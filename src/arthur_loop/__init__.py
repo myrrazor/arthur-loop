@@ -4,6 +4,7 @@ __all__ = [
     "artifact_store",
     "browser_lock",
     "browser_runtime",
+    "cli",
     "queue_ledger",
     "reporting",
     "resource_usage",
