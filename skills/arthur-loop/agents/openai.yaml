@@ -1,0 +1,4 @@
+interface:
+  display_name: "Arthur Loop"
+  short_description: "Run browser-mediated Codex and ChatGPT Pro project loops."
+  default_prompt: "Use Arthur Loop to coordinate a browser-first ChatGPT Pro review loop, Codex coding session handoff, durable queue state, human-decision escalation, and quota-aware task tracking."

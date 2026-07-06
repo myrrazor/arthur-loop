@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "advisor": { "adapter": "chatgpt-browser" },
+  "executor": { "adapter": "codex" },
+  "tracker": { "adapter": "none" },
+  "components": { "resource_governor": true, "heartbeat": true },
+  "reserve_policy": {
+    "minimum_reserve_percent": 5
+  },
+  "polling_policy": {
+    "first_poll_minutes": 1,
+    "steady_poll_minutes": 5,
+    "max_retries_after_stopped_no_output": 1
+  },
+  "projects": [
+    {
+      "project_id": "DEMO_APP",
+      "advisor_target_title": "Demo App Planning",
+      "advisor_target_url": "https://chatgpt.com/c/your-conversation-id",
+      "state_path": "projects/DEMO_APP/state.md"
+    }
+  ]
+}
