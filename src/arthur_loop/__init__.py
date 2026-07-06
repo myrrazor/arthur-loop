@@ -6,6 +6,7 @@ __all__ = [
     "browser_runtime",
     "cli",
     "config",
+    "init_cli",
     "queue_ledger",
     "reporting",
     "resource_usage",

@@ -16,6 +16,7 @@ from arthur_loop.browser_lock import (
     release_lock,
 )
 from arthur_loop.config import load_config
+from arthur_loop.init_cli import add_init_parser
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, parse_ledger_time
 from arthur_loop.status import (
     VALID_SESSION_STATES,
@@ -614,6 +615,7 @@ def _build_usage_parser(subparsers: Any) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arthur", description="Arthur Loop — file-first control plane for AI dev loops.")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    add_init_parser(subparsers)
     _build_queue_parser(subparsers)
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)
