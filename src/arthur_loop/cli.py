@@ -15,6 +15,7 @@ from arthur_loop.browser_lock import (
     read_lock,
     release_lock,
 )
+from arthur_loop.config import load_config
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, parse_ledger_time
 from arthur_loop.status import (
     VALID_SESSION_STATES,
@@ -26,6 +27,8 @@ from arthur_loop.status import (
     status_to_dict,
 )
 from arthur_loop.tick import classify_tick, render_tick_markdown, write_tick_state
+from arthur_loop.tracker import ACTIONS as TRACKER_ACTIONS
+from arthur_loop.tracker import run_action as tracker_run_action
 from arthur_loop.usage_attribution import (
     append_snapshot,
     append_task_usage,
@@ -316,14 +319,22 @@ def _build_lock_parser(subparsers: Any) -> None:
 # tick
 
 
+def _reserve_from(args: argparse.Namespace, config: dict[str, Any]) -> float:
+    if args.reserve_percent is not None:
+        return args.reserve_percent
+    return float(config["reserve_policy"]["minimum_reserve_percent"])
+
+
 def cmd_tick(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
+    config = load_config(root)
     result = classify_tick(
         root,
         now=parse_ledger_time(args.at) if args.at else None,
         dry_run=args.dry_run,
-        reserve_percent=args.reserve_percent,
+        reserve_percent=_reserve_from(args, config),
         stale_after_minutes=args.stale_after_minutes,
+        quota_enabled=bool(config["components"]["resource_governor"]),
     )
     if not args.dry_run:
         write_tick_state(root, result)
@@ -343,7 +354,7 @@ def _build_tick_parser(subparsers: Any) -> None:
     tick.add_argument("--dry-run", action="store_true", help="Do not write runtime/tick-state.json or queue events")
     tick.add_argument("--at", help="Override current time for tests, e.g. 2026-07-02T12:00:00Z")
     tick.add_argument("--format", choices=["json", "markdown", "both"], default="both")
-    tick.add_argument("--reserve-percent", type=float, default=5.0)
+    tick.add_argument("--reserve-percent", type=float, default=None, help="Overrides reserve_policy.minimum_reserve_percent from config")
     tick.add_argument("--stale-after-minutes", type=int, default=30)
     tick.set_defaults(func=cmd_tick)
 
@@ -374,12 +385,14 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(json.dumps({"session_id": args.session_id, "cleared": cleared}, indent=2, sort_keys=True))
         return 0
 
+    config = load_config(root)
     snapshot = collect_status(
         root,
         now=at,
-        reserve_percent=args.reserve_percent,
+        reserve_percent=_reserve_from(args, config),
         stale_after_minutes=args.stale_after_minutes,
         session_stale_minutes=args.session_stale_minutes,
+        quota_enabled=bool(config["components"]["resource_governor"]),
     )
     if args.json:
         print(json.dumps(status_to_dict(snapshot), indent=2, sort_keys=True))
@@ -393,7 +406,7 @@ def _add_status_show_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true", help="Print machine-readable status and exit")
     parser.add_argument("--no-color", action="store_true")
     parser.add_argument("--at", help="Override current time, e.g. 2026-07-02T12:00:00Z")
-    parser.add_argument("--reserve-percent", type=float, default=5.0)
+    parser.add_argument("--reserve-percent", type=float, default=None, help="Overrides reserve_policy.minimum_reserve_percent from config")
     parser.add_argument("--stale-after-minutes", type=int, default=30)
     parser.add_argument("--session-stale-minutes", type=int, default=60)
 
@@ -425,6 +438,37 @@ def _build_status_parser(subparsers: Any) -> None:
     clear.add_argument("--session-id", required=True)
     clear.add_argument("--at")
     clear.set_defaults(func=cmd_status)
+
+
+# ---------------------------------------------------------------------------
+# tracker
+
+
+def cmd_tracker(args: argparse.Namespace) -> int:
+    values: dict[str, str] = {}
+    for pair in args.value or []:
+        key, sep, val = pair.partition("=")
+        if not sep:
+            raise ValueError(f"--value expects key=value, got {pair!r}")
+        values[key] = val
+
+    result = tracker_run_action(
+        load_config(Path(args.root).resolve()),
+        args.tracker_action,
+        dry_run=args.dry_run,
+        **values,
+    )
+    print_record(result)
+    return 0 if result["status"] in ("ok", "dry_run", "skipped") else 2
+
+
+def _build_tracker_parser(subparsers: Any) -> None:
+    tracker = subparsers.add_parser("tracker", help="Run a tracker adapter action")
+    tracker.add_argument("tracker_action", choices=list(TRACKER_ACTIONS))
+    tracker.add_argument("--root", default=".", help="Arthur Loop instance root")
+    tracker.add_argument("--value", action="append", help="key=value template inputs (repeatable)")
+    tracker.add_argument("--dry-run", action="store_true")
+    tracker.set_defaults(func=cmd_tracker)
 
 
 # ---------------------------------------------------------------------------
@@ -574,6 +618,7 @@ def build_parser() -> argparse.ArgumentParser:
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)
     _build_lock_parser(subparsers)
+    _build_tracker_parser(subparsers)
     _build_capture_parser(subparsers)
     _build_usage_parser(subparsers)
     return parser

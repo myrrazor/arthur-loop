@@ -120,6 +120,33 @@ class TickTests(unittest.TestCase):
             events = read_jsonl(root / "queue/events.jsonl")
             self.assertEqual(events[0]["event_type"], "tick")
 
+    def test_disabled_governor_never_blocks_on_quota(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            QueueLedger(root).record_job(
+                QueueJob(
+                    job_id="BQ-SAMPLE_APP-001",
+                    project_id="SAMPLE_APP",
+                    target_chat_title="Sample App Planning",
+                    target_chat_url="https://chatgpt.com/c/test",
+                )
+            )
+            append_snapshot(
+                root,
+                snapshot_from_codexbar_json(
+                    [{"provider": "codex", "usage": {"primary": {"usedPercent": 97}}}],
+                    snapshot_id="latest",
+                    captured_at="2026-07-02T12:00:00Z",
+                ),
+            )
+
+            result = classify_tick(
+                root, now=datetime(2026, 7, 2, 12, 1, tzinfo=UTC), quota_enabled=False
+            )
+
+            self.assertEqual(result.status, "POLL_DUE")
+            self.assertIsNone(result.quota_left_percent)
+
 
 if __name__ == "__main__":
     unittest.main()
