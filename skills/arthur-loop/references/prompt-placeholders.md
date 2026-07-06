@@ -1,14 +1,14 @@
 # Prompt Placeholder Reference
 
-Final prompt wording is intentionally not locked yet. Use the repo templates under `prompts/` until the user supplies scenario-specific prompts.
+Final prompt wording is intentionally not locked. Use the adapter prompt packs until the operator supplies scenario-specific wording.
 
-Use these templates:
+Use these templates (paths inside the package; `arthur init` copies your chosen packs into the instance under `adapters/advisor/prompts/` and `adapters/executor/prompts/`):
 
-- `prompts/chatgpt/next-plan-request.md`
-- `prompts/chatgpt/plan-approval-review.md`
-- `prompts/chatgpt/sprint-review.md`
-- `prompts/codex/plan-only.md`
-- `prompts/codex/implementation-handoff.md`
+- `src/arthur_loop/adapters/advisors/<adapter>/prompts/next-plan-request.md`
+- `src/arthur_loop/adapters/advisors/<adapter>/prompts/plan-approval-review.md`
+- `src/arthur_loop/adapters/advisors/<adapter>/prompts/sprint-review.md`
+- `src/arthur_loop/adapters/executors/<adapter>/prompts/plan-only.md`
+- `src/arthur_loop/adapters/executors/<adapter>/prompts/implementation-handoff.md`
 - `prompts/master/human-decision-summary.md`
 
 Template variables:
@@ -23,3 +23,5 @@ Template variables:
 - `{{HUMAN_DECISIONS}}`
 - `{{EXPECTED_MARKER}}`
 - `{{IDEMPOTENCY_KEY}}`
+
+(The `CODEX_`/`CHATGPT_` names are historical — read them as "executor" and "advisor".)

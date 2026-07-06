@@ -4,20 +4,20 @@ Date: 2026-06-22
 
 ## Purpose
 
-This runbook describes the durable workflow Arthur Loop should follow once the final prompts are supplied.
+This runbook describes the durable workflow Arthur Loop follows once your prompts are tuned.
 
-The goal is not to make Codex and ChatGPT talk forever. The goal is to keep each project moving in controlled sprints, with durable state, quota awareness, human-decision escalation, and explicit review gates.
+The goal is not to make the advisor and executor talk forever. The goal is to keep each project moving in controlled sprints, with durable state, quota awareness, human-decision escalation, and explicit review gates. Throughout: the **advisor** plans and reviews (e.g. ChatGPT Pro in the browser, Claude Code, a human), the **executor** implements (e.g. Codex, Claude Code). Adapter specifics live in `docs/adapters.md`.
 
 ## Control Plane Roles
 
 | Role | Writes State | Reads State | Main Job |
 | --- | --- | --- | --- |
 | Master Orchestrator | `human-decisions/`, status reports, usage records | all project state, queue state, usage state | Prioritize, coordinate, escalate, report. |
-| Resource Governor | `usage/snapshots.jsonl`, `usage/task-usage.jsonl` | `codexbar usage`, active job list | Keep 5 percent reserve and estimate task usage. |
-| Browser Queue Manager | `queue/jobs.jsonl`, `queue/events.jsonl`, browser artifacts | prompt templates, queue state | Serialize ChatGPT browser access. |
-| Project Loop Manager | `projects/<id>/state.md`, Atlas Tasker tickets | project artifacts, Codex/ChatGPT outputs | Own one project loop. |
-| Codex Coding Session | repo code, test logs, handoff reports | approved implementation prompt | Plan or implement one packet only. |
-| ChatGPT Pro Browser | browser response artifacts | compact project packets | Review, research, approve, reject, or escalate. |
+| Resource Governor (optional) | `usage/snapshots.jsonl`, `usage/task-usage.jsonl` | `codexbar usage`, active job list | Keep the reserve and estimate task usage. |
+| Advisor Queue Manager | `queue/jobs.jsonl`, `queue/events.jsonl`, advisor artifacts | prompt templates, queue state | Serialize advisor (browser) access. |
+| Project Loop Manager | `projects/<id>/state.md`, tracker tickets | project artifacts, advisor/executor outputs | Own one project loop. |
+| Executor Session (Codex, Claude Code, ...) | repo code, test logs, handoff reports | approved implementation prompt | Plan or implement one packet only. |
+| Advisor Session (ChatGPT Pro browser, ...) | advisor response artifacts | compact project packets | Review, research, approve, reject, or escalate. |
 
 ## State Files
 
@@ -29,17 +29,17 @@ Durable local state:
 - `runtime/tick-state.json`: latest local scheduler tick, ignored by git.
 - `runtime/sessions.jsonl`: append-only self-reported agent-session activity, ignored by git.
 - `projects/<PROJECT_ID>/state.md`: latest project loop state.
-- `projects/<PROJECT_ID>/artifacts/chatgpt/index.md`: cheap index of saved ChatGPT browser responses.
+- `projects/<PROJECT_ID>/artifacts/chatgpt/index.md`: cheap index of saved advisor responses (the directory name is historical and stays stable for compatibility).
 - `human-decisions/open.md`: human input queue.
 - `usage/snapshots.jsonl`: quota snapshots.
 - `usage/task-usage.jsonl`: task usage attribution.
-- `outputs/`: generated reports and captured browser/Codex artifacts.
+- `outputs/`: generated reports and captured advisor/executor artifacts.
 - `prompts/`: scenario prompt templates.
 
 Future source of truth:
 
-- Atlas Tasker should own project tickets, sprint tasks, review gates, and human-decision tickets.
-- A private GitHub repository can back up Atlas Tasker and Arthur Loop state on a schedule.
+- Your tracker (Atlas Tasker, or any CLI tracker via the `command` adapter) can own project tickets, sprint tasks, review gates, and human-decision tickets.
+- A private repository can back up tracker and Arthur Loop state on a schedule.
 
 ## Queue Lifecycle
 
@@ -47,49 +47,50 @@ Recommended queue statuses:
 
 | Status | Meaning | Next Action |
 | --- | --- | --- |
-| `queued` | Job is ready but not claimed. | Browser Queue Manager may claim. |
-| `claimed` | Queue manager owns the job. | Confirm target browser chat. |
+| `queued` | Job is ready but not claimed. | Queue manager may claim. |
+| `claimed` | Queue manager owns the job. | Confirm the target advisor conversation. |
 | `submitted` | Prompt was sent. | First poll after one minute. |
-| `waiting_for_chatgpt` | ChatGPT is still thinking. | Poll again after five minutes. |
-| `stopped_no_output` | ChatGPT stopped without useful output. | Retry once after five minutes or fail cleanly. |
+| `waiting_for_chatgpt` | The advisor is still thinking (status name is historical). | Poll again after five minutes. |
+| `stopped_no_output` | The advisor stopped without useful output. | Retry once after five minutes or fail cleanly. |
 | `needs_recovery` | Job is stale or ambiguous. | Master/queue manager must inspect before retrying. |
 | `completed` | Marker/control block captured. | Hand artifact to project loop. |
 | `completed_with_warnings` | Marker captured, but retrieval degraded. | Proceed only if artifact is sufficient. |
 | `failed` | Job cannot be trusted. | Escalate to master. |
 | `cancelled` | Job intentionally stopped. | No action. |
 
-Use `scripts/queue-job.py` for queue updates. Do not hand-edit `queue/jobs.jsonl`.
+Use `arthur queue` for queue updates. Do not hand-edit `queue/jobs.jsonl`.
 
 Common commands:
 
 ```bash
-PYTHONPATH=src scripts/queue-job.py create \
+arthur queue create \
   --job-id <JOB_ID> \
   --project-id <PROJECT_ID> \
-  --target-chat-title "<ChatGPT title>" \
-  --target-chat-url "<ChatGPT URL>" \
+  --target-chat-title "<advisor conversation title>" \
+  --target-chat-url "<advisor conversation URL>" \
   --prompt-path <prompt.md>
 
-PYTHONPATH=src scripts/queue-job.py claim --job-id <JOB_ID>
-PYTHONPATH=src scripts/queue-job.py submit --job-id <JOB_ID>
-PYTHONPATH=src scripts/queue-job.py poll-result --job-id <JOB_ID> --marker-found true --status completed
-PYTHONPATH=src scripts/queue-job.py due
+arthur queue claim --job-id <JOB_ID>
+arthur queue submit --job-id <JOB_ID>
+arthur queue poll-result --job-id <JOB_ID> --marker-found true --status completed
+arthur queue recover --job-id <JOB_ID> --requeue
+arthur queue due
 ```
 
-`claim`, `submit`, and `poll-result` use the browser lock so only one queue manager controls the browser at a time.
+`claim`, `submit`, and `poll-result` use the browser lock so only one queue manager controls the shared browser at a time. (Working from a source checkout without installing? Every command also exists as a `PYTHONPATH=src scripts/*.py` shim.)
 
-## ChatGPT Artifact Capture
+## Advisor Artifact Capture
 
-Rule: save browser-produced ChatGPT text before handing it to Codex.
+Rule: save advisor-produced text before handing it to the executor.
 
 This applies to:
 
 - markdown copied from the browser,
 - text reconstructed from accessibility/visible UI,
 - downloaded markdown files,
-- ZIP contents that need to be summarized for Codex.
+- ZIP contents that need to be summarized for the executor.
 
-Store text artifacts under:
+Store text artifacts under (the `chatgpt` directory name is historical and stays stable):
 
 ```text
 projects/<PROJECT_ID>/artifacts/chatgpt/
@@ -100,11 +101,11 @@ Future agents should read `index.md` first and only open full artifacts when nee
 Capture command:
 
 ```bash
-PYTHONPATH=src scripts/capture-chatgpt-artifact.py \
+arthur capture \
   --project-id <PROJECT_ID> \
   --job-id <JOB_ID> \
   --kind <next-plan-request|plan-review|sprint-review|human-decision> \
-  --source-chat-title "<ChatGPT chat title>" \
+  --source-chat-title "<advisor conversation title>" \
   --source-file <captured-response.md>
 ```
 
@@ -128,9 +129,9 @@ Default:
 
 - First poll: 1 minute after submit.
 - Steady poll: every 5 minutes.
-- Slow ChatGPT response: keep polling without changing prompt.
+- Slow advisor response: keep polling without changing the prompt.
 - Stopped/no output: record `stopped_no_output`, wait 5 minutes, retry once with same idempotency key and clearer instruction.
-- Stale active job: `scripts/arthur-tick.py --dry-run` should surface it; inspect before retrying.
+- Stale active job: `arthur tick --dry-run` should surface it; `arthur queue recover` parks or requeues it.
 
 Measured fields:
 
@@ -146,7 +147,7 @@ Measured fields:
 Run tick at the start of each master orchestration turn:
 
 ```bash
-PYTHONPATH=src scripts/arthur-tick.py --dry-run
+arthur tick --dry-run
 ```
 
 The dry run only reads state and classifies the next action:
@@ -157,25 +158,25 @@ The dry run only reads state and classifies the next action:
 - `BLOCKED_BY_QUOTA`
 - `HUMAN_INPUT_REQUIRED`
 
-Non-dry-run mode writes `runtime/tick-state.json` and appends small queue events such as `tick`, `poll_due`, `stale_job`, or `quota_paused`. It does not control the browser, message Codex sessions, or call a model.
+Non-dry-run mode writes `runtime/tick-state.json` and appends small queue events such as `tick`, `poll_due`, `stale_job`, or `quota_paused`. It does not control the browser, message executor sessions, or call a model.
 
 ## Status Dashboard
 
 Tick gates; status displays. The master session renders the dashboard at the start of every orchestration turn:
 
 ```bash
-PYTHONPATH=src scripts/arthur-status.py
+arthur status
 ```
 
-It shows the headline tick state, self-reported agent sessions, active queue jobs, project summaries with decision-block flags, open human decisions, the quota bar, and the browser lock. `--json` prints the same data machine-readable (this is the hook for external notifiers like OpenClaw/Discord later).
+It shows the headline tick state, self-reported agent sessions, active queue jobs, project summaries with decision-block flags, open human decisions, the quota bar, and the browser lock. `--json` prints the same data machine-readable — that's the hook for external notifiers (Discord bots, dashboards, whatever polls it).
 
 Every manager or executor session reports what it is doing when it picks up work and on major transitions:
 
 ```bash
-PYTHONPATH=src scripts/arthur-status.py set \
+arthur status set \
   --session-id demo-app-loop --role project-loop --project-id DEMO_APP \
-  --state working --activity "revising sprint 14 plan for ChatGPT review"
-PYTHONPATH=src scripts/arthur-status.py clear --session-id demo-app-loop
+  --state working --activity "revising the sprint plan for advisor review"
+arthur status clear --session-id demo-app-loop
 ```
 
 States: `working`, `waiting`, `blocked`, `idle`, `done`. Suggested roles: `master`, `queue-manager`, `project-loop`, `executor`, `governor`. Sessions that have not reported for 60 minutes render dimmed with a `(stale)` marker — a stale `working` row usually means a session died mid-task and its work needs the recovery path.
@@ -186,13 +187,13 @@ Run quota snapshots:
 
 - Before a master orchestration segment.
 - After a master orchestration segment.
-- Before and after a long Codex coding task.
+- Before and after a long executor coding task.
 - Before starting any new project sprint.
 - After any unexpectedly expensive browser or planning loop.
 
 Resource Governor state:
 
-| Codex Remaining | State | Behavior |
+| Executor Quota Remaining | State | Behavior |
 | --- | --- | --- |
 | `> 5%` | GREEN | Start new work if project gates allow it. |
 | `= 5%` | YELLOW | Checkpoint and report only. |
@@ -200,7 +201,7 @@ Resource Governor state:
 
 Task attribution confidence:
 
-| Active Codex Tasks | Background Activity | Confidence |
+| Active Executor Tasks | Background Activity | Confidence |
 | --- | --- | --- |
 | 1 | no | HIGH |
 | 1 | yes | MEDIUM |
@@ -211,24 +212,24 @@ Task attribution confidence:
 ## Planning Loop
 
 1. Create current-state summary.
-2. Run `PYTHONPATH=src scripts/arthur-tick.py --dry-run`.
-3. Create `NEXT_PLAN_REQUEST` browser job through `scripts/queue-job.py`.
-4. ChatGPT returns `REQUEST_CODEX_PLAN` or `HUMAN_INPUT_REQUIRED`.
-5. Save the ChatGPT response with `scripts/capture-chatgpt-artifact.py`.
-6. If human input required, write `human-decisions/open.md` and stop project only.
-7. If plan requested, send `prompts/codex/plan-only.md` to project Codex thread with the artifact path and a short excerpt.
-8. Codex returns `READY_FOR_CHATGPT_REVIEW` or `HUMAN_INPUT_REQUIRED`.
-9. If ready, send plan back to ChatGPT using `prompts/chatgpt/plan-approval-review.md`.
+2. Run `arthur tick --dry-run` and `arthur status`.
+3. Create a `NEXT_PLAN_REQUEST` advisor job through `arthur queue create`.
+4. The advisor returns `REQUEST_CODEX_PLAN` or `HUMAN_INPUT_REQUIRED`.
+5. Save the advisor response with `arthur capture`.
+6. If human input required, write `human-decisions/open.md` and stop that project only.
+7. If a plan was requested, send the executor pack's `plan-only.md` to the project's executor session with the artifact path and a short excerpt.
+8. The executor returns `READY_FOR_CHATGPT_REVIEW` or `HUMAN_INPUT_REQUIRED`.
+9. If ready, send the plan back to the advisor using the advisor pack's `plan-approval-review.md`.
 10. Iterate until `APPROVE_PLAN`, `REVISE_PLAN`, or `HUMAN_INPUT_REQUIRED`.
 
 ## Implementation Loop
 
-1. Only begin from a ChatGPT-approved implementation prompt.
-2. Send one implementation handoff to the Codex coding session.
-3. Codex works one sprint/task only.
-4. Codex runs tests, captures `TEST_STDOUT.log`, and returns a structured handoff.
-5. ChatGPT reviews using `prompts/chatgpt/sprint-review.md`.
-6. Fix required issues in Codex, then re-review.
+1. Only begin from an advisor-approved implementation prompt.
+2. Send one implementation handoff to the executor session.
+3. The executor works one sprint/task only.
+4. The executor runs tests, captures `TEST_STDOUT.log`, and returns a structured handoff.
+5. The advisor reviews using the advisor pack's `sprint-review.md`.
+6. Fix required issues in the executor session, then re-review.
 7. Stop on release-ready or human input required.
 
 ## Human Decision Escalation
