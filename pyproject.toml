@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "arthur-loop"
+version = "0.1.0"
+description = "File-first control plane for AI dev loops — bring your own advisor, executor, and tracker."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = ["rich>=13,<15"]
+
+[project.scripts]
+arthur = "arthur_loop.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+arthur_loop = ["adapters/**/*"]
