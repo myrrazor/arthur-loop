@@ -8,6 +8,7 @@ __all__ = [
     "config",
     "init_cli",
     "queue_ledger",
+    "quota",
     "reporting",
     "resource_usage",
     "status",

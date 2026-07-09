@@ -4,6 +4,10 @@
   "executor": { "adapter": "codex" },
   "tracker": { "adapter": "none" },
   "components": { "resource_governor": true, "heartbeat": true },
+  "quota": {
+    "provider": "auto",
+    "codexbar_provider": "codex"
+  },
   "reserve_policy": {
     "minimum_reserve_percent": 5
   },

@@ -85,7 +85,7 @@ Sessions that stop reporting go dim with a `(stale)` marker after an hour — a 
 | Advisor (plans, reviews, approves) | `chatgpt-browser` · `claude-code` · `api-model` · `manual` |
 | Executor (implements) | `codex` · `claude-code` · `manual` |
 | Tracker (tickets) | `atlas-tasker` · `command` (bring your own CLI) · `none` |
-| Quota governor | on/off (`codexbar`-based reserve protection) |
+| Quota governor | on/off — sources: [codexbar](https://github.com/steipete/CodexBar) (auto-detected) · your own `command` · a JSON `file` |
 | Heartbeat state files | on/off |
 
 **Trackers.** If you use [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) — Jira for your terminal, built for AI agents — Arthur Loop ships preset command templates and `arthur init` points you at its installer. Any other tracker with a CLI works through three command templates in config (`open_decision`, `close_decision`, `sprint_gate`) — no code, just your tool's commands. Or pick `none` and decisions live in `human-decisions/open.md` alone.

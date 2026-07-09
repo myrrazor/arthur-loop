@@ -93,16 +93,24 @@ def run_init(args: argparse.Namespace) -> int:
     )
     tracker = args.tracker or _ask_choice("Ticket tracker?", sorted(KNOWN_TRACKERS), "none", yes)
 
+    quota_provider = args.quota_provider or "auto"
     if args.no_governor:
         governor = False
     else:
         codexbar_found = shutil.which("codexbar") is not None
+        source_hint = (
+            "codexbar detected — quota follows your subscriptions automatically"
+            if codexbar_found
+            else "no codexbar found — you can point quota.provider at a command or JSON file later"
+        )
         governor = _ask_bool(
-            "Enable the quota governor? (needs `codexbar`; detected: %s)"
-            % ("yes" if codexbar_found else "no"),
-            codexbar_found,
+            f"Enable the quota governor? ({source_hint})",
+            codexbar_found or quota_provider not in ("auto", "none"),
             yes,
         )
+        if governor and quota_provider == "auto" and not codexbar_found:
+            print("note: governor is on but no quota source was found; `arthur usage snapshot` will")
+            print("      report how to wire one (codexbar, a custom command, or a JSON file).")
     heartbeat = not args.no_heartbeat and _ask_bool("Enable heartbeat state files (runtime/)?", True, yes)
 
     projects: list[dict[str, str]] = []
@@ -131,6 +139,7 @@ def run_init(args: argparse.Namespace) -> int:
         "executor": {"adapter": executor},
         "tracker": {"adapter": tracker},
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
+        "quota": {"provider": quota_provider, "codexbar_provider": "codex"},
         "reserve_policy": {"minimum_reserve_percent": float(args.reserve_percent)},
         "polling_policy": {
             "first_poll_minutes": 1,
@@ -269,6 +278,8 @@ def add_init_parser(subparsers: Any) -> None:
     init.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS))
     init.add_argument("--tracker", choices=sorted(KNOWN_TRACKERS))
     init.add_argument("--no-governor", action="store_true")
+    init.add_argument("--quota-provider", choices=["auto", "codexbar", "command", "file", "none"],
+                      help="Where quota numbers come from (default auto: codexbar when installed)")
     init.add_argument("--no-heartbeat", action="store_true")
     init.add_argument("--reserve-percent", type=float, default=5.0)
     init.add_argument("--demo", action="store_true", help="Seed sample projects, a job, sessions, and a decision")

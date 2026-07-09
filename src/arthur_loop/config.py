@@ -15,6 +15,7 @@ DEFAULTS: dict[str, Any] = {
     "executor": {"adapter": "codex"},
     "tracker": {"adapter": "none"},
     "components": {"resource_governor": True, "heartbeat": True},
+    "quota": {"provider": "auto", "codexbar_provider": "codex"},
     "reserve_policy": {"minimum_reserve_percent": 5},
     "polling_policy": {
         "first_poll_minutes": 1,
