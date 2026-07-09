@@ -17,3 +17,4 @@ build/
 TEST_STDOUT.log
 runtime/
 usage/*.jsonl
+menubar/ArthurBar/.build/
