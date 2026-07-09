@@ -1,6 +1,7 @@
 """Small durable-state helpers for Arthur Loop control-plane tests."""
 
 __all__ = [
+    "agents",
     "artifact_store",
     "browser_lock",
     "browser_runtime",

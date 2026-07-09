@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 
-KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "api-model", "manual"}
+KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "api-model", "manual"}
 KNOWN_EXECUTORS = {"codex", "claude-code", "manual"}
 KNOWN_TRACKERS = {"atlas-tasker", "command", "none"}
 

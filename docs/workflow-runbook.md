@@ -245,13 +245,6 @@ When a project needs input:
 
 ## Skill Packaging
 
-The repo-local skill draft lives at `skills/arthur-loop/`.
+The agent-facing skill ships inside the package at `src/arthur_loop/seed/skill/` and `arthur init` copies it into every instance under `agent-setup/skill/` (plus your main agent's native location — `.claude/skills/` for Claude Code, an `AGENTS.md`/`GEMINI.md` pointer for others).
 
-Keep it repo-local until:
-
-- the scenario prompts are final,
-- the queue/job scripts have stabilized,
-- tracker integration is clear,
-- you decide to install it into your agent's skill directory.
-
-Then install or copy the skill wherever your coding agent discovers skills.
+Tune the instance copy; treat the packaged one as the template.

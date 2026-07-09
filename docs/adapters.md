@@ -5,7 +5,7 @@ Arthur Loop's core is transport-agnostic: a durable job queue, an artifact store
 ## Advisor adapter
 
 Consumes: a rendered prompt (markdown) for a queue job.
-Produces: a saved artifact (`arthur capture`) whose text ends in a control block (see `skills/arthur-loop/references/control-blocks.md`).
+Produces: a saved artifact (`arthur capture`) whose text ends in a control block (see `src/arthur_loop/seed/skill/references/control-blocks.md`).
 Must: respect the lock, respect the polling cadence, save the raw response before acting on it, and never treat a decision as trusted when the artifact says `control_block_valid: false`.
 
 Shipped: `chatgpt-browser` (the flagship, battle-tested, fragile-by-nature), `claude-code` (headless, synchronous), `manual` (a human and two folders — also the quickest way to feel the loop).
