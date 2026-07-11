@@ -30,6 +30,7 @@ from arthur_loop.status import (
 from arthur_loop.tick import classify_tick, render_tick_markdown, write_tick_state
 from arthur_loop.tracker import ACTIONS as TRACKER_ACTIONS
 from arthur_loop.tracker import run_action as tracker_run_action
+from arthur_loop.web import add_web_parser
 from arthur_loop.usage_attribution import (
     append_snapshot,
     append_task_usage,
@@ -621,6 +622,7 @@ def build_parser() -> argparse.ArgumentParser:
     _build_status_parser(subparsers)
     _build_lock_parser(subparsers)
     _build_tracker_parser(subparsers)
+    add_web_parser(subparsers)
     _build_capture_parser(subparsers)
     _build_usage_parser(subparsers)
     return parser
