@@ -1,8 +1,8 @@
 "use strict";
 /* Arthur Loop web console — vanilla, no build step.
    Read-mostly control surface: polls arthur status, renders five views, and
-   offers a human exactly four write actions (answer decision, recover job,
-   create job, clear session). Everything else is agent-owned. */
+   offers a human exactly five write actions (answer decision, recover job,
+   create job, clear session, break stale lock). Everything else is agent-owned. */
 
 const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
 const POLL_MS = 3000;
@@ -20,18 +20,22 @@ const JOB_STATE = {
   needs_recovery: "var(--quota)", completed: "var(--wait)",
   completed_with_warnings: "var(--lock)", failed: "var(--quota)", cancelled: "var(--wait)",
 };
-const INFLIGHT = new Set(["submitted", "waiting_for_chatgpt", "stopped_no_output"]);
+// "claimed" counts as in flight: the queue manager owns it and is about to submit
+const INFLIGHT = new Set(["claimed", "submitted", "waiting_for_chatgpt", "stopped_no_output"]);
 const TERMINAL = new Set(["completed", "completed_with_warnings", "failed", "cancelled"]);
+const VISIT_KEY = "arthur:lastVisit";
 
 const store = {
-  status: null, events: [], view: "canvas", project: null,
-  artifacts: [], artifactSel: null, artifactBody: "",
+  status: null, events: [], eventsLoaded: false, view: "canvas", project: null,
   lastOk: 0, failing: false,
+  railSig: "", viewSig: {},
+  prevVisit: Number(localStorage.getItem(VISIT_KEY) || 0),
 };
+localStorage.setItem(VISIT_KEY, String(Date.now()));
+
 const $ = (sel, root = document) => root.querySelector(sel);
 const bind = (name) => document.querySelector(`[data-bind="${name}"]`);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
-const esc = (s) => String(s == null ? "" : s);
 
 /* ---- time helpers ------------------------------------------------------ */
 
@@ -42,12 +46,6 @@ function rel(v, now = Date.now()) {
   if (a < 45) return "now";
   const span = a < 3600 ? `${Math.round(a / 60)}m` : a < 86400 ? `${Math.round(a / 3600)}h` : `${Math.round(a / 86400)}d`;
   return s > 0 ? `in ${span}` : `${span} ago`;
-}
-function elapsed(v, now = Date.now()) {
-  const d = parseAt(v); if (!d) return "";
-  const s = Math.max(0, (now - d.getTime()) / 1000);
-  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-  return m < 60 ? `${m}:${String(sec).padStart(2, "0")}` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 /* ---- networking -------------------------------------------------------- */
@@ -68,18 +66,33 @@ async function action(path, body) {
   return data;
 }
 
+let pollBusy = false;
 async function poll() {
+  if (pollBusy) return; // no overlapping polls: stale responses must not win
+  pollBusy = true;
   try {
     const status = await getJSON("/api/status");
     store.status = status;
     store.lastOk = Date.now();
     store.failing = false;
     if (!store.project && status.projects.length) store.project = status.projects[0].projectId;
-    if (store.view === "events") store.events = await getJSON("/api/events?n=150");
+    if (store.view === "events") {
+      try {
+        store.events = await getJSON("/api/events?n=150");
+        store.eventsLoaded = true;
+      } catch (_) { /* keep the old list; status itself succeeded */ }
+    }
     render();
   } catch (err) {
     store.failing = true;
+    if (!store.status) {
+      bind("skeleton").replaceChildren(
+        el("div", "rail-empty", "Can't reach the console server — is `arthur web` still running? Retrying…")
+      );
+    }
     updateFreshness();
+  } finally {
+    pollBusy = false;
   }
 }
 
@@ -120,6 +133,7 @@ function render() {
   bind("state-hint").textContent = `${na.verb} · ${na.target}`;
 
   renderQuotaMini(s);
+  renderLock(s);
   renderProjects(s);
   renderRail(s);
   updateFreshness();
@@ -136,8 +150,24 @@ function updateFreshness() {
   const txt = bind("freshness-text");
   if (store.failing) { node.classList.add("stale"); txt.textContent = "reconnecting"; return; }
   node.classList.remove("stale");
-  txt.textContent = store.lastOk ? `${rel(new Date(store.lastOk).toISOString())}`.replace("in ", "") || "live" : "live";
   txt.textContent = "live";
+}
+
+function renderLock(s) {
+  const wrap = bind("lock-chip");
+  const lock = s.browserLock;
+  if (!lock) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  wrap.classList.toggle("is-stale", !lock.fresh);
+  bind("lock-text").textContent = lock.fresh ? `lock: ${lock.holder}` : `stale lock: ${lock.holder}`;
+  const btn = bind("lock-break");
+  btn.hidden = lock.fresh; // breaking a fresh lock would yank it from an active agent
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try { await action("/api/actions/break-lock", {}); toast("ok", "Stale lock broken", lock.holder); poll(); }
+    catch (e) { toast("err", "Could not break lock", e.message); }
+    finally { btn.disabled = false; }
+  };
 }
 
 function renderQuotaMini(s) {
@@ -157,8 +187,10 @@ function renderProjects(s) {
   list.replaceChildren();
   if (!s.projects.length) { list.append(el("div", "rail-empty", "no projects yet")); return; }
   for (const p of s.projects) {
+    const jobs = s.queue.filter((j) => j.projectId === p.projectId).length;
     const row = el("button", `project-chip${p.blockedByDecision ? " blocked" : ""}`);
     row.append(el("i", "pdot"), el("span", "pname", p.projectId));
+    if (jobs) row.append(el("span", "pcount", String(jobs)));
     row.title = p.summary;
     row.onclick = () => { store.project = p.projectId; setView("artifacts"); };
     list.append(row);
@@ -167,12 +199,33 @@ function renderProjects(s) {
 
 /* ---- right rail: needs you --------------------------------------------- */
 
+function railSignature(s) {
+  return JSON.stringify([
+    s.decisions,
+    s.tick.staleJobIds,
+    s.sessions.map((x) => [x.sessionId, x.state, x.activity, x.stale, x.projectId]),
+    (s.quarantine || []).map((q) => q.path),
+  ]);
+}
+
 function renderRail(s) {
   const body = bind("rail-body");
-  body.replaceChildren();
-  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0);
+  const quarantine = s.quarantine || [];
+  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0) + quarantine.length;
   const badge = bind("attention-badge");
   badge.hidden = attention === 0; badge.textContent = attention;
+
+  // never nuke a half-typed answer: if the human is mid-draft, or nothing
+  // changed, keep the DOM and just refresh the relative timestamps
+  const sig = railSignature(s);
+  const typing = body.contains(document.activeElement) && document.activeElement.tagName === "TEXTAREA";
+  const hasDraft = [...body.querySelectorAll("textarea")].some((t) => t.value.trim());
+  if (sig === store.railSig || typing || hasDraft) {
+    body.querySelectorAll("[data-seen-at]").forEach((n) => { n.textContent = rel(n.dataset.seenAt); });
+    return;
+  }
+  store.railSig = sig;
+  body.replaceChildren();
 
   if (s.decisions.length) {
     body.append(el("div", "rail-group-title", "Open decisions"));
@@ -184,6 +237,11 @@ function renderRail(s) {
   if (staleJobs.length) {
     body.append(el("div", "rail-group-title", "Stale jobs"));
     for (const j of staleJobs) body.append(staleCard(j));
+  }
+
+  if (quarantine.length) {
+    body.append(el("div", "rail-group-title", "Quarantined artifacts"));
+    for (const q of quarantine) body.append(quarantineCard(q));
   }
 
   body.append(el("div", "rail-group-title", "Sessions"));
@@ -202,19 +260,38 @@ function renderRail(s) {
   }
 }
 
+function quarantineCard(q) {
+  const card = el("div", "quarantine");
+  card.append(el("div", "q-kind", `${q.projectId} · ${q.kind}`));
+  if (q.reasons) card.append(el("div", "q-why", q.reasons));
+  card.append(el("div", "q-note", "Control block failed validation. Do not act on this artifact; a human should look."));
+  const actions = el("div", "d-actions");
+  const inspect = el("button", "btn ghost sm", "Inspect");
+  inspect.onclick = () => openFile(q.path, `${q.projectId} quarantined ${q.kind}`);
+  actions.append(inspect);
+  card.append(actions);
+  return card;
+}
+
 function decisionCard(d) {
   const card = el("div", "decision");
   card.append(el("div", "d-title", d.title), el("div", "d-project", d.projectId || ""));
+  if (d.body) card.append(el("div", "d-body", d.body));
   const ta = el("textarea"); ta.placeholder = "Answer this decision. It records into human-decisions/open.md and unblocks the project.";
   card.append(ta);
   const actions = el("div", "d-actions");
   const submit = el("button", "btn human sm", "Answer & unblock");
   const view = el("button", "btn ghost sm", "View");
   submit.onclick = async () => {
-    if (!ta.value.trim()) { ta.focus(); return; }
+    const answer = ta.value.trim();
+    if (!answer) { ta.focus(); return; }
     submit.disabled = true;
-    try { await action("/api/actions/answer-decision", { title: d.title, answer: ta.value.trim() }); toast("ok", "Decision answered", d.title); poll(); }
-    catch (e) { toast("err", "Could not answer", e.message); submit.disabled = false; }
+    try {
+      await action("/api/actions/answer-decision", { title: d.title, answer });
+      ta.value = ""; // clear the draft so the rail is free to rebuild
+      toast("ok", "Decision answered", d.title);
+      poll();
+    } catch (e) { toast("err", "Could not answer", e.message); submit.disabled = false; }
   };
   view.onclick = () => openFile("human-decisions/open.md", d.title);
   actions.append(submit, view);
@@ -249,6 +326,7 @@ function sessionRow(sess) {
   mid.append(el("div", "s-act", sess.activity || sess.role));
   row.append(mid);
   const seen = el("span", "s-seen", rel(sess.at));
+  seen.dataset.seenAt = sess.at;
   row.append(seen);
   const clear = el("button", "btn ghost sm s-clear", "clear");
   clear.title = "Drop this session from the dashboard";
@@ -269,10 +347,24 @@ function renderView() {
   const s = store.status; if (!s) return;
   const panel = $(`[data-view-panel="${store.view}"]`);
   if (store.view === "canvas") return renderCanvas(panel, s);
+  // rebuild-views skip re-render when their data is unchanged, so scroll
+  // position and artifact selection survive the 3s poll
+  const sig = viewSignature(store.view, s);
+  if (sig && sig === store.viewSig[store.view]) return;
+  store.viewSig[store.view] = sig;
   if (store.view === "board") return renderBoard(panel, s);
   if (store.view === "queue") return renderQueue(panel, s);
   if (store.view === "artifacts") return renderArtifacts(panel, s);
   if (store.view === "events") return renderEvents(panel, s);
+}
+
+function viewSignature(view, s) {
+  // the 30s bucket lets relative "next poll" times refresh without a data change
+  const bucket = Math.floor(Date.now() / 30000);
+  if (view === "board" || view === "queue") return JSON.stringify([s.queue, s.hiddenTerminalJobs, bucket]);
+  if (view === "events") return store.events.length ? `${store.events[0].at}:${store.events.length}` : (store.eventsLoaded ? "empty" : "loading");
+  if (view === "artifacts") return `artifacts:${store.project || ""}`;
+  return "";
 }
 
 /* ---- the loop canvas (signature view) ---------------------------------- */
@@ -407,7 +499,7 @@ function patchCanvas(s) {
   const active = new Set();
   if (counts.queue.n > 0) active.add("advisor-queue");
   if (counts.inflight.n > 0) { active.add("queue-inflight"); active.add("inflight-executor"); }
-  if (counts.executor.n > 0) active.add("inflight-executor");
+  if (counts.executor.n > 0) active.add("executor-gate");
   document.querySelectorAll("[data-flow]").forEach((f) => { f.style.display = active.has(f.dataset.flow) ? "" : "none"; });
 }
 
@@ -437,10 +529,22 @@ function onNodeClick(id) {
 function flashRail() { const r = $(".rail"); r.animate([{ background: "var(--elevated)" }, { background: "var(--surface)" }], { duration: 900 }); }
 
 function wireCanvasPanZoom(svg, root) {
-  let dragging = false, sx = 0, sy = 0;
-  svg.addEventListener("pointerdown", (e) => { dragging = true; sx = e.clientX; sy = e.clientY; svg.classList.add("panning"); svg.setPointerCapture(e.pointerId); });
-  svg.addEventListener("pointermove", (e) => { if (!dragging || !cam) return; cam.x += e.clientX - sx; cam.y += e.clientY - sy; sx = e.clientX; sy = e.clientY; applyCam(root); });
-  svg.addEventListener("pointerup", (e) => { dragging = false; svg.classList.remove("panning"); try { svg.releasePointerCapture(e.pointerId); } catch (_) {} });
+  // capture the pointer only once real movement starts — capturing on
+  // pointerdown retargets the click to the svg and kills node navigation
+  let down = false, dragging = false, sx = 0, sy = 0;
+  svg.addEventListener("pointerdown", (e) => { down = true; dragging = false; sx = e.clientX; sy = e.clientY; });
+  svg.addEventListener("pointermove", (e) => {
+    if (!down || !cam) return;
+    if (!dragging) {
+      if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) < 5) return;
+      dragging = true; svg.classList.add("panning");
+      try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    }
+    cam.x += e.clientX - sx; cam.y += e.clientY - sy; sx = e.clientX; sy = e.clientY; applyCam(root);
+  });
+  const stopDrag = (e) => { down = false; dragging = false; svg.classList.remove("panning"); try { svg.releasePointerCapture(e.pointerId); } catch (_) {} };
+  svg.addEventListener("pointerup", stopDrag);
+  svg.addEventListener("pointercancel", stopDrag);
   svg.addEventListener("wheel", (e) => {
     e.preventDefault(); if (!cam) return;
     const rect = svg.getBoundingClientRect();
@@ -527,7 +631,7 @@ function renderQueue(panel, s) {
     const st = el("td"); const pill = el("span", null, j.status); pill.style.cssText = `color:${JOB_STATE[j.status] || "var(--text)"}`; st.append(pill); tr.append(st);
     tr.append(td("num", String(j.attemptCount)));
     const eta = j.status === "queued" ? "ready" : rel(j.nextPollAt, now);
-    tr.append(td(eta.endsWith("ago") ? "num" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta));
+    tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta));
     const err = td(null, j.lastError || "—"); err.style.color = "var(--text-faint)"; err.style.maxWidth = "220px"; err.style.overflow = "hidden"; err.style.textOverflow = "ellipsis"; err.style.whiteSpace = "nowrap"; err.title = j.lastError || ""; tr.append(err);
     const act = el("td");
     if (!TERMINAL.has(j.status)) {
@@ -579,8 +683,14 @@ async function loadArtifact(path, doc) {
 function renderEvents(panel, s) {
   panel.replaceChildren(viewHead("Activity", "queue events, newest first"));
   const wrap = el("div", "events");
-  if (!store.events.length) { wrap.append(el("div", "rail-empty", "No events yet.")); }
+  if (!store.events.length) { wrap.append(el("div", "rail-empty", store.eventsLoaded ? "No events yet." : "Loading events…")); }
+  let dividerPlaced = !store.prevVisit;
   for (const ev of store.events) {
+    const at = parseAt(ev.at);
+    if (!dividerPlaced && at && at.getTime() <= store.prevVisit) {
+      if (wrap.children.length) wrap.append(el("div", "ev-divider", "seen before your last visit"));
+      dividerPlaced = true;
+    }
     const row = el("div", "evrow");
     row.append(el("div", "ev-at", (ev.at || "").replace("T", " ").replace("Z", "")));
     const type = el("div", "ev-type"); const b = el("b", null, ev.event_type); type.append(b, document.createTextNode(" " + (ev.job_id || ""))); row.append(type);
@@ -616,8 +726,9 @@ function openJobModal() {
   bind("modal-title").textContent = "Create queue job";
   const fields = {};
   const add = (key, label, hint, value = "") => {
-    const f = el("div", "field"); f.append(el("label", null, label));
-    const input = el("input"); input.value = value; input.placeholder = hint || ""; fields[key] = input; f.append(input);
+    const f = el("div", "field");
+    const lab = el("label", null, label); lab.htmlFor = `f-${key}`; f.append(lab);
+    const input = el("input"); input.id = `f-${key}`; input.value = value; input.placeholder = hint || ""; fields[key] = input; f.append(input);
     body.append(f);
   };
   const proj = (s && s.projects[0] && s.projects[0].projectId) || "MY_APP";
@@ -636,9 +747,21 @@ function openJobModal() {
     catch (e) { toast("err", "Could not create job", e.message); create.disabled = false; }
   };
   actions.append(cancel, create); body.append(actions);
-  bind("modal").hidden = false;
+  showModal(fields.job_id);
 }
-function closeModal() { bind("modal").hidden = true; }
+
+let modalOpener = null;
+function showModal(focusTarget) {
+  modalOpener = document.activeElement;
+  bind("modal").hidden = false;
+  const target = focusTarget || $(".modal button, .modal input, .modal textarea");
+  if (target) target.focus();
+}
+function closeModal() {
+  bind("modal").hidden = true;
+  if (modalOpener && typeof modalOpener.focus === "function") modalOpener.focus();
+  modalOpener = null;
+}
 
 /* ---- files + toasts ---------------------------------------------------- */
 
@@ -647,7 +770,7 @@ async function openFile(path, title) {
   bind("modal-title").textContent = title || path;
   const pre = el("pre"); pre.style.cssText = "white-space:pre-wrap;max-height:60vh;overflow:auto;font-size:12px;line-height:1.6;margin:0";
   pre.textContent = "Loading…"; body.append(pre);
-  bind("modal").hidden = false;
+  showModal(document.querySelector('[data-action="modal-close"]'));
   try { pre.textContent = await (await fetch(`/api/file?path=${encodeURIComponent(path)}`)).text(); }
   catch (e) { pre.textContent = "Could not read file: " + e.message; }
 }
@@ -663,14 +786,29 @@ function toast(kind, title, body) {
 
 /* ---- boot -------------------------------------------------------------- */
 
-document.querySelectorAll(".railnav-item").forEach((b) => (b.onclick = () => setView(b.dataset.view)));
+const VIEW_KEYS = { 1: "canvas", 2: "board", 3: "queue", 4: "artifacts", 5: "events" };
+document.querySelectorAll(".railnav-item").forEach((b, i) => {
+  b.onclick = () => setView(b.dataset.view);
+  if (i < 5) b.title = `Shortcut: ${i + 1}`;
+});
 document.querySelector('[data-action="new-job"]').onclick = openJobModal;
 document.querySelector('[data-action="modal-close"]').onclick = closeModal;
 bind("modal").addEventListener("click", (e) => { if (e.target === bind("modal")) closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
-
-// elapsed timers on the canvas tick every second without a network hit
-setInterval(() => { if (store.view === "canvas" && store.status) patchCanvas(store.status); }, 1000);
+bind("modal").addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  const focusables = bind("modal").querySelectorAll("button, input, textarea, select, a[href]");
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") return closeModal();
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  if (VIEW_KEYS[e.key]) setView(VIEW_KEYS[e.key]);
+});
 
 let timer = null;
 function startPolling() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, POLL_MS); }

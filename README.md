@@ -83,14 +83,14 @@ Sessions that stop reporting go dim with a `(stale)` marker after an hour — a 
   <img src="assets/web-console.png" alt="arthur web — the loop canvas, needs-you rail, and live status in the browser" width="100%">
 </p>
 
-`arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **live loop canvas**: the pipeline (advisor → queue → in flight → executor → review gate → human) as a map you pan and zoom, with counts and flow moving over fixed nodes and the human-decision node lit the loudest. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, and clear sessions.
+`arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **live loop canvas**: the pipeline (advisor → queue → in flight → executor → review gate → human) as a map you pan and zoom, with counts and flow moving over fixed nodes and the human-decision node lit the loudest. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, inspect quarantined artifacts, and clear sessions.
 
 ```bash
 arthur web                 # serve this instance, open the browser
 arthur web --root ~/loop --port 8080 --no-open
 ```
 
-Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only, with a per-process session token guarding every write. It exposes exactly four human actions (answer a decision, recover a job, create a job, clear a session) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
+Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only, with a per-process session token guarding every write. It exposes exactly five human actions (answer a decision, recover a job, create a job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
 
 ## Pick your pieces
 

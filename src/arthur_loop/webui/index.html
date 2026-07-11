@@ -31,6 +31,10 @@
           <span class="meter" role="img"><i data-bind="quota-mini-fill"></i></span>
           <span class="quota-mini-value" data-bind="quota-mini-value"></span>
         </div>
+        <div class="lock-chip" data-bind="lock-chip" hidden>
+          <span data-bind="lock-text"></span>
+          <button class="btn ghost sm" data-bind="lock-break" hidden title="Remove a stale browser lock so due work can move">Break</button>
+        </div>
         <button class="btn ghost sm" data-action="new-job" title="Create a queue job">+ Job</button>
         <span class="pulse-live" data-bind="freshness" title="Auto-refreshing">
           <i aria-hidden="true"></i><span data-bind="freshness-text">live</span>

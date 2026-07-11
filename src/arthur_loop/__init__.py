@@ -15,5 +15,4 @@ __all__ = [
     "tracker",
     "usage_attribution",
     "web",
-    "web",
 ]

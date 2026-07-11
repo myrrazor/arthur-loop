@@ -34,6 +34,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -112,6 +113,14 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .meter i { display: block; height: 100%; border-radius: 3px; background: var(--go); transition: width 0.5s ease; }
 .quota-mini-value { font-variant-numeric: tabular-nums; }
 
+.lock-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--lock);
+  padding: 3px 9px; border: 1px solid color-mix(in srgb, var(--lock) 35%, var(--line));
+  border-radius: 999px; background: color-mix(in srgb, var(--lock) 8%, transparent);
+}
+.lock-chip.is-stale { color: var(--text-muted); border-color: var(--line); background: transparent; }
+
 .pulse-live { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-faint); }
 .pulse-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--go); box-shadow: 0 0 0 0 color-mix(in srgb, var(--go) 60%, transparent); animation: live-pulse 2.4s ease-out infinite; }
 .pulse-live.stale i { background: var(--text-faint); animation: none; }
@@ -157,6 +166,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 }
 .project-chip:hover { background: var(--surface-2); color: var(--text); }
 .project-chip .pdot { width: 6px; height: 6px; border-radius: 50%; background: var(--wait); flex: none; }
+.project-chip .pcount { margin-left: auto; font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .project-chip.blocked .pdot { background: var(--human); }
 .project-chip .pname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .railnav-foot { margin-top: auto; padding: 10px; color: var(--text-faint); font-size: 10.5px; line-height: 1.7; }
@@ -254,6 +264,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .tbl td { padding: 10px; border-bottom: 1px solid var(--line-soft); font-size: 12px; vertical-align: middle; }
 .tbl tr:hover td { background: var(--surface); }
 .tbl .num { font-variant-numeric: tabular-nums; text-align: right; }
+.tbl .num.overdue { color: var(--quota); }
 .tbl .mono-id { font-weight: 700; }
 
 /* ---- artifacts view --------------------------------------------------- */
@@ -294,6 +305,10 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 }
 .decision .d-title { font-weight: 700; font-size: 12.5px; color: var(--text); }
 .decision .d-project { font-size: 10.5px; color: var(--human); margin-top: 2px; }
+.decision .d-body {
+  margin-top: 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-muted);
+  white-space: pre-wrap; max-height: 150px; overflow-y: auto;
+}
 .decision textarea {
   width: 100%; margin-top: 9px; resize: vertical; min-height: 76px;
   background: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -311,6 +326,23 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .stale-job .s-id { font-weight: 700; font-size: 12px; }
 .stale-job .s-meta { color: var(--text-faint); font-size: 10.5px; margin-top: 2px; }
 .stale-job .s-actions { display: flex; gap: 8px; margin-top: 9px; }
+
+.quarantine {
+  border: 1px solid color-mix(in srgb, var(--quota) 35%, var(--line));
+  background: color-mix(in srgb, var(--quota) 7%, var(--surface));
+  border-radius: var(--radius); padding: 11px 12px;
+}
+.quarantine .q-kind { font-weight: 700; font-size: 12px; }
+.quarantine .q-why { color: var(--quota); font-size: 10.5px; margin-top: 3px; }
+.quarantine .q-note { color: var(--text-faint); font-size: 10.5px; margin-top: 5px; line-height: 1.5; }
+.quarantine .d-actions { display: flex; gap: 8px; margin-top: 9px; }
+
+.ev-divider {
+  text-align: center; color: var(--text-faint); font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 0 4px; border-bottom: 1px solid var(--line);
+  margin-bottom: 4px;
+}
 
 .session-row { display: flex; align-items: flex-start; gap: 9px; padding: 8px 4px; border-bottom: 1px solid var(--line-soft); }
 .session-row:last-child { border-bottom: none; }

@@ -28,8 +28,9 @@ person sitting at the machine, not a hosted dashboard.
 - **Artifacts** — per-project index and a reader; artifacts whose control block
   failed validation are flagged.
 - **Activity** — the `queue/events.jsonl` tail, newest first.
-- **Needs you** (right rail, always on) — open decisions with an answer box,
-  stale jobs with recover buttons, and the live session list.
+- **Needs you** (right rail, always on) — open decisions with the question and
+  an answer box, stale jobs with recover buttons, quarantined artifacts whose
+  control block failed validation, and the live session list.
 
 The top strip carries the **next action** as an imperative with a target
 ("Answer SAMPLE_APP Auth Scope Gate", "Poll BQ-12 · 4m ago") so one blocked
@@ -37,14 +38,17 @@ project never hides due work in another.
 
 ## What a human can do here (and what they can't)
 
-The console exposes exactly four write actions, each a thin wrapper over the same
+The console exposes exactly five write actions, each a thin wrapper over the same
 durable-state paths the CLI uses:
 
 1. **Answer a decision** — records the answer into `human-decisions/open.md`,
    flips the section to `ANSWERED`, and unblocks the project.
 2. **Recover a job** — parks a stale job as `needs_recovery`, optionally requeues.
+   Finished jobs are refused.
 3. **Create a job** — the `arthur queue create` form, with the same dedupe guard.
 4. **Clear a session** — drops a finished session from the dashboard.
+5. **Break a stale lock** — removes a browser lock whose holder went quiet past
+   its TTL. A fresh lock is refused; you can't yank the browser from a live agent.
 
 It deliberately does **not** offer claim/submit/poll buttons (those are the
 browser-lock lifecycle the queue-manager agent owns), an "approve plan" button
