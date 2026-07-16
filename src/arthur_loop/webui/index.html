@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="arthur-token" content="__ARTHUR_TOKEN__">
+  <title>Arthur Loop</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230c0e11'/%3E%3Cg fill='%23e7ebef'%3E%3Crect x='4' y='4' width='2.4' height='2.4'/%3E%3Crect x='6.8' y='4' width='2.4' height='2.4'/%3E%3Crect x='9.6' y='4' width='2.4' height='2.4'/%3E%3Crect x='4' y='6.8' width='2.4' height='2.4' fill='%23616b76'/%3E%3Crect x='9.6' y='6.8' width='2.4' height='2.4' fill='%23616b76'/%3E%3Crect x='4' y='9.6' width='2.4' height='2.4'/%3E%3Crect x='6.8' y='9.6' width='2.4' height='2.4'/%3E%3Crect x='9.6' y='9.6' width='2.4' height='2.4'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+  <div id="app" aria-busy="true">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b>
+        </span>
+        <span class="brand-name">ARTHUR<span class="brand-dim">LOOP</span></span>
+        <span class="brand-sep" aria-hidden="true">/</span>
+        <span class="brand-instance" data-bind="instance">loading</span>
+      </div>
+      <div class="topbar-state">
+        <span class="state-chip" data-bind="state-chip" data-state="">
+          <i class="dot" aria-hidden="true"></i><span data-bind="state-label">WAIT</span>
+        </span>
+        <span class="state-hint" data-bind="state-hint"></span>
+      </div>
+      <div class="topbar-right">
+        <div class="quota-mini" data-bind="quota-mini" hidden>
+          <span class="quota-mini-label">quota</span>
+          <span class="meter" role="img"><i data-bind="quota-mini-fill"></i></span>
+          <span class="quota-mini-value" data-bind="quota-mini-value"></span>
+        </div>
+        <div class="lock-chip" data-bind="lock-chip" hidden>
+          <span data-bind="lock-text"></span>
+          <button class="btn ghost sm" data-bind="lock-break" hidden title="Remove a stale browser lock so due work can move">Break</button>
+        </div>
+        <button class="btn ghost sm" data-action="new-job" title="Create a queue job">+ Job</button>
+        <span class="pulse-live" data-bind="freshness" title="Auto-refreshing">
+          <i aria-hidden="true"></i><span data-bind="freshness-text">live</span>
+        </span>
+      </div>
+    </header>
+
+    <nav class="railnav" aria-label="Views">
+      <button class="railnav-item is-active" data-view="canvas">
+        <span class="ri" aria-hidden="true">◈</span><span>Canvas</span>
+      </button>
+      <button class="railnav-item" data-view="board">
+        <span class="ri" aria-hidden="true">▤</span><span>Board</span>
+      </button>
+      <button class="railnav-item" data-view="queue">
+        <span class="ri" aria-hidden="true">≣</span><span>Queue</span>
+        <span class="railnav-count" data-bind="count-queue" hidden></span>
+      </button>
+      <button class="railnav-item" data-view="artifacts">
+        <span class="ri" aria-hidden="true">❏</span><span>Artifacts</span>
+      </button>
+      <button class="railnav-item" data-view="events">
+        <span class="ri" aria-hidden="true">⌁</span><span>Events</span>
+      </button>
+      <div class="railnav-projects">
+        <div class="railnav-heading">Projects</div>
+        <div data-bind="project-list"></div>
+      </div>
+      <div class="railnav-foot">
+        <span data-bind="adapters"></span>
+      </div>
+    </nav>
+
+    <main class="stage" data-bind="stage">
+      <section class="view" data-view-panel="canvas" hidden></section>
+      <section class="view" data-view-panel="board" hidden></section>
+      <section class="view" data-view-panel="queue" hidden></section>
+      <section class="view" data-view-panel="artifacts" hidden></section>
+      <section class="view" data-view-panel="events" hidden></section>
+      <div class="stage-skeleton" data-bind="skeleton">
+        <div class="sk sk-canvas"></div>
+      </div>
+    </main>
+
+    <aside class="rail" aria-label="Needs you">
+      <div class="rail-head">
+        <span class="rail-title">Needs you</span>
+        <span class="rail-badge" data-bind="attention-badge" hidden>0</span>
+      </div>
+      <div class="rail-body" data-bind="rail-body"></div>
+    </aside>
+  </div>
+
+  <div class="toast-stack" data-bind="toasts" aria-live="polite"></div>
+
+  <div class="modal-scrim" data-bind="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title" data-bind="modal-title">Create job</h2>
+        <button class="btn ghost sm icon" data-action="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" data-bind="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
