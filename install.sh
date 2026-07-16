@@ -1,7 +1,7 @@
 #!/bin/sh
 # Arthur Loop one-command installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/arthur-loop/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh
 #
 # Also works from a local checkout:  ./install.sh
 #
@@ -12,7 +12,7 @@
 # Env overrides: ARTHUR_LOOP_REPO (git URL), ARTHUR_LOOP_HOME, ARTHUR_LOOP_BIN.
 set -eu
 
-REPO="${ARTHUR_LOOP_REPO:-https://github.com/OWNER/arthur-loop.git}"
+REPO="${ARTHUR_LOOP_REPO:-https://github.com/myrrazor/arthur-loop.git}"
 DEST="${ARTHUR_LOOP_HOME:-$HOME/.arthur-loop}"
 BIN_DIR="${ARTHUR_LOOP_BIN:-$HOME/.local/bin}"
 
