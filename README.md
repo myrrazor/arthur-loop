@@ -42,14 +42,36 @@ Long AI loops fail at the seams: duplicate prompts after a crash, "approved" pla
 
 ## Quickstart
 
-Five minutes, no browser automation — the `manual` advisor is a human and two folders, which is also the fastest way to *feel* the loop:
+One command:
 
 ```bash
-git clone <this repo> arthur-loop && cd arthur-loop
-pip install .
+curl -fsSL https://raw.githubusercontent.com/OWNER/arthur-loop/main/install.sh | sh
+```
 
+(From a checkout, `./install.sh` does the same thing. The script uses pipx when available, `pip --user` otherwise.)
+
+Then make a loop. `arthur init` **detects the agent CLIs on your machine** (Codex, Claude Code, Gemini, Grok, Goose — see `arthur agents`), asks which one is your **main agent** and which **loop preset** you want:
+
+| Preset | Shape |
+| --- | --- |
+| `guided` (default) | Wizard writes a working base; your main agent interviews you and finishes the setup |
+| `solo` | One agent both plans and implements |
+| `pair` | Main agent implements, a second agent reviews |
+| `browser-advisor` | A browser AI (e.g. ChatGPT Pro) plans/reviews, your main agent implements |
+| `custom` | Pick adapters yourself |
+
+The wizard then seeds your main agent — the arthur-loop skill plus a `KICKOFF.md` interview — so *the agent itself* asks you how the flow should work, wires the adapters, and creates your projects:
+
+```bash
 mkdir ~/my-loop && cd ~/my-loop
-arthur init                  # pick advisor=manual to start
+arthur init
+# hand over to your main agent, e.g.:
+claude "$(cat agent-setup/KICKOFF.md)"     # or: codex "$(cat agent-setup/KICKOFF.md)"
+```
+
+No agent CLIs installed? Five minutes, no automation — the `manual` advisor is a human and two folders, which is also the fastest way to *feel* the loop:
+
+```bash
 arthur queue create --job-id BQ-MY_APP-001 --project-id MY_APP \
   --target-chat-title "MY_APP planning" --target-chat-url manual \
   --expected-marker HELLO_LOOP

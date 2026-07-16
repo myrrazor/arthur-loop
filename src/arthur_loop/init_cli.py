@@ -8,6 +8,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from arthur_loop.agents import KNOWN_AGENTS, AgentCLI, DetectedAgent, detect_agents, find_agent
 from arthur_loop.config import KNOWN_ADVISORS, KNOWN_EXECUTORS, KNOWN_TRACKERS, config_path
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.status import record_session
@@ -17,6 +18,8 @@ from arthur_loop.usage_attribution import append_snapshot, snapshot_from_codexba
 ATLAS_INSTALL_CMD = (
     "curl -fsSL https://raw.githubusercontent.com/myrrazor/atlas-tasker/main/scripts/install.sh | sh"
 )
+
+PRESETS = ("guided", "solo", "pair", "browser-advisor", "custom")
 
 INSTANCE_DIRS = [
     "queue/prompts",
@@ -38,6 +41,90 @@ TEST_STDOUT.log
 OPEN_DECISIONS_STUB = """# Open Human Decisions
 
 None right now. The loop appends here when a project needs you.
+"""
+
+INSTRUCTIONS_POINTER = """# Arthur Loop Instance
+
+This directory is an Arthur Loop instance — a durable control plane for an
+advisor/executor dev loop. If you are a coding agent working here, you are a
+role in that loop.
+
+Start by reading, in order:
+
+1. `agent-setup/skill/SKILL.md` — how to operate the loop (hard rules included)
+2. `agent-setup/KICKOFF.md` — the setup interview, if the loop is not configured yet
+3. `docs` in the arthur-loop package, via `arthur --help`, `arthur status`, `arthur tick --dry-run`
+
+Non-negotiables: never hand-edit `queue/*.jsonl` (use `arthur queue`), save
+advisor output with `arthur capture` before acting on it, and stop for a human
+whenever a control block says HUMAN_INPUT_REQUIRED or fails validation.
+"""
+
+KICKOFF_TEMPLATE = """# Arthur Loop Kickoff — read this whole file, then run the interview
+
+You are the **Master Orchestrator** of a brand-new Arthur Loop instance in this
+directory. Arthur Loop is a file-first control plane: durable queue, saved
+artifacts, validated approval gates, human-decision escalation. Your job right
+now is to finish setting it up **with** the human, then run the loop for them.
+
+## Step 0 — learn the system (do this before speaking)
+
+- Read `agent-setup/skill/SKILL.md` and its `references/` (workflow, control blocks).
+- Read `adapters/advisor/ADAPTER.md` and `adapters/executor/ADAPTER.md`.
+- Run `arthur status` and `arthur tick --dry-run` to see the empty loop.
+
+## Current configuration (written by the wizard)
+
+- preset: {preset}
+- main agent: {main_agent}
+- advisor adapter: {advisor}
+- executor adapter: {executor}
+- tracker: {tracker}
+- detected agent CLIs on this machine: {detected}
+
+## Step 1 — interview the human
+
+Ask, one topic at a time, and keep it conversational:
+
+1. **The flow.** Who should plan/review, and who should implement? Offer the
+   shapes by name: solo (you do both), pair (one agent develops, another
+   reviews), browser-advisor (a browser AI like ChatGPT Pro plans/reviews).
+   Confirm or change the adapters accordingly in `config/arthur-loop.json`
+   (valid advisors: {known_advisors}; executors: {known_executors}). If they
+   want an agent with no shipped adapter (e.g. Gemini or Grok), author
+   `adapters/advisor/ADAPTER.md` or `adapters/executor/ADAPTER.md` for it
+   yourself, following `docs/adapters.md` — the contract is a runbook + the
+   standard control blocks, no core code.
+2. **Review strictness.** What blocks a sprint: P0/P1 only, or any finding?
+   When must a human approve — every implementation handoff, or only flagged
+   ones? Record the answers in a new `FLOW.md` at the instance root.
+3. **Projects.** Which projects should the loop manage? For each: a
+   SHOUTY_SNAKE id, one-line goal, and (if the advisor is browser-based) the
+   conversation title/URL. Create `projects/<ID>/state.md` and add each to
+   `projects` in `config/arthur-loop.json`.
+4. **Cadence and quota.** Confirm polling cadence and the quota reserve in the
+   config, and whether the governor should be on.
+
+## Step 2 — make it real
+
+- Write `FLOW.md` summarizing every decision (this is the loop's constitution).
+- Update `config/arthur-loop.json` to match. Validate by running `arthur status`.
+- Report to your session registry: `arthur status set --session-id master
+  --role master --state working --activity "setting up the loop"`.
+- If a project is ready, seed its first job with `arthur queue create` and walk
+  the human through one full planning cycle per the skill.
+
+## Hard rules (from the skill — these override enthusiasm)
+
+- Implementation never starts from a plan-only packet; sprints advance only on
+  explicit advisor approval, and human gates always win.
+- Save advisor output with `arthur capture` before acting on it; never trust an
+  artifact marked `control_block_valid: false`.
+- One advisor conversation at a time — respect the lock.
+- Never hand-edit `queue/*.jsonl`.
+
+When setup is done, print the dashboard (`arthur status`) and tell the human
+exactly what will happen next and what you are waiting on.
 """
 
 
@@ -75,6 +162,85 @@ def _copy_tree(source: Any, dest: Path) -> None:
             target.write_bytes(item.read_bytes())
 
 
+def resolve_preset(
+    preset: str,
+    main: AgentCLI | None,
+    second: AgentCLI | None,
+) -> tuple[str, str, list[str]]:
+    """Map a loop preset to (advisor, executor) adapters, with honest notes."""
+
+    notes: list[str] = []
+    main_exec = main.executor_adapter if main else None
+    main_adv = main.advisor_adapter if main else None
+
+    if preset == "solo":
+        if main_adv and main_exec:
+            return main_adv, main_exec, notes
+        notes.append("solo preset needs an agent with shipped adapters; falling back to guided")
+        preset = "guided"
+
+    if preset == "pair":
+        second_adv = second.advisor_adapter if second else None
+        if main_exec and second_adv:
+            return second_adv, main_exec, notes
+        notes.append("pair preset needs adapters for both agents; falling back to guided")
+        preset = "guided"
+
+    if preset == "browser-advisor":
+        return "chatgpt-browser", (main_exec or "manual"), notes
+
+    # guided: a working base the kickoff interview will finalize
+    if main and not main_exec:
+        notes.append(
+            f"{main.name} has no shipped executor adapter yet — the kickoff interview "
+            "walks your agent through authoring one (docs/adapters.md)"
+        )
+    return "manual", (main_exec or "manual"), notes
+
+
+def seed_agent_kickoff(
+    root: Path,
+    main: AgentCLI,
+    *,
+    preset: str,
+    advisor: str,
+    executor: str,
+    tracker: str,
+    detected: list[DetectedAgent],
+) -> list[str]:
+    """Copy the skill into the instance and aim the main agent at the interview."""
+
+    seed_pkg = resources.files("arthur_loop") / "seed" / "skill"
+    setup_dir = root / "agent-setup"
+    _copy_tree(seed_pkg, setup_dir / "skill")
+
+    detected_line = (
+        ", ".join(f"{item.agent.name} ({item.agent.agent_id})" for item in detected) or "none"
+    )
+    kickoff = KICKOFF_TEMPLATE.format(
+        preset=preset,
+        main_agent=f"{main.name} ({main.agent_id})",
+        advisor=advisor,
+        executor=executor,
+        tracker=tracker,
+        detected=detected_line,
+        known_advisors=", ".join(sorted(KNOWN_ADVISORS)),
+        known_executors=", ".join(sorted(KNOWN_EXECUTORS)),
+    )
+    (setup_dir / "KICKOFF.md").write_text(kickoff, encoding="utf-8")
+
+    seeded: list[str] = ["agent-setup/KICKOFF.md", "agent-setup/skill/"]
+    if main.skills_dir:
+        _copy_tree(seed_pkg, root / main.skills_dir / "arthur-loop")
+        seeded.append(f"{main.skills_dir}/arthur-loop/")
+    if main.instructions_file:
+        pointer = root / main.instructions_file
+        if not pointer.exists():
+            pointer.write_text(INSTRUCTIONS_POINTER, encoding="utf-8")
+            seeded.append(main.instructions_file)
+    return seeded
+
+
 def run_init(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     yes = args.yes
@@ -85,12 +251,54 @@ def run_init(args: argparse.Namespace) -> int:
 
     print("Arthur Loop setup — pick the pieces of your loop.\n")
 
-    advisor = args.advisor or _ask_choice(
-        "Who plans and reviews? (your advisor)", sorted(KNOWN_ADVISORS), "chatgpt-browser", yes
+    detected = detect_agents(with_versions=not yes)
+    if detected:
+        print("Detected agent CLIs:")
+        for item in detected:
+            version = f"  ({item.version})" if item.version else ""
+            print(f"  • {item.agent.name:<12} {item.path}{version}")
+    else:
+        print("No known agent CLIs detected (looked for: "
+              + ", ".join(agent.binary for agent in KNOWN_AGENTS) + ").")
+    print()
+
+    # main agent first — everything else hangs off this choice
+    agent_choices = [item.agent.agent_id for item in detected] or [a.agent_id for a in KNOWN_AGENTS]
+    default_main = args.main_agent or (detected[0].agent.agent_id if detected else "none")
+    main_id = args.main_agent or _ask_choice(
+        "Main agent (runs the loop and the setup interview)",
+        agent_choices + ["none"],
+        default_main,
+        yes,
     )
-    executor = args.executor or _ask_choice(
-        "Who implements? (your executor)", sorted(KNOWN_EXECUTORS), "codex", yes
+    main = find_agent(main_id) if main_id != "none" else None
+
+    preset = args.preset or _ask_choice(
+        "Loop preset", list(PRESETS), "guided" if main else "custom", yes
     )
+
+    second: AgentCLI | None = find_agent(args.second_agent) if args.second_agent else None
+    if preset == "pair" and second is None and not yes:
+        others = [item.agent.agent_id for item in detected if main and item.agent.agent_id != main.agent_id]
+        if others:
+            second = find_agent(_ask_choice("Reviewing agent", others, others[0], False))
+
+    if preset == "custom":
+        advisor = args.advisor or _ask_choice(
+            "Who plans and reviews? (your advisor)", sorted(KNOWN_ADVISORS), "chatgpt-browser", yes
+        )
+        executor = args.executor or _ask_choice(
+            "Who implements? (your executor)", sorted(KNOWN_EXECUTORS), "codex", yes
+        )
+        preset_notes: list[str] = []
+    else:
+        advisor, executor, preset_notes = resolve_preset(preset, main, second)
+        # explicit flags always win over the preset
+        advisor = args.advisor or advisor
+        executor = args.executor or executor
+    for note in preset_notes:
+        print(f"note: {note}")
+
     tracker = args.tracker or _ask_choice("Ticket tracker?", sorted(KNOWN_TRACKERS), "none", yes)
 
     if args.no_governor:
@@ -106,7 +314,7 @@ def run_init(args: argparse.Namespace) -> int:
     heartbeat = not args.no_heartbeat and _ask_bool("Enable heartbeat state files (runtime/)?", True, yes)
 
     projects: list[dict[str, str]] = []
-    while not yes and _ask_bool("Add a project now?", not projects, False):
+    while not yes and _ask_bool("Add a project now?", False, False):
         project_id = _ask("  project id (SHOUTY_SNAKE)", "MY_APP", False)
         title = _ask("  advisor conversation/target title", f"{project_id} planning", False)
         url = _ask("  advisor target URL (blank if n/a)", "", False)
@@ -118,6 +326,8 @@ def run_init(args: argparse.Namespace) -> int:
                 "state_path": f"projects/{project_id}/state.md",
             }
         )
+    if not projects and main is not None:
+        print("(no projects yet — your main agent's kickoff interview will create them)")
 
     if tracker == "atlas-tasker" and shutil.which("tracker") is None:
         print("\nAtlas Tasker's `tracker` CLI is not on PATH. Install it from the open-source repo")
@@ -136,6 +346,11 @@ def run_init(args: argparse.Namespace) -> int:
             "first_poll_minutes": 1,
             "steady_poll_minutes": 5,
             "max_retries_after_stopped_no_output": 1,
+        },
+        "flow": {
+            "preset": preset,
+            "main_agent": main.agent_id if main else None,
+            "reviewer": second.agent_id if second else None,
         },
         "projects": projects,
     }
@@ -163,18 +378,40 @@ def run_init(args: argparse.Namespace) -> int:
     _copy_tree(adapters_pkg / "advisors" / advisor, root / "adapters/advisor")
     _copy_tree(adapters_pkg / "executors" / executor, root / "adapters/executor")
 
+    seeded: list[str] = []
+    if main is not None and not args.no_kickoff:
+        seeded = seed_agent_kickoff(
+            root,
+            main,
+            preset=preset,
+            advisor=advisor,
+            executor=executor,
+            tracker=tracker,
+            detected=detected,
+        )
+
     if args.demo:
         seed_demo(root)
 
     print("\nDone. Your loop:")
+    print(f"  preset:   {preset}" + (f"   main agent: {main.name}" if main else ""))
     print(f"  advisor:  {advisor}   (runbook: adapters/advisor/ADAPTER.md)")
     print(f"  executor: {executor}   (runbook: adapters/executor/ADAPTER.md)")
     print(f"  tracker:  {tracker}")
     print(f"  governor: {'on' if governor else 'off'}   heartbeat: {'on' if heartbeat else 'off'}")
-    print("\nNext steps:")
-    print("  1. Read adapters/advisor/ADAPTER.md and tune the prompts in adapters/advisor/prompts/.")
-    print("  2. Create your first job:   arthur queue create --job-id BQ-<PROJECT>-001 ...")
-    print("  3. See the whole loop:      arthur status")
+    if seeded:
+        print("\nSeeded for your main agent: " + ", ".join(seeded))
+        print("\nHand over to it now — it will interview you and finish the setup:")
+        if main and main.launch_hint:
+            print(f"  cd {root}")
+            print(f"  {main.launch_hint}")
+        else:
+            print(f"  start {main.name if main else 'your agent'} in {root} and paste agent-setup/KICKOFF.md")
+    else:
+        print("\nNext steps:")
+        print("  1. Read adapters/advisor/ADAPTER.md and tune the prompts in adapters/advisor/prompts/.")
+        print("  2. Create your first job:   arthur queue create --job-id BQ-<PROJECT>-001 ...")
+        print("  3. See the whole loop:      arthur status")
     if args.demo:
         print("\nDemo state is seeded — run `arthur status` right now to see a busy loop.")
     return 0
@@ -262,14 +499,21 @@ def seed_demo(root: Path) -> None:
 
 
 def add_init_parser(subparsers: Any) -> None:
-    init = subparsers.add_parser("init", help="Interactive setup — pick your advisor, executor, and tracker")
+    init = subparsers.add_parser("init", help="Interactive setup — pick your agents, flow preset, and tracker")
     init.add_argument("--root", default=".", help="Directory to initialize as an Arthur Loop instance")
     init.add_argument("--yes", action="store_true", help="Accept defaults / provided flags, ask nothing")
-    init.add_argument("--advisor", choices=sorted(KNOWN_ADVISORS))
-    init.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS))
+    init.add_argument("--main-agent", choices=[a.agent_id for a in KNOWN_AGENTS] + ["none"],
+                      help="Agent that runs the loop and the setup interview (default: first detected)")
+    init.add_argument("--preset", choices=list(PRESETS),
+                      help="Loop shape: guided, solo, pair, browser-advisor, or custom")
+    init.add_argument("--second-agent", choices=[a.agent_id for a in KNOWN_AGENTS],
+                      help="Reviewing agent for the pair preset")
+    init.add_argument("--advisor", choices=sorted(KNOWN_ADVISORS), help="Override the advisor adapter")
+    init.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS), help="Override the executor adapter")
     init.add_argument("--tracker", choices=sorted(KNOWN_TRACKERS))
     init.add_argument("--no-governor", action="store_true")
     init.add_argument("--no-heartbeat", action="store_true")
+    init.add_argument("--no-kickoff", action="store_true", help="Skip seeding the main agent's setup interview")
     init.add_argument("--reserve-percent", type=float, default=5.0)
     init.add_argument("--demo", action="store_true", help="Seed sample projects, a job, sessions, and a decision")
     init.add_argument("--force", action="store_true")

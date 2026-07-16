@@ -11,6 +11,7 @@ from arthur_loop.status import collect_status
 
 BASE_ARGS = [
     "--yes",
+    "--main-agent", "none",
     "--advisor", "manual",
     "--executor", "manual",
     "--tracker", "none",
@@ -65,6 +66,84 @@ class InitTests(unittest.TestCase):
             root = Path(tmp)
             self.assertTrue((root / "adapters/advisor/prompts/next-plan-request.md").exists())
             self.assertTrue((root / "adapters/executor/prompts/plan-only.md").exists())
+
+    def test_pair_preset_wires_reviewer_as_advisor_and_seeds_kickoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code = main(
+                [
+                    "init", "--root", tmp, "--yes",
+                    "--main-agent", "codex",
+                    "--preset", "pair",
+                    "--second-agent", "claude-code",
+                    "--tracker", "none",
+                    "--no-governor",
+                ]
+            )
+            self.assertEqual(code, 0)
+
+            root = Path(tmp)
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["executor"]["adapter"], "codex")
+            self.assertEqual(config["advisor"]["adapter"], "claude-code")
+            self.assertEqual(config["flow"], {"preset": "pair", "main_agent": "codex", "reviewer": "claude-code"})
+
+            kickoff = (root / "agent-setup/KICKOFF.md").read_text(encoding="utf-8")
+            self.assertIn("Codex CLI (codex)", kickoff)
+            self.assertIn("preset: pair", kickoff)
+            self.assertTrue((root / "agent-setup/skill/SKILL.md").exists())
+            # codex reads AGENTS.md — the wizard leaves a pointer
+            self.assertIn("agent-setup/skill/SKILL.md", (root / "AGENTS.md").read_text(encoding="utf-8"))
+
+    def test_solo_preset_with_claude_installs_project_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            main(
+                [
+                    "init", "--root", tmp, "--yes",
+                    "--main-agent", "claude-code",
+                    "--preset", "solo",
+                    "--tracker", "none",
+                    "--no-governor",
+                ]
+            )
+            root = Path(tmp)
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["advisor"]["adapter"], "claude-code")
+            self.assertEqual(config["executor"]["adapter"], "claude-code")
+            self.assertTrue((root / ".claude/skills/arthur-loop/SKILL.md").exists())
+
+    def test_guided_preset_without_shipped_adapter_falls_back_to_manual(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            main(
+                [
+                    "init", "--root", tmp, "--yes",
+                    "--main-agent", "gemini",
+                    "--preset", "guided",
+                    "--tracker", "none",
+                    "--no-governor",
+                ]
+            )
+            root = Path(tmp)
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["advisor"]["adapter"], "manual")
+            self.assertEqual(config["executor"]["adapter"], "manual")
+            self.assertTrue((root / "GEMINI.md").exists())
+            self.assertTrue((root / "agent-setup/KICKOFF.md").exists())
+
+    def test_no_kickoff_skips_agent_seeding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            main(
+                [
+                    "init", "--root", tmp, "--yes",
+                    "--main-agent", "claude-code",
+                    "--preset", "guided",
+                    "--tracker", "none",
+                    "--no-governor",
+                    "--no-kickoff",
+                ]
+            )
+            root = Path(tmp)
+            self.assertFalse((root / "agent-setup").exists())
+            self.assertFalse((root / ".claude").exists())
 
     def test_demo_seed_renders_nonempty_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

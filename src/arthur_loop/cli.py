@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from arthur_loop.agents import KNOWN_AGENTS, detect_agents
 from arthur_loop.artifact_store import save_chatgpt_artifact
 from arthur_loop.notify import send_notification, watch_events
 from arthur_loop.browser_lock import (
@@ -446,6 +447,32 @@ def _build_status_parser(subparsers: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# agents
+
+
+def cmd_agents(args: argparse.Namespace) -> int:
+    detected = detect_agents(with_versions=not args.no_versions)
+    if args.json:
+        print(json.dumps([item.to_record() for item in detected], indent=2, sort_keys=True))
+        return 0
+    if not detected:
+        binaries = ", ".join(agent.binary for agent in KNOWN_AGENTS)
+        print(f"No known agent CLIs found on PATH (looked for: {binaries}).")
+        return 0
+    for item in detected:
+        version = f"  ({item.version})" if item.version else ""
+        print(f"{item.agent.name:<12} {item.path}{version}")
+    return 0
+
+
+def _build_agents_parser(subparsers: Any) -> None:
+    agents = subparsers.add_parser("agents", help="Detect coding-agent CLIs available on this machine")
+    agents.add_argument("--json", action="store_true")
+    agents.add_argument("--no-versions", action="store_true", help="Skip the (slower) --version probes")
+    agents.set_defaults(func=cmd_agents)
+
+
+# ---------------------------------------------------------------------------
 # tracker
 
 
@@ -695,6 +722,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arthur", description="Arthur Loop — file-first control plane for AI dev loops.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_init_parser(subparsers)
+    _build_agents_parser(subparsers)
     _build_queue_parser(subparsers)
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)
