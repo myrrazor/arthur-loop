@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import time
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -715,6 +716,7 @@ def _build_usage_parser(subparsers: Any) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="arthur", description="Arthur Loop — file-first control plane for AI dev loops.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version('arthur-loop')}")
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_init_parser(subparsers)
     _build_agents_parser(subparsers)
