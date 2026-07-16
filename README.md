@@ -92,6 +92,19 @@ arthur web --root ~/loop --port 8080 --no-open
 
 Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only, with a per-process session token guarding every write. It exposes exactly five human actions (answer a decision, recover a job, create a job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
 
+## The menu bar app (macOS)
+
+<p align="center">
+  <img src="assets/arthurbar-demo.png" alt="ArthurBar — menu bar popover showing workers, queue, projects, decisions, and quota" width="360">
+</p>
+
+[ArthurBar](menubar/ArthurBar/) puts the loop in your menu bar: an `∞` icon with a badge counting the things that need a human, and a one-click card with workers, queue, projects, open decisions, the quota bar, and the browser lock. Native SwiftUI, styled after [CodexBar](https://github.com/steipete/CodexBar), fed by `arthur status --json`, read-only by design.
+
+```bash
+cd menubar/ArthurBar && swift build -c release
+.build/release/ArthurBar --root ~/my-loop
+```
+
 ## Pick your pieces
 
 `arthur init` asks; every answer is also a flag.
