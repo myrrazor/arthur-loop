@@ -8,6 +8,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .gstack/
+.playwright-cli/
 .venv/
 venv/
 node_modules/
@@ -18,3 +19,4 @@ TEST_STDOUT.log
 runtime/
 usage/*.jsonl
 menubar/ArthurBar/.build/
+output/playwright/
