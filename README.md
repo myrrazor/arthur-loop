@@ -2,14 +2,21 @@
   <img src="assets/banner.svg" alt="Arthur Loop — a file-first control plane for AI dev loops" width="100%">
 </p>
 
+File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
+
 <div align="center">
+  <a href="https://github.com/myrrazor/arthur-loop/releases/latest"><img alt="Release: v0.1.0" src="https://img.shields.io/badge/release-v0.1.0-3fb950?style=for-the-badge"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3fb950?style=for-the-badge">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-58a6ff?style=for-the-badge">
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-d29922?style=for-the-badge">
-  <img alt="State: files first" src="https://img.shields.io/badge/state-files--first-bc8cff?style=for-the-badge">
 </div>
 
 <p align="center">
+  <img src="docs/assets/arthur-loop-demo.gif" alt="Arthur Loop terminal demo showing a live queue, a blocked human decision, and the scheduler choosing the next due job" width="880">
+</p>
+
+<p align="center">
+  <a href="#install">Install</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#the-status-dashboard">The Dashboard</a> ·
   <a href="#the-web-console">Web Console</a> ·
@@ -18,6 +25,22 @@
   <a href="#adapters">Adapters</a> ·
   <a href="#faq">FAQ</a>
 </p>
+
+## Install
+
+Pick one. All three install an isolated `arthur` command; Python 3.9 or newer is the only requirement.
+
+```bash
+pipx install git+https://github.com/myrrazor/arthur-loop.git
+
+# or with uv
+uv tool install git+https://github.com/myrrazor/arthur-loop.git
+
+# or let the installer manage a venv under ~/.arthur-loop
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh
+```
+
+From a checkout, `./install.sh` installs that checkout. Run `arthur --version` to confirm the installed release.
 
 One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: durable job queues, saved artifacts, validated approval gates, human-decision escalation, and a scheduler tick that always knows what should happen next.
 
@@ -42,15 +65,7 @@ Long AI loops fail at the seams: duplicate prompts after a crash, "approved" pla
 
 ## Quickstart
 
-One command:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/arthur-loop/main/install.sh | sh
-```
-
-(From a checkout, `./install.sh` does the same thing. The script uses pipx when available, `pip --user` otherwise.)
-
-Then make a loop. `arthur init` **detects the agent CLIs on your machine** (Codex, Claude Code, Gemini, Grok, Goose — see `arthur agents`), asks which one is your **main agent** and which **loop preset** you want:
+Make a loop. `arthur init` **detects the agent CLIs on your machine** (Codex, Claude Code, Gemini, Grok, Goose — see `arthur agents`), asks which one is your **main agent** and which **loop preset** you want:
 
 | Preset | Shape |
 | --- | --- |
@@ -65,9 +80,9 @@ The wizard then seeds your main agent — the arthur-loop skill plus a `KICKOFF.
 ```bash
 mkdir ~/my-loop && cd ~/my-loop
 arthur init
-# hand over to your main agent, e.g.:
-claude "$(cat agent-setup/KICKOFF.md)"     # or: codex "$(cat agent-setup/KICKOFF.md)"
 ```
+
+The wizard leaves `agent-setup/KICKOFF.md` for your main agent. Hand it over there; the agent interviews you, wires the adapters, and creates your projects.
 
 No agent CLIs installed? Five minutes, no automation — the `manual` advisor is a human and two folders, which is also the fastest way to *feel* the loop:
 
@@ -102,7 +117,7 @@ Sessions that stop reporting go dim with a `(stale)` marker after an hour — a 
 ## The web console
 
 <p align="center">
-  <img src="assets/web-console.png" alt="arthur web — the loop canvas, needs-you rail, and live status in the browser" width="100%">
+  <img src="docs/assets/web-console.png" alt="Arthur Loop web console showing the advisor-to-human canvas, one queued job, and an open auth-scope decision" width="100%">
 </p>
 
 `arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **live loop canvas**: the pipeline (advisor → queue → in flight → executor → review gate → human) as a map you pan and zoom, with counts and flow moving over fixed nodes and the human-decision node lit the loudest. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, inspect quarantined artifacts, and clear sessions.
@@ -133,7 +148,7 @@ And the loop can come find *you*: `arthur watch` polls the tick and fires **desk
 
 ```bash
 arthur watch                 # ping me when the loop needs a human
-arthur watch --once          # cron-friendly single check
+arthur watch --once --no-desktop  # cron-friendly check that only prints
 arthur notify --message "sprint 2 approved"
 ```
 
@@ -152,6 +167,8 @@ arthur notify --message "sprint 2 approved"
 **Trackers.** If you use [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) — Jira for your terminal, built for AI agents — Arthur Loop ships preset command templates and `arthur init` points you at its installer. Any other tracker with a CLI works through three command templates in config (`open_decision`, `close_decision`, `sprint_gate`) — no code, just your tool's commands. Or pick `none` and decisions live in `human-decisions/open.md` alone.
 
 **Advisors.** Each adapter is a runbook plus a prompt pack, not code. The `chatgpt-browser` adapter drives a logged-in ChatGPT Pro conversation through the browser UI — the most battle-tested path and also fragile-by-nature; check the terms of any service you automate. The `manual` and `claude-code` adapters exist precisely so the core never depends on browser automation.
+
+**Quota.** `auto` uses CodexBar when it is installed and otherwise stays out of the way. `command` accepts any executable that prints CodexBar-shaped JSON; `file` reads the same schema from disk; `none` disables collection. The core never requires CodexBar.
 
 ## The loop, end to end
 
@@ -176,14 +193,28 @@ The contract lives in [docs/adapters.md](docs/adapters.md); shipped adapters liv
 
 ## FAQ
 
+**Where does the data live? Does it phone home?** Queue state, artifacts, decisions, and status are ordinary markdown and JSONL under the instance directory you choose. The core does not phone home or require an API key; adapters only call the tools you configure.
+
+**Is it free?** Yes. Arthur Loop is MIT licensed and has no paid tier.
+
 **Does the core call any AI APIs?** No. The core is files and a CLI. Adapters decide how prompts reach an advisor/executor — including entirely manual.
 
 **Does it automate ChatGPT?** Only if you choose the `chatgpt-browser` adapter, and then only via your own agent driving your own logged-in browser. Review the terms of the services you automate; the `manual` and `claude-code` adapters are first-class alternatives.
 
-**Windows?** The file formats are portable; locks and browser adapters are untested there. Linux and macOS are exercised in CI.
+**Which platforms work?** The Python CLI is exercised on Linux and macOS. The file formats are portable, but locks and browser adapters are untested on Windows. ArthurBar requires macOS 14 or newer.
+
+**How do I update or uninstall it?** Repeat your `pipx install --force`, `uv tool install --force`, or curl command to update. For the curl install, remove `~/.arthur-loop` and `~/.local/bin/arthur` to uninstall; pipx and uv have their usual `uninstall arthur-loop` commands.
 
 **Why "Arthur"?** A round table of agents, one loop, and nobody implements without the crown's approval.
 
+## Contributing
+
+Issues and adapter contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local test commands and the `dev → testing → main` branch flow.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Release history lives in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
-MIT licensed. Built for personal multi-project loops; issues and adapter contributions welcome.
+Built by [myrrazor](https://github.com/myrrazor) · [more projects](https://github.com/myrrazor) · [source](https://github.com/myrrazor/arthur-loop) · [support the project](https://github.com/myrrazor). If Arthur Loop is useful, a ⭐ helps others find it.
