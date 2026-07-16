@@ -4,10 +4,12 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 from arthur_loop.artifact_store import save_chatgpt_artifact
+from arthur_loop.notify import send_notification, watch_events
 from arthur_loop.browser_lock import (
     BrowserLockError,
     acquire_lock,
@@ -23,6 +25,7 @@ from arthur_loop.status import (
     build_console,
     clear_session,
     collect_status,
+    open_decision_items,
     record_session,
     render_status,
     status_to_dict,
@@ -474,6 +477,81 @@ def _build_tracker_parser(subparsers: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# notify + watch
+
+
+def cmd_notify(args: argparse.Namespace) -> int:
+    result = send_notification(args.title, args.message, dry_run=args.dry_run)
+    print_record(result.to_record())
+    return 0 if (result.sent or args.dry_run) else 2
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    root = Path(args.root).resolve()
+    config = load_config(root)
+    reserve = _reserve_from(args, config)
+    quota_enabled = bool(config["components"]["resource_governor"])
+    label = root.name or "arthur-loop"
+
+    previous = None
+    previous_decisions: list[str] = []
+    try:
+        while True:
+            current = classify_tick(
+                root,
+                dry_run=True,
+                reserve_percent=reserve,
+                stale_after_minutes=args.stale_after_minutes,
+                quota_enabled=quota_enabled,
+            )
+            decisions = [item["title"] for item in open_decision_items(root)]
+
+            for headline, message in watch_events(previous, current, previous_decisions, decisions):
+                line = f"notify: {headline} — {message}"
+                if args.no_desktop:
+                    print(line)
+                else:
+                    result = send_notification(f"Arthur Loop ({label}) — {headline}", message)
+                    suffix = "" if result.sent else f"  [not delivered: {result.detail}]"
+                    print(line + suffix)
+
+            stale = len(current.stale_job_ids or [])
+            blocked = ", ".join(current.blocked_projects or []) or "-"
+            print(
+                f"[{current.generated_at}] {current.status:<24} "
+                f"blocked: {blocked} · stale: {stale}",
+                flush=True,
+            )
+
+            previous, previous_decisions = current, decisions
+            if args.once:
+                return 0
+            time.sleep(args.interval)
+    except KeyboardInterrupt:
+        print("\nwatch stopped")
+        return 0
+
+
+def _build_notify_parser(subparsers: Any) -> None:
+    notify = subparsers.add_parser("notify", help="Send a desktop notification (macOS/Linux)")
+    notify.add_argument("--title", default="Arthur Loop")
+    notify.add_argument("--message", required=True)
+    notify.add_argument("--dry-run", action="store_true", help="Print the command without sending")
+    notify.set_defaults(func=cmd_notify)
+
+    watch = subparsers.add_parser(
+        "watch", help="Poll the loop and notify on human-input, blocks, due work, and stale jobs"
+    )
+    watch.add_argument("--root", default=".", help="Arthur Loop instance root")
+    watch.add_argument("--interval", type=float, default=30.0, help="Seconds between checks")
+    watch.add_argument("--once", action="store_true", help="Check once and exit (cron-friendly)")
+    watch.add_argument("--no-desktop", action="store_true", help="Print events instead of notifying")
+    watch.add_argument("--reserve-percent", type=float, default=None)
+    watch.add_argument("--stale-after-minutes", type=int, default=30)
+    watch.set_defaults(func=cmd_watch)
+
+
+# ---------------------------------------------------------------------------
 # capture
 
 
@@ -621,6 +699,7 @@ def build_parser() -> argparse.ArgumentParser:
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)
     _build_lock_parser(subparsers)
+    _build_notify_parser(subparsers)
     _build_tracker_parser(subparsers)
     add_web_parser(subparsers)
     _build_capture_parser(subparsers)

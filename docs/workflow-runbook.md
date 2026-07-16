@@ -181,6 +181,24 @@ arthur status clear --session-id demo-app-loop
 
 States: `working`, `waiting`, `blocked`, `idle`, `done`. Suggested roles: `master`, `queue-manager`, `project-loop`, `executor`, `governor`. Sessions that have not reported for 60 minutes render dimmed with a `(stale)` marker — a stale `working` row usually means a session died mid-task and its work needs the recovery path.
 
+## Notifications
+
+`arthur watch` polls the tick (read-only) and sends a desktop notification on
+transitions into `HUMAN_INPUT_REQUIRED`, `BLOCKED_BY_QUOTA`,
+`BLOCKED_BY_BROWSER_LOCK`, or `POLL_DUE`, on newly opened human decisions, and
+on newly stale jobs — one notification per event, never repeats. Each check
+also prints a one-line heartbeat, so a `watch` pane doubles as a terminal
+event tray.
+
+```bash
+arthur watch --interval 30        # macOS: osascript · Linux: notify-send
+arthur watch --once               # single check, cron/launchd-friendly
+arthur notify --message "..."     # ad-hoc, for runbooks and agents
+```
+
+Agents may call `arthur notify` directly at human gates; `watch` exists so
+nobody has to remember to.
+
 ## Quota Policy
 
 Run quota snapshots:

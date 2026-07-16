@@ -105,6 +105,16 @@ cd menubar/ArthurBar && swift build -c release
 .build/release/ArthurBar --root ~/my-loop
 ```
 
+## Desktop notifications
+
+And the loop can come find *you*: `arthur watch` polls the tick and fires **desktop notifications** (macOS `osascript`, Linux `notify-send`) the moment a human decision opens, quota blocks, work goes due, or a job goes stale — never on repeats. Run it in a spare pane for a live event tray, from cron with `--once`, or script your own alerts with `arthur notify --message "..."`:
+
+```bash
+arthur watch                 # ping me when the loop needs a human
+arthur watch --once          # cron-friendly single check
+arthur notify --message "sprint 2 approved"
+```
+
 ## Pick your pieces
 
 `arthur init` asks; every answer is also a flag.
