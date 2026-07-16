@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Arthur Loop prompt mark">
+  <rect width="64" height="64" rx="10" fill="#0b0f0c"/>
+  <path d="M15 18l13 14-13 14" fill="none" stroke="#55e878" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+  <path d="M34 46h15" stroke="#edf7ef" stroke-width="6"/>
+</svg>
