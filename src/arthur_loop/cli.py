@@ -21,6 +21,7 @@ from arthur_loop.browser_lock import (
 from arthur_loop.config import load_config
 from arthur_loop.init_cli import add_init_parser
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, parse_ledger_time
+from arthur_loop.quota import fetch_quota_payload, quota_settings
 from arthur_loop.status import (
     VALID_SESSION_STATES,
     build_console,
@@ -624,22 +625,16 @@ def _build_capture_parser(subparsers: Any) -> None:
 
 def cmd_usage_snapshot(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
-    if args.input_json:
-        payload = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
-    else:
-        proc = subprocess.run(
-            ["codexbar", "usage", "--provider", args.provider, "--source", "web", "--format", "json"],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if proc.returncode != 0 and not proc.stdout.strip():
-            sys.stderr.write(proc.stderr)
-            return proc.returncode
-        payload = json.loads(proc.stdout)
+    config = load_config(root)
+    result = fetch_quota_payload(config, codexbar_provider=args.provider, input_json=args.input_json)
+    for warning in result.warnings:
+        sys.stderr.write(f"note: {warning}\n")
+    if result.payload is None:
+        sys.stderr.write(f"error: no quota payload available (source: {result.source})\n")
+        return 3
 
-    snapshot = snapshot_from_codexbar_json(payload, snapshot_id=args.snapshot_id, provider=args.provider)
+    wanted = args.provider or quota_settings(config).get("codexbar_provider") or "codex"
+    snapshot = snapshot_from_codexbar_json(result.payload, snapshot_id=args.snapshot_id, provider=wanted)
     append_snapshot(root, snapshot)
     print(json.dumps(snapshot.to_record(), indent=2, sort_keys=True))
     return 0
@@ -691,8 +686,8 @@ def _build_usage_parser(subparsers: Any) -> None:
     snapshot = actions.add_parser("snapshot", help="Record a normalized codexbar usage snapshot")
     snapshot.add_argument("--root", default=".", help="Arthur Loop instance root")
     snapshot.add_argument("--snapshot-id", required=True, help="Stable snapshot id, e.g. before-bq-demo-plan-001")
-    snapshot.add_argument("--input-json", help="Read codexbar JSON from this file instead of running codexbar")
-    snapshot.add_argument("--provider", default="codex", help="Provider to normalize from codexbar JSON")
+    snapshot.add_argument("--input-json", help="Read a codexbar-schema JSON file instead of the configured quota provider")
+    snapshot.add_argument("--provider", default=None, help="codexbar provider to fetch/normalize (default: quota.codexbar_provider from config)")
     snapshot.set_defaults(func=cmd_usage_snapshot)
 
     task = actions.add_parser("task", help="Estimate task usage from two quota snapshots")

@@ -10,6 +10,7 @@ __all__ = [
     "init_cli",
     "notify",
     "queue_ledger",
+    "quota",
     "reporting",
     "resource_usage",
     "status",

@@ -201,6 +201,16 @@ nobody has to remember to.
 
 ## Quota Policy
 
+Quota numbers come from a pluggable source configured in `quota.provider`:
+
+| Provider | How it works |
+| --- | --- |
+| `auto` (default) | Uses `codexbar` when installed, otherwise behaves like `none`. |
+| `codexbar` | Shells out to [CodexBar](https://github.com/steipete/CodexBar)'s CLI, which already handles subscription auth (OAuth/keychain/web) for codex, claude, gemini, grok, and dozens more — set `quota.codexbar_provider` to match your executor. Arthur Loop deliberately does not reimplement that authentication. |
+| `command` | Runs `quota.command` (argv, never a shell); it must print codexbar-schema JSON. |
+| `file` | Reads codexbar-schema JSON from `quota.path` — useful when another tool refreshes it. |
+| `none` | Governor has no data; `arthur usage snapshot` explains how to wire a source. |
+
 Run quota snapshots:
 
 - Before a master orchestration segment.
