@@ -1,7 +1,8 @@
-import XCTest
+import Foundation
+import Testing
 @testable import ArthurBar
 
-final class ModelTests: XCTestCase {
+struct ModelTests {
     let fixture = """
     {
       "generated_at": "2026-07-09T12:00:00Z",
@@ -31,31 +32,31 @@ final class ModelTests: XCTestCase {
     }
     """
 
-    func testDecodesStatusJson() throws {
+    @Test func decodesStatusJson() throws {
         let status = try LoopStatus.decode(Data(fixture.utf8))
 
-        XCTAssertEqual(status.state, "POLL_DUE")
-        XCTAssertEqual(status.sessions.first?.sessionId, "master")
-        XCTAssertEqual(status.queue.first?.jobId, "BQ-DEMO_APP-002")
-        XCTAssertEqual(status.hiddenTerminalJobs, 2)
-        XCTAssertEqual(status.projects.first?.blockedByDecision, false)
-        XCTAssertEqual(status.quota?.leftPercent, 62)
-        XCTAssertNil(status.browserLock)
-        XCTAssertEqual(status.tick.staleJobIds, ["BQ-OLD-001"])
+        #expect(status.state == "POLL_DUE")
+        #expect(status.sessions.first?.sessionId == "master")
+        #expect(status.queue.first?.jobId == "BQ-DEMO_APP-002")
+        #expect(status.hiddenTerminalJobs == 2)
+        #expect(status.projects.first?.blockedByDecision == false)
+        #expect(status.quota?.leftPercent == 62)
+        #expect(status.browserLock == nil)
+        #expect(status.tick.staleJobIds == ["BQ-OLD-001"])
     }
 
-    func testAttentionCountsDecisionsAndStaleJobs() throws {
+    @Test func attentionCountsDecisionsAndStaleJobs() throws {
         let status = try LoopStatus.decode(Data(fixture.utf8))
-        XCTAssertEqual(status.attentionCount, 2)
+        #expect(status.attentionCount == 2)
     }
 
-    func testRelativeTimeDescriptions() {
+    @Test func relativeTimeDescriptions() {
         let now = RelativeTime.parse("2026-07-09T12:00:00Z")!
 
-        XCTAssertEqual(RelativeTime.describe("2026-07-09T11:57:00Z", relativeTo: now), "3m ago")
-        XCTAssertEqual(RelativeTime.describe("2026-07-09T12:04:00Z", relativeTo: now), "in 4m")
-        XCTAssertEqual(RelativeTime.describe("2026-07-09T12:00:20Z", relativeTo: now), "now")
-        XCTAssertEqual(RelativeTime.describe(nil, relativeTo: now), "—")
-        XCTAssertEqual(RelativeTime.describe("2026-07-10T13:00:00Z", relativeTo: now), "in 1d 1h")
+        #expect(RelativeTime.describe("2026-07-09T11:57:00Z", relativeTo: now) == "3m ago")
+        #expect(RelativeTime.describe("2026-07-09T12:04:00Z", relativeTo: now) == "in 4m")
+        #expect(RelativeTime.describe("2026-07-09T12:00:20Z", relativeTo: now) == "now")
+        #expect(RelativeTime.describe(nil, relativeTo: now) == "—")
+        #expect(RelativeTime.describe("2026-07-10T13:00:00Z", relativeTo: now) == "in 1d 1h")
     }
 }
