@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from arthur_loop.tracker import render_command, run_action
 
@@ -55,6 +57,22 @@ class TrackerTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "skipped")
         self.assertIn("no template", result["reason"])
+
+    def test_live_call_runs_from_the_instance_root_not_the_cwd(self) -> None:
+        config = {"tracker": {"adapter": "command", "command_templates": {"open_decision": "pwd"}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            result = run_action(config, "open_decision", cwd=Path(tmp), project="X", title="Y")
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(Path(result["stdout"]).resolve(), Path(tmp).resolve())
+            self.assertEqual(result["cwd"], tmp)
+
+    def test_missing_tracker_binary_is_an_error_result_not_a_traceback(self) -> None:
+        config = {"tracker": {"adapter": "command", "command_templates": {"open_decision": "definitely-not-a-binary-xyz {project}"}}}
+        result = run_action(config, "open_decision", project="X", title="Y")
+
+        self.assertEqual(result["status"], "error")
+        self.assertIn("definitely-not-a-binary-xyz", result["stderr"])
 
 
 if __name__ == "__main__":
