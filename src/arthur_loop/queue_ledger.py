@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from arthur_loop.filelock import exclusive, instance_lock_path
+
 
 DEFAULT_FIRST_POLL_MINUTES = 1
 DEFAULT_POLL_MINUTES = 5
@@ -22,6 +24,26 @@ VALID_STATUSES = {
     "cancelled",
 }
 TERMINAL_STATUSES = {"completed", "completed_with_warnings", "failed", "cancelled"}
+_RESULT_STATUSES = {"completed", "completed_with_warnings", "failed", "needs_recovery", "cancelled"}
+
+# The queue state machine. A job may only move along these edges; everything
+# else (completing work that was never submitted, claiming a finished job,
+# reviving a terminal job) is rejected so the ledger cannot tell a story the
+# loop never lived. `--force` on create is the one documented override.
+ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "queued": {"claimed", "submitted", "needs_recovery", "failed", "cancelled"},
+    # re-claiming an already claimed job is a harmless retry after a crash
+    "claimed": {"claimed", "submitted", "needs_recovery", "failed", "cancelled"},
+    "submitted": {"waiting_for_chatgpt", "stopped_no_output"} | _RESULT_STATUSES,
+    "waiting_for_chatgpt": {"waiting_for_chatgpt", "stopped_no_output"} | _RESULT_STATUSES,
+    # retry after a silent stop re-submits with the same idempotency key
+    "stopped_no_output": {"submitted", "waiting_for_chatgpt"} | _RESULT_STATUSES,
+    "needs_recovery": {"queued", "failed", "cancelled"},
+    "completed": set(),
+    "completed_with_warnings": set(),
+    "failed": set(),
+    "cancelled": set(),
+}
 UTC = timezone.utc
 
 
@@ -98,6 +120,26 @@ def validate_status(status: str) -> None:
         raise ValueError(f"unknown queue status {status!r}; expected one of: {allowed}")
 
 
+class IllegalTransition(ValueError):
+    """Raised when a job is asked to move along an edge the state machine forbids."""
+
+
+def validate_transition(job_id: str, current: str, target: str) -> None:
+    """Raise IllegalTransition unless current -> target is a legal queue edge."""
+
+    validate_status(target)
+    allowed = ALLOWED_TRANSITIONS.get(current, set())
+    if target in allowed:
+        return
+    if current in TERMINAL_STATUSES:
+        detail = f"{current} is terminal; finished jobs never move again (create a new job)"
+    else:
+        detail = "allowed next: " + (", ".join(sorted(allowed)) or "none")
+    raise IllegalTransition(
+        f"illegal queue transition for {job_id}: {current} -> {target} ({detail})"
+    )
+
+
 @dataclass
 class QueueJob:
     """A browser queue job snapshot stored in the append-only ledger."""
@@ -119,6 +161,8 @@ class QueueJob:
     last_error: str | None = None
     output_artifact_paths: list[str] = field(default_factory=list)
     idempotency_key: str | None = None
+    # lock holder that claimed the job — lets `recover` release the right lease
+    claimed_by: str | None = None
 
     def to_record(self) -> dict[str, Any]:
         """Return a JSON-serializable job snapshot."""
@@ -134,12 +178,58 @@ class QueueLedger:
         self.jobs_path = root / "queue/jobs.jsonl"
         self.events_path = root / "queue/events.jsonl"
 
+    def _exclusive(self):
+        """Cross-process lock for read-modify-append sequences on the ledger."""
+
+        return exclusive(instance_lock_path(self.root, "queue-ledger"))
+
     def record_job(self, job: QueueJob) -> None:
         """Append a new or updated job snapshot and a matching event."""
 
         validate_status(job.status)
         append_jsonl(self.jobs_path, job.to_record())
         self.append_event(job.job_id, "job_snapshot", {"status": job.status})
+
+    def create_job(self, job: QueueJob, *, force: bool = False) -> QueueJob:
+        """Add a new job, refusing duplicate ids and reused idempotency keys.
+
+        `force` re-queues an existing job id with a fresh snapshot (the
+        documented escape hatch). A reused idempotency key on a *different* job
+        id is always a conflict: the key exists so retries cannot fork the queue.
+        """
+
+        with self._exclusive():
+            jobs = self.latest_jobs()
+            if job.idempotency_key:
+                for other in jobs.values():
+                    if other.job_id != job.job_id and other.idempotency_key == job.idempotency_key:
+                        raise ValueError(
+                            f"idempotency key {job.idempotency_key!r} is already used by "
+                            f"{other.job_id} ({other.status}); reuse the existing job or pick a new key"
+                        )
+            if job.job_id in jobs and not force:
+                existing = jobs[job.job_id]
+                raise ValueError(
+                    f"queue job {job.job_id} already exists ({existing.status}); "
+                    "use --force to append a fresh queued snapshot"
+                )
+            self.record_job(job)
+            if job.job_id in jobs:
+                self.append_event(job.job_id, "job_requeued_by_force", {"previous_status": jobs[job.job_id].status})
+        return job
+
+    def link_artifact(self, job_id: str, artifact_path: str) -> bool:
+        """Attach a saved artifact path to a job snapshot. Returns False for unknown jobs."""
+
+        with self._exclusive():
+            job = self.latest_jobs().get(job_id)
+            if job is None:
+                return False
+            if artifact_path not in job.output_artifact_paths:
+                job.output_artifact_paths.append(artifact_path)
+                self.record_job(job)
+            self.append_event(job_id, "artifact_saved", {"path": artifact_path})
+        return True
 
     def append_event(
         self,
@@ -178,6 +268,21 @@ class QueueLedger:
                 return event
         return None
 
+    def require_job(self, job_id: str) -> QueueJob:
+        """Return the latest snapshot for a job or raise KeyError."""
+
+        jobs = self.latest_jobs()
+        if job_id not in jobs:
+            raise KeyError(f"unknown queue job: {job_id}")
+        return jobs[job_id]
+
+    def check_transition(self, job_id: str, status: str) -> QueueJob:
+        """Validate a transition without recording it (for pre-flight checks)."""
+
+        job = self.require_job(job_id)
+        validate_transition(job_id, job.status, status)
+        return job
+
     def transition(
         self,
         job_id: str,
@@ -186,21 +291,40 @@ class QueueLedger:
         now: datetime | None = None,
         error: str | None = None,
         output_artifact_paths: list[str] | None = None,
+        holder: str | None = None,
     ) -> QueueJob:
         """Create a new job snapshot with an updated status."""
 
-        validate_status(status)
-        jobs = self.latest_jobs()
-        if job_id not in jobs:
-            raise KeyError(f"unknown queue job: {job_id}")
+        with self._exclusive():
+            return self._transition_locked(
+                job_id,
+                status,
+                now=now,
+                error=error,
+                output_artifact_paths=output_artifact_paths,
+                holder=holder,
+            )
+
+    def _transition_locked(
+        self,
+        job_id: str,
+        status: str,
+        *,
+        now: datetime | None,
+        error: str | None,
+        output_artifact_paths: list[str] | None,
+        holder: str | None,
+    ) -> QueueJob:
+        job = self.check_transition(job_id, status)
 
         now = now or utc_now()
-        job = jobs[job_id]
         job.status = status
         job.last_error = error
 
         if status == "claimed":
             job.claimed_at = isoformat(now)
+            if holder:
+                job.claimed_by = holder
         elif status == "submitted":
             job.submitted_at = isoformat(now)
             job.attempt_count += 1
@@ -248,19 +372,22 @@ class QueueLedger:
     ) -> QueueJob:
         """Record a browser poll result and transition the queue job."""
 
-        validate_status(status)
         now = now or utc_now()
-        event_type = "poll_result" if self.first_event(job_id, "first_poll_result") else "first_poll_result"
-        event_data = dict(data or {})
-        event_data.update({"marker_found": marker_found, "status": status})
-        self.append_event(job_id, event_type, event_data, at=now)
-        return self.transition(
-            job_id,
-            status,
-            now=now,
-            error=error,
-            output_artifact_paths=output_artifact_paths,
-        )
+        with self._exclusive():
+            # validate first so an illegal poll leaves no orphan poll event behind
+            self.check_transition(job_id, status)
+            event_type = "poll_result" if self.first_event(job_id, "first_poll_result") else "first_poll_result"
+            event_data = dict(data or {})
+            event_data.update({"marker_found": marker_found, "status": status})
+            self.append_event(job_id, event_type, event_data, at=now)
+            return self._transition_locked(
+                job_id,
+                status,
+                now=now,
+                error=error,
+                output_artifact_paths=output_artifact_paths,
+                holder=None,
+            )
 
     def due_jobs(self, now: datetime | None = None) -> list[QueueJob]:
         """Return jobs that are ready to submit or poll."""

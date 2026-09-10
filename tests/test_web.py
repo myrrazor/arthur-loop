@@ -38,10 +38,14 @@ class WebConsoleTests(unittest.TestCase):
 
     # ------------------------------------------------------------- helpers
 
-    def _get(self, path: str, host: str | None = None):
+    def _get(self, path: str, host: str | None = None, token: str | None = "default"):
         request = urllib.request.Request(self.base + path)
         if host:
             request.add_header("Host", host)
+        if token == "default":
+            token = self.token
+        if token:
+            request.add_header("X-Arthur-Token", token)
         return urllib.request.urlopen(request, timeout=5)
 
     def _post(self, path: str, body: dict, token: str | None = None):
@@ -66,19 +70,35 @@ class WebConsoleTests(unittest.TestCase):
         self.assertTrue(payload["sessions"])
         self.assertTrue(payload["queue"])
 
-    def test_index_serves_html_with_session_token(self) -> None:
-        with self._get("/") as response:
+    def test_index_serves_html_only_to_the_printed_url(self) -> None:
+        # the bootstrap URL carries the token as a query parameter
+        with self._get(f"/?token={self.token}", token=None) as response:
             html = response.read().decode("utf-8")
 
         self.assertIn("text/html", response.headers["Content-Type"])
         self.assertIn(self.token, html)
         self.assertNotIn("__ARTHUR_TOKEN__", html)
 
+        # a bare GET / (another local user, a guessing script) never learns the token
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self._get("/", token=None)
+        self.assertEqual(ctx.exception.code, 403)
+        self.assertNotIn(self.token, ctx.exception.read().decode("utf-8"))
+
+    def test_api_reads_require_the_session_token(self) -> None:
+        for path in ("/api/status", "/api/events?n=3", "/api/artifacts?project=DEMO_APP", "/api/file?path=human-decisions/open.md"):
+            with self.assertRaises(urllib.error.HTTPError, msg=path) as ctx:
+                self._get(path, token=None)
+            self.assertEqual(ctx.exception.code, 403, path)
+            with self.assertRaises(urllib.error.HTTPError, msg=path) as ctx:
+                self._get(path, token="wrong-token")
+            self.assertEqual(ctx.exception.code, 403, path)
+
     def test_assets_are_whitelisted(self) -> None:
-        with self._get("/assets/style.css") as response:
+        with self._get("/assets/style.css", token=None) as response:
             self.assertIn("text/css", response.headers["Content-Type"])
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self._get("/assets/../web.py")
+            self._get("/assets/../web.py", token=None)
         self.assertEqual(ctx.exception.code, 404)
 
     def test_events_endpoint_returns_recent_first(self) -> None:
@@ -205,6 +225,7 @@ class WebConsoleTests(unittest.TestCase):
             token=self.token,
         ):
             pass
+        ledger.transition("BQ-DEMO_APP-900", "submitted")
         ledger.transition("BQ-DEMO_APP-900", "completed")
 
         with self.assertRaises(urllib.error.HTTPError) as ctx:
@@ -254,8 +275,12 @@ class WebEnrichmentTests(unittest.TestCase):
         cls.server.server_close()
         cls._tmp.cleanup()
 
+    def _get(self, path: str):
+        request = urllib.request.Request(self.base + path, headers={"X-Arthur-Token": self.token})
+        return urllib.request.urlopen(request, timeout=5)
+
     def _status(self) -> dict:
-        with urllib.request.urlopen(self.base + "/api/status", timeout=5) as response:
+        with self._get("/api/status") as response:
             return json.load(response)
 
     def _post(self, path: str, body: dict):
@@ -286,14 +311,20 @@ class WebEnrichmentTests(unittest.TestCase):
         self.assertTrue(record["reasons"])
 
     def test_artifacts_endpoint_lists_latest_records(self) -> None:
-        with urllib.request.urlopen(self.base + "/api/artifacts?project=DEMO_APP", timeout=5) as response:
+        with self._get("/api/artifacts?project=DEMO_APP") as response:
             items = json.load(response)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["kind"], "sprint-review")
 
         with self.assertRaises(urllib.error.HTTPError) as ctx:
-            urllib.request.urlopen(self.base + "/api/artifacts", timeout=5)
+            self._get("/api/artifacts")
         self.assertEqual(ctx.exception.code, 400)
+
+    def test_quarantine_opened_a_blocking_decision(self) -> None:
+        payload = self._status()
+        titles = [decision["title"] for decision in payload["decisions"]]
+        self.assertTrue(any(title.startswith("DEMO_APP Quarantined artifact") for title in titles), titles)
+        self.assertIn("DEMO_APP", payload["tick"]["blockedProjects"])
 
     def test_clear_session_drops_a_session(self) -> None:
         payload = self._status()
