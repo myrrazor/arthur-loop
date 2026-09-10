@@ -3,7 +3,7 @@
 ```text
 Arthur Loop handoff from ChatGPT browser review. PLAN ONLY.
 
-Do not edit files, create branches, run migrations, run implementation commands, or begin implementation.
+Do not edit files, create branches, run migrations, run implementation commands, or begin implementation. A plan whose control block says IMPLEMENTATION_STARTED: true is quarantined and stops this project for a human.
 
 Use this saved ChatGPT planning artifact:
 {{CHATGPT_RESPONSE_ARTIFACT_PATH}}

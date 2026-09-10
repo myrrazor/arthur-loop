@@ -6,6 +6,8 @@ Arthur Loop implementation handoff for {{PROJECT_ID}}.
 ChatGPT approved this implementation prompt:
 {{CHATGPT_RESPONSE_ARTIFACT}}
 
+Before editing any file, run `arthur gate implementation --project-id {{PROJECT_ID}}` from the Arthur Loop instance root. If it prints NO-GO, stop and report that instead of implementing; the loop quarantines handoffs made while the gate is closed.
+
 Implement one approved sprint/task only. Follow repository AGENTS.md. Do not move to the next sprint after tests pass; stop for review.
 
 Before final response:

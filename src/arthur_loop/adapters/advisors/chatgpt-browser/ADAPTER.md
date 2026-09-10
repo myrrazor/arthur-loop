@@ -28,10 +28,10 @@ Drives a logged-in ChatGPT (Pro) conversation through the browser UI. No API cal
       arthur capture --project-id <ID> --job-id <JOB> --kind <kind> \
         --source-chat-title "<title>" --source-file <response.md>
 
-- If the saved artifact says `control_block_valid: false`, treat the response as HUMAN_INPUT_REQUIRED — never auto-approve from an invalid block.
+- If `capture` exits `3`, the response was quarantined (`control_block_valid: false`) or said HUMAN_INPUT_REQUIRED: a human decision is already open for the project — never auto-approve from an invalid block, stop that project and move on.
 
 ## Failure modes seen in practice
 
 - Copy-response populating an empty clipboard → always verify, keep the accessibility-text fallback.
 - "Stopped thinking" with no output → transient; one retry usually lands.
-- Automation checks on fresh browser profiles → use a profile you actually use, and check the terms of any service you automate. The `manual` and `claude-code` advisors exist so the core never depends on this transport.
+- Automation checks on fresh browser profiles → use a profile you actually use, and check the terms of any service you automate. This transport is fragile by nature — browser UIs change without notice — and it is not exercised by the test suite. The `manual`, `codex`, and `claude-code` advisors exist so the core never depends on it.
