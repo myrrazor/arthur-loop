@@ -111,7 +111,9 @@ HAS_P0_P1: false
             self.assertIn("# Review", saved)
 
             index = root / "projects/DEMO_APP/artifacts/chatgpt/index.md"
-            self.assertIn("Read this index before opening full ChatGPT response files", index.read_text(encoding="utf-8"))
+            index_text = index.read_text(encoding="utf-8")
+            self.assertIn("Read this index before opening full advisor/executor response files", index_text)
+            self.assertIn("| ok |", index_text)
 
             records = latest_artifacts(root, "DEMO_APP")
             self.assertEqual(len(records), 1)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from arthur_loop.tick import TickResult
@@ -64,6 +66,20 @@ def notification_command(title: str, message: str, platform: str | None = None) 
     return None
 
 
+def unsupported_detail(platform: str | None = None) -> str:
+    """Honest, platform-specific explanation of why no desktop notification can go out."""
+
+    platform = platform or sys.platform
+    if platform == "darwin":
+        return "osascript is missing — desktop notifications need the stock macOS toolchain"
+    if platform.startswith("linux"):
+        return (
+            "no desktop notifier found: install libnotify (`notify-send`, e.g. apt install libnotify-bin) "
+            "or run `arthur watch --no-desktop` to print events instead"
+        )
+    return f"desktop notifications are not supported on {platform}; use `arthur watch --no-desktop`"
+
+
 def send_notification(
     title: str,
     message: str,
@@ -78,10 +94,15 @@ def send_notification(
         return NotifyResult(
             sent=False,
             method="unsupported",
-            detail="no desktop notifier found (macOS needs osascript; Linux needs notify-send)",
+            detail=unsupported_detail(platform),
         )
     if dry_run:
-        return NotifyResult(sent=False, method=command[0], command=command, detail="dry run")
+        return NotifyResult(
+            sent=False,
+            method=command[0],
+            command=command,
+            detail="dry run — nothing sent; would run: " + " ".join(command),
+        )
 
     proc = subprocess.run(command, text=True, capture_output=True, check=False)
     if proc.returncode != 0:
@@ -92,6 +113,45 @@ def send_notification(
             detail=proc.stderr.strip() or f"{command[0]} exited {proc.returncode}",
         )
     return NotifyResult(sent=True, method=command[0], command=command)
+
+
+def watch_state_path(root: Path) -> Path:
+    """Where `arthur watch` remembers its last observation between runs."""
+
+    return root / "runtime/watch-state.json"
+
+
+def load_watch_state(root: Path) -> tuple[TickResult | None, list[str]]:
+    """Return (previous tick, previous open-decision titles) or (None, []) on a first run.
+
+    Persisting this is what makes `watch --once` cron-safe: a state that has not
+    changed since the last run is not news, so it is not re-announced.
+    """
+
+    path = watch_state_path(root)
+    if not path.exists():
+        return None, []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tick = data.get("tick") or {}
+        known = {key: value for key, value in tick.items() if key in TickResult.__dataclass_fields__}
+        previous = TickResult(**known) if known else None
+        decisions = [str(item) for item in data.get("decisions") or []]
+    except (ValueError, TypeError):
+        return None, []
+    return previous, decisions
+
+
+def save_watch_state(root: Path, tick: TickResult, decisions: list[str]) -> Path:
+    """Persist the observation `watch` will diff against next time."""
+
+    path = watch_state_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"tick": tick.to_record(), "decisions": decisions}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def watch_events(

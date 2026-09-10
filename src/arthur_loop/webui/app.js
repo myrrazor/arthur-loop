@@ -6,6 +6,8 @@
 
 const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
 const POLL_MS = 3000;
+// the bootstrap URL carries the session token; keep it out of the address bar / history
+if (location.search.includes("token=")) history.replaceState(null, "", location.pathname);
 
 const STATE_META = {
   WAIT: { color: "var(--wait)", verb: "Resting", hint: "nothing due — the loop is idle" },
@@ -50,10 +52,16 @@ function rel(v, now = Date.now()) {
 
 /* ---- networking -------------------------------------------------------- */
 
+const AUTH_HEADERS = { "Cache-Control": "no-store", "X-Arthur-Token": TOKEN };
 async function getJSON(path) {
-  const r = await fetch(path, { headers: { "Cache-Control": "no-store" } });
+  const r = await fetch(path, { headers: AUTH_HEADERS });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
   return r.json();
+}
+async function getText(path) {
+  const r = await fetch(path, { headers: AUTH_HEADERS });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `HTTP ${r.status}`);
+  return r.text();
 }
 async function action(path, body) {
   const r = await fetch(path, {
@@ -674,7 +682,7 @@ async function renderArtifacts(panel, s) {
 }
 async function loadArtifact(path, doc) {
   doc.replaceChildren(el("div", "rail-empty", "Loading…"));
-  try { const text = await (await fetch(`/api/file?path=${encodeURIComponent(path)}`)).text(); const pre = el("pre"); pre.textContent = text; doc.replaceChildren(pre); }
+  try { const text = await getText(`/api/file?path=${encodeURIComponent(path)}`); const pre = el("pre"); pre.textContent = text; doc.replaceChildren(pre); }
   catch (e) { doc.replaceChildren(el("div", "rail-empty", `Could not read: ${e.message}`)); }
 }
 
@@ -771,7 +779,7 @@ async function openFile(path, title) {
   const pre = el("pre"); pre.style.cssText = "white-space:pre-wrap;max-height:60vh;overflow:auto;font-size:12px;line-height:1.6;margin:0";
   pre.textContent = "Loading…"; body.append(pre);
   showModal(document.querySelector('[data-action="modal-close"]'));
-  try { pre.textContent = await (await fetch(`/api/file?path=${encodeURIComponent(path)}`)).text(); }
+  try { pre.textContent = await getText(`/api/file?path=${encodeURIComponent(path)}`); }
   catch (e) { pre.textContent = "Could not read file: " + e.message; }
 }
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 from arthur_loop.cli import main
@@ -41,7 +43,18 @@ class NotificationCommandTests(unittest.TestCase):
 
         self.assertFalse(result.sent)
         self.assertEqual(result.method, "osascript")
-        self.assertEqual(result.detail, "dry run")
+        self.assertIn("dry run", result.detail)
+        self.assertIn("osascript", result.detail)
+
+    def test_unsupported_platform_explains_itself(self) -> None:
+        with patch("arthur_loop.notify.shutil.which", return_value=None):
+            result = send_notification("t", "m", dry_run=True, platform="linux")
+
+        self.assertFalse(result.sent)
+        self.assertEqual(result.method, "unsupported")
+        self.assertIsNone(result.command)
+        self.assertIn("notify-send", result.detail)
+        self.assertIn("--no-desktop", result.detail)
 
 
 class WatchEventTests(unittest.TestCase):
@@ -73,15 +86,57 @@ class WatchEventTests(unittest.TestCase):
         self.assertIn("arthur queue recover --job-id BQ-X-001", events[0][1])
 
 
+INIT_ARGS = [
+    "--yes", "--main-agent", "none", "--advisor", "manual", "--executor", "manual",
+    "--tracker", "none", "--no-governor",
+]
+
+
 class WatchCliTests(unittest.TestCase):
-    def test_watch_once_on_empty_root_exits_clean(self) -> None:
+    def test_watch_once_on_fresh_instance_exits_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["init", "--root", tmp, *INIT_ARGS]), 0)
             code = main(["watch", "--root", tmp, "--once", "--no-desktop"])
         self.assertEqual(code, 0)
 
-    def test_notify_dry_run_exits_zero(self) -> None:
-        code = main(["notify", "--message", "hello from tests", "--dry-run"])
+    def test_watch_refuses_a_directory_that_is_not_an_instance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, redirect_stderr(io.StringIO()) as err:
+            code = main(["watch", "--root", tmp, "--once", "--no-desktop"])
+        self.assertEqual(code, 2)
+        self.assertIn("not an Arthur Loop instance", err.getvalue())
+
+    def test_watch_once_does_not_refire_an_unchanged_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(main(["init", "--root", tmp, *INIT_ARGS]), 0)
+            main(
+                [
+                    "queue", "--root", tmp, "create", "--job-id", "BQ-W-001", "--project-id", "W",
+                    "--target-chat-title", "W", "--target-chat-url", "manual",
+                ]
+            )
+            first, second = io.StringIO(), io.StringIO()
+            with redirect_stdout(first):
+                main(["watch", "--root", tmp, "--once", "--no-desktop", "--quiet"])
+            with redirect_stdout(second):
+                main(["watch", "--root", tmp, "--once", "--no-desktop", "--quiet"])
+
+        self.assertIn("POLL DUE", first.getvalue())
+        self.assertEqual(second.getvalue().strip(), "", "the second cron run must stay silent")
+
+    def test_notify_dry_run_exits_zero_when_a_notifier_exists(self) -> None:
+        with patch("arthur_loop.notify.sys.platform", "darwin"), redirect_stdout(io.StringIO()):
+            code = main(["notify", "--message", "hello from tests", "--dry-run"])
         self.assertEqual(code, 0)
+
+    def test_notify_without_a_notifier_is_an_honest_error(self) -> None:
+        out, err = io.StringIO(), io.StringIO()
+        with patch("arthur_loop.notify.sys.platform", "linux"), patch(
+            "arthur_loop.notify.shutil.which", return_value=None
+        ), redirect_stdout(out), redirect_stderr(err):
+            code = main(["notify", "--message", "hello", "--dry-run"])
+        self.assertEqual(code, 2)
+        self.assertIn("notify-send", err.getvalue())
+        self.assertIn('"method": "unsupported"', out.getvalue())
 
 
 if __name__ == "__main__":

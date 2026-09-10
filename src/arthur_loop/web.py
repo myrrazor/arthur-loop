@@ -13,20 +13,20 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from arthur_loop.browser_lock import is_fresh, lock_path, read_lock
-from arthur_loop.config import load_config
-from arthur_loop.queue_ledger import (
-    TERMINAL_STATUSES,
-    QueueJob,
-    QueueLedger,
-    isoformat,
-    read_jsonl,
-)
+from arthur_loop.browser_lock import BrowserLockError, break_lock, read_lock
+from arthur_loop.config import load_config, require_instance
+from arthur_loop.decisions import answer_decision as _answer_decision
+from arthur_loop.decisions import list_decisions
+from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
+from arthur_loop.recovery import recover_job
 from arthur_loop.status import clear_session, collect_status, status_to_dict
-from arthur_loop.tick import OPEN_STATUS_RE, SECTION_RE
 
 
 DEFAULT_PORT = 7433
+
+# routes that never need the session token: the bootstrap page (which itself
+# requires ?token=) and the static assets it loads
+TOKEN_QUERY = "token"
 
 # static files we are willing to serve, nothing else
 STATIC_FILES = {
@@ -60,11 +60,17 @@ class WebApp:
     """Shared state for the request handler: instance root, config, session token."""
 
     def __init__(self, root: Path):
+        require_instance(root)
         self.root = root
         self.config = load_config(root)
+        # one secret per process: the operator gets it in the URL `arthur web` prints,
+        # and every read or write over the API must present it
         self.token = secrets.token_urlsafe(24)
         # ThreadingHTTPServer: writes are read-modify-write, serialize them
         self._write_lock = threading.Lock()
+
+    def token_ok(self, presented: str | None) -> bool:
+        return bool(presented) and secrets.compare_digest(presented or "", self.token)
 
     # ------------------------------------------------------------------ reads
 
@@ -94,23 +100,7 @@ class WebApp:
     def _decision_bodies(self) -> dict[str, str]:
         """Map open-decision titles to their question text (status line stripped)."""
 
-        path = self.root / "human-decisions/open.md"
-        if not path.exists():
-            return {}
-        bodies: dict[str, str] = {}
-        title: str | None = None
-        buf: list[str] = []
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("## "):
-                if title is not None:
-                    bodies[title] = "\n".join(buf).strip()
-                title = line[3:].strip()
-                buf = []
-            elif title is not None and not line.strip().lower().startswith("status:"):
-                buf.append(line)
-        if title is not None:
-            bodies[title] = "\n".join(buf).strip()
-        return bodies
+        return {row["title"]: row["body"] for row in list_decisions(self.root)}
 
     def quarantine_payload(self, project_ids: list[str]) -> list[dict[str, Any]]:
         """Artifacts whose control block failed validation, across all projects."""
@@ -168,80 +158,23 @@ class WebApp:
 
     # ---------------------------------------------------------------- actions
 
-    @staticmethod
-    def _defuse_answer(answer: str) -> str:
-        """Backslash-escape lines that could forge sections or status flips in open.md.
-
-        Answers are often drafted by an agent or pasted from an artifact, so a
-        multiline answer containing "## Title" / "Status: OPEN" would otherwise
-        parse as a brand-new open decision on the next tick.
-        """
-
-        out = []
-        for line in answer.splitlines():
-            stripped = line.lstrip()
-            if stripped.startswith("#") or stripped.lower().startswith("status:"):
-                indent = line[: len(line) - len(stripped)]
-                line = f"{indent}\\{stripped}"
-            out.append(line)
-        return "\n".join(out)
-
     def answer_decision(self, title: str, answer: str) -> dict[str, Any]:
-        """Mark one open human decision answered, recording the answer inline."""
+        """Mark one open human decision answered — same code path as `arthur decision answer`."""
 
-        title = title.strip()
-        answer = self._defuse_answer(answer.strip())
-        if not title or not answer:
+        if not title.strip() or not answer.strip():
             raise ValueError("both a decision title and an answer are required")
-
-        path = self.root / "human-decisions/open.md"
-        if not path.exists():
-            raise ValueError("human-decisions/open.md does not exist")
-
         with self._write_lock:
-            lines = path.read_text(encoding="utf-8").splitlines()
-            in_section = False
-            answered = False
-            out: list[str] = []
-            for line in lines:
-                section = SECTION_RE.match(line)
-                if section:
-                    in_section = section.group(1) == title
-                # same regex the tick classifier uses, so the console can never
-                # disagree with the loop about which decisions are open
-                if in_section and not answered and OPEN_STATUS_RE.match(line):
-                    out.append("Status: `ANSWERED`")
-                    out.append("")
-                    out.append(f"**Answer** ({isoformat()}): {answer}")
-                    answered = True
-                    continue
-                out.append(line)
-
-            if not answered:
-                raise ValueError(f"no open decision titled {title!r}")
-
-            path.write_text("\n".join(out) + "\n", encoding="utf-8")
-        QueueLedger(self.root).append_event(
-            "__decision__", "decision_answered", {"title": title}
-        )
-        return {"title": title, "status": "ANSWERED"}
+            return _answer_decision(self.root, title, answer)
 
     def recover_job(self, job_id: str, requeue: bool) -> dict[str, Any]:
-        ledger = QueueLedger(self.root)
+        """Park/requeue a job and free its dead manager's lease — same as `arthur queue recover`."""
+
         with self._write_lock:
-            current = ledger.latest_jobs().get(job_id)
-            if current is None:
-                raise ValueError(f"unknown queue job: {job_id}")
-            if current.status in TERMINAL_STATUSES:
-                raise ValueError(f"{job_id} is {current.status}; finished jobs are not recoverable")
-            # keep the diagnostic around instead of clobbering it with our note
-            note = "parked from the web console"
-            if current.last_error:
-                note = f"{current.last_error} — {note}"
-            job = ledger.transition(job_id, "needs_recovery", error=note)
-            if requeue:
-                job = ledger.transition(job_id, "queued")
-        return job.to_record()
+            try:
+                result = recover_job(self.root, job_id, requeue=requeue, error="parked from the web console")
+            except KeyError as exc:
+                raise ValueError(str(exc.args[0]) if exc.args else str(exc))
+        return result.to_record()
 
     def create_job(self, body: dict[str, Any]) -> dict[str, Any]:
         required = ["job_id", "project_id", "target_chat_title", "target_chat_url"]
@@ -252,7 +185,6 @@ class WebApp:
         if missing:
             raise ValueError(f"missing fields: {', '.join(missing)}")
 
-        ledger = QueueLedger(self.root)
         job = QueueJob(
             job_id=body["job_id"].strip(),
             project_id=body["project_id"].strip(),
@@ -260,11 +192,11 @@ class WebApp:
             target_chat_url=body["target_chat_url"].strip(),
             prompt_path=str(body.get("prompt_path") or "").strip() or None,
             expected_marker=str(body.get("expected_marker") or "").strip() or None,
+            idempotency_key=str(body.get("idempotency_key") or "").strip() or None,
         )
         with self._write_lock:
-            if job.job_id in ledger.latest_jobs():
-                raise ValueError(f"queue job {job.job_id} already exists")
-            ledger.record_job(job)
+            # same dedupe rules as the CLI: duplicate id or reused idempotency key → refused
+            QueueLedger(self.root).create_job(job)
         return job.to_record()
 
     def clear_session_action(self, session_id: str) -> dict[str, Any]:
@@ -275,16 +207,13 @@ class WebApp:
         """Remove a STALE browser lock. A fresh lock means the holder is active: refuse."""
 
         with self._write_lock:
-            lock = read_lock(self.root)
-            if lock is None:
+            if read_lock(self.root) is None:
                 return {"broken": False, "reason": "no lock held"}
-            if is_fresh(lock):
-                raise ValueError(f"lock is fresh; {lock.holder} is still active. Refusing to break it.")
-            lock_path(self.root).unlink(missing_ok=True)
-        QueueLedger(self.root).append_event(
-            "__browser_lock__", "lock_broken", {"holder": lock.holder, "via": "web-console"}
-        )
-        return {"broken": True, "holder": lock.holder}
+            try:
+                broken = break_lock(self.root, force=False, via="web-console")
+            except BrowserLockError as exc:
+                raise ValueError(str(exc))
+        return {"broken": broken is not None, "holder": broken.holder if broken else None}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -337,6 +266,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- routes
 
+    def _presented_token(self, query: dict[str, list[str]]) -> str | None:
+        header = self.headers.get("X-Arthur-Token")
+        if header:
+            return header
+        values = query.get(TOKEN_QUERY)
+        return values[0] if values else None
+
     def do_GET(self) -> None:  # noqa: N802 - stdlib naming
         if not self._host_allowed():
             return self._fail(HTTPStatus.FORBIDDEN, "arthur web only answers localhost")
@@ -345,14 +281,23 @@ class Handler(BaseHTTPRequestHandler):
         query = parse_qs(url.query)
 
         try:
-            if url.path == "/":
-                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", self.app.token)
-                return self._send_text(html, "text/html; charset=utf-8")
             if url.path.startswith("/assets/"):
-                name = url.path.removeprefix("/assets/")
+                name = url.path[len("/assets/"):]
                 if name not in STATIC_FILES:
                     return self._fail(HTTPStatus.NOT_FOUND, "unknown asset")
                 return self._send_text(_read_ui(name), STATIC_FILES[name])
+            if not self.app.token_ok(self._presented_token(query)):
+                if url.path == "/":
+                    return self._send_text(
+                        "Arthur Loop web console: open the exact URL printed by `arthur web` "
+                        "(it carries this session's token).\n",
+                        "text/plain; charset=utf-8",
+                        status=HTTPStatus.FORBIDDEN,
+                    )
+                return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
+            if url.path == "/":
+                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", self.app.token)
+                return self._send_text(html, "text/html; charset=utf-8")
             if url.path == "/api/status":
                 return self._send_json(self.app.status_payload())
             if url.path == "/api/events":
@@ -382,7 +327,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - stdlib naming
         if not self._host_allowed():
             return self._fail(HTTPStatus.FORBIDDEN, "arthur web only answers localhost")
-        if not secrets.compare_digest(self.headers.get("X-Arthur-Token") or "", self.app.token):
+        if not self.app.token_ok(self.headers.get("X-Arthur-Token")):
             return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
 
         try:
@@ -426,17 +371,25 @@ def make_server(root: Path, port: int = 0) -> ThreadingHTTPServer:
     return server
 
 
+def console_url(server: ThreadingHTTPServer) -> str:
+    """The one URL that opens the console: it carries this process's session token."""
+
+    app = server.arthur_app  # type: ignore[attr-defined]
+    return f"http://127.0.0.1:{server.server_address[1]}/?{TOKEN_QUERY}={app.token}"
+
+
 def cmd_web(args: Any) -> int:
-    root = Path(args.root).resolve()
+    root = Path(getattr(args, "root", None) or ".").resolve()
     try:
         server = make_server(root, port=args.port)
     except OSError as exc:
         print(f"error: could not bind 127.0.0.1:{args.port} ({exc})", file=sys.stderr)
         return 2
 
-    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    url = console_url(server)
     print(f"arthur web console: {url}")
     print(f"instance: {root}")
+    print("localhost only; the token in the URL is this session's key — other local users cannot read or write without it.")
     print("read-only for agents; humans get five actions. Ctrl+C stops it.")
     if not args.no_open:
         webbrowser.open(url)
@@ -449,9 +402,15 @@ def cmd_web(args: Any) -> int:
     return 0
 
 
-def add_web_parser(subparsers: Any) -> None:
-    web = subparsers.add_parser("web", help="Serve the local web console for this instance")
-    web.add_argument("--root", default=".", help="Arthur Loop instance root")
+def add_web_parser(subparsers: Any, add_root: Any = None) -> None:
+    web = subparsers.add_parser(
+        "web",
+        help="Serve the local web console for this instance (URL with session token is printed)",
+    )
+    if add_root is not None:
+        add_root(web)
+    else:
+        web.add_argument("--root", default=".", help="Arthur Loop instance root")
     web.add_argument("--port", type=int, default=DEFAULT_PORT)
     web.add_argument("--no-open", action="store_true", help="Do not open the browser")
     web.set_defaults(func=cmd_web)

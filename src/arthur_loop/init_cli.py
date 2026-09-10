@@ -21,6 +21,20 @@ ATLAS_INSTALL_CMD = (
 
 PRESETS = ("guided", "solo", "pair", "browser-advisor", "custom")
 
+DEMO_QUOTA_PATH = "usage/demo-quota.json"
+DEMO_QUOTA_PAYLOAD = [
+    {
+        "provider": "codex",
+        "usage": {
+            "primary": {
+                "usedPercent": 38,
+                "windowMinutes": 300,
+                "resetDescription": "Resets 4:00 AM",
+            }
+        },
+    }
+]
+
 INSTANCE_DIRS = [
     "queue/prompts",
     "projects",
@@ -116,10 +130,13 @@ Ask, one topic at a time, and keep it conversational:
 
 ## Hard rules (from the skill — these override enthusiasm)
 
-- Implementation never starts from a plan-only packet; sprints advance only on
-  explicit advisor approval, and human gates always win.
-- Save advisor output with `arthur capture` before acting on it; never trust an
-  artifact marked `control_block_valid: false`.
+- Implementation never starts from a plan-only packet. Before any implementation
+  handoff run `arthur gate implementation --project-id <ID>` and proceed only on
+  GO; the loop quarantines handoffs captured while the gate is NO-GO.
+- Save advisor/executor output with `arthur capture` before acting on it. Exit
+  code 3 means the artifact was quarantined or asked for a human — stop that
+  project; a decision is already open (`arthur decision list`).
+- Escalate with `arthur decision open`, never by editing markdown by hand.
 - One advisor conversation at a time — respect the lock.
 - Never hand-edit `queue/*.jsonl`.
 
@@ -128,10 +145,24 @@ exactly what will happen next and what you are waiting on.
 """
 
 
+class NonInteractive(RuntimeError):
+    """Raised when the wizard would have to ask a question but nobody is there to answer."""
+
+
+NON_INTERACTIVE_HELP = (
+    "stdin is not a terminal, so the setup wizard cannot ask questions. Pass --yes to accept "
+    "defaults (and flags for anything specific), e.g. `arthur init --yes --demo` or "
+    "`arthur init --yes --main-agent none --advisor manual --executor manual --tracker none --no-governor`."
+)
+
+
 def _ask(prompt: str, default: str, assume_yes: bool) -> str:
     if assume_yes:
         return default
-    raw = input(f"{prompt} [{default}]: ").strip()
+    try:
+        raw = input(f"{prompt} [{default}]: ").strip()
+    except EOFError as exc:
+        raise NonInteractive(NON_INTERACTIVE_HELP) from exc
     return raw or default
 
 
@@ -162,38 +193,78 @@ def _copy_tree(source: Any, dest: Path) -> None:
             target.write_bytes(item.read_bytes())
 
 
+class PresetUnavailable(ValueError):
+    """The requested preset cannot be wired with the chosen agents' shipped adapter packs."""
+
+
+def viable_presets(main: AgentCLI | None, detected: list[DetectedAgent]) -> list[str]:
+    """Presets that can be honestly wired for this main agent (offered by the wizard)."""
+
+    presets = ["guided"]
+    if main and main.advisor_adapter and main.executor_adapter:
+        presets.append("solo")
+    reviewers = [item.agent for item in detected if item.agent.advisor_adapter and (not main or item.agent.agent_id != main.agent_id)]
+    if main and main.executor_adapter and reviewers:
+        presets.append("pair")
+    presets.extend(["browser-advisor", "custom"])
+    return presets
+
+
 def resolve_preset(
     preset: str,
     main: AgentCLI | None,
     second: AgentCLI | None,
 ) -> tuple[str, str, list[str]]:
-    """Map a loop preset to (advisor, executor) adapters, with honest notes."""
+    """Map a loop preset to (advisor, executor) adapters, with honest notes.
+
+    `solo` and `pair` are only ever wired with shipped adapter packs. When the
+    chosen agents have none, this raises instead of quietly substituting the
+    `manual` adapter while still calling the result "solo".
+    """
 
     notes: list[str] = []
     main_exec = main.executor_adapter if main else None
     main_adv = main.advisor_adapter if main else None
+    main_name = main.name if main else "no main agent"
 
     if preset == "solo":
         if main_adv and main_exec:
             return main_adv, main_exec, notes
-        notes.append("solo preset needs an agent with shipped adapters; falling back to guided")
-        preset = "guided"
+        raise PresetUnavailable(
+            f"solo preset needs a main agent with shipped advisor and executor packs; {main_name} has "
+            f"advisor={main_adv or 'none'}, executor={main_exec or 'none'}. Use --preset guided (the kickoff "
+            "interview helps your agent author an adapter) or --preset custom with explicit --advisor/--executor."
+        )
 
     if preset == "pair":
         second_adv = second.advisor_adapter if second else None
         if main_exec and second_adv:
             return second_adv, main_exec, notes
-        notes.append("pair preset needs adapters for both agents; falling back to guided")
-        preset = "guided"
+        missing = []
+        if not main_exec:
+            missing.append(f"{main_name} has no shipped executor pack")
+        if second is None:
+            missing.append("no reviewing agent given (--second-agent)")
+        elif not second_adv:
+            missing.append(f"{second.name} has no shipped advisor pack")
+        raise PresetUnavailable(
+            "pair preset cannot be wired: " + "; ".join(missing) + ". Agents with shipped packs: "
+            + ", ".join(agent.agent_id for agent in KNOWN_AGENTS if agent.executor_adapter or agent.advisor_adapter)
+            + ". Use --preset guided or --preset custom instead."
+        )
 
     if preset == "browser-advisor":
+        if main and not main_exec:
+            notes.append(
+                f"{main.name} has no shipped executor pack; the executor is `manual` until you author one (docs/adapters.md)"
+            )
         return "chatgpt-browser", (main_exec or "manual"), notes
 
     # guided: a working base the kickoff interview will finalize
     if main and not main_exec:
         notes.append(
-            f"{main.name} has no shipped executor adapter yet — the kickoff interview "
-            "walks your agent through authoring one (docs/adapters.md)"
+            f"{main.name} has no shipped adapter packs yet — both roles start as `manual`; the kickoff "
+            "interview walks your agent through authoring an adapter (docs/adapters.md)"
         )
     return "manual", (main_exec or "manual"), notes
 
@@ -242,12 +313,26 @@ def seed_agent_kickoff(
 
 
 def run_init(args: argparse.Namespace) -> int:
-    root = Path(args.root).resolve()
+    try:
+        return _run_init(args)
+    except NonInteractive as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except PresetUnavailable as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+
+def _run_init(args: argparse.Namespace) -> int:
+    root = Path(getattr(args, "root", None) or ".").resolve()
     yes = args.yes
 
     if config_path(root).exists() and not args.force:
         print(f"error: {config_path(root)} already exists (use --force to overwrite)", file=sys.stderr)
         return 1
+
+    if not yes and not sys.stdin.isatty():
+        raise NonInteractive(NON_INTERACTIVE_HELP)
 
     print("Arthur Loop setup — pick the pieces of your loop.\n")
 
@@ -256,7 +341,8 @@ def run_init(args: argparse.Namespace) -> int:
         print("Detected agent CLIs:")
         for item in detected:
             version = f"  ({item.version})" if item.version else ""
-            print(f"  • {item.agent.name:<12} {item.path}{version}")
+            packs = "shipped adapter packs" if item.agent.executor_adapter else "no shipped adapter pack (guided/custom only)"
+            print(f"  • {item.agent.name:<12} {item.path}{version}  [{packs}]")
     else:
         print("No known agent CLIs detected (looked for: "
               + ", ".join(agent.binary for agent in KNOWN_AGENTS) + ").")
@@ -273,13 +359,16 @@ def run_init(args: argparse.Namespace) -> int:
     )
     main = find_agent(main_id) if main_id != "none" else None
 
-    preset = args.preset or _ask_choice(
-        "Loop preset", list(PRESETS), "guided" if main else "custom", yes
-    )
+    offered = viable_presets(main, detected)
+    preset = args.preset or _ask_choice("Loop preset", offered, "guided" if main else "custom", yes)
 
     second: AgentCLI | None = find_agent(args.second_agent) if args.second_agent else None
     if preset == "pair" and second is None and not yes:
-        others = [item.agent.agent_id for item in detected if main and item.agent.agent_id != main.agent_id]
+        others = [
+            item.agent.agent_id
+            for item in detected
+            if item.agent.advisor_adapter and (not main or item.agent.agent_id != main.agent_id)
+        ]
         if others:
             second = find_agent(_ask_choice("Reviewing agent", others, others[0], False))
 
@@ -299,11 +388,23 @@ def run_init(args: argparse.Namespace) -> int:
     for note in preset_notes:
         print(f"note: {note}")
 
+    adapters_pkg = resources.files("arthur_loop") / "adapters"
+    for role, name in (("advisors", advisor), ("executors", executor)):
+        if not (adapters_pkg / role / name).is_dir():
+            raise PresetUnavailable(f"no shipped {role[:-1]} pack named {name!r}")
+
     tracker = args.tracker or _ask_choice("Ticket tracker?", sorted(KNOWN_TRACKERS), "none", yes)
 
     quota_provider = args.quota_provider or "auto"
+    quota_path: str | None = None
     if args.no_governor:
         governor = False
+    elif args.demo:
+        # the demo seeds a quota snapshot; the dashboard shows it only with the governor on,
+        # and a file source keeps `arthur usage snapshot` working inside the demo
+        governor = True
+        quota_provider = "file"
+        quota_path = DEMO_QUOTA_PATH
     else:
         codexbar_found = shutil.which("codexbar") is not None
         source_hint = (
@@ -343,13 +444,16 @@ def run_init(args: argparse.Namespace) -> int:
         print(f"  {ATLAS_INSTALL_CMD}")
         print("Tracker calls will report errors until it is installed.")
 
+    quota_config: dict[str, Any] = {"provider": quota_provider, "codexbar_provider": "codex"}
+    if quota_path:
+        quota_config["path"] = quota_path
     config = {
         "version": 2,
         "advisor": {"adapter": advisor},
         "executor": {"adapter": executor},
         "tracker": {"adapter": tracker},
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
-        "quota": {"provider": quota_provider, "codexbar_provider": "codex"},
+        "quota": quota_config,
         "reserve_policy": {"minimum_reserve_percent": float(args.reserve_percent)},
         "polling_policy": {
             "first_poll_minutes": 1,
@@ -383,7 +487,6 @@ def run_init(args: argparse.Namespace) -> int:
         if not state.exists():
             state.write_text(f"# {project['project_id']} State\n\nNot started.\n", encoding="utf-8")
 
-    adapters_pkg = resources.files("arthur_loop") / "adapters"
     _copy_tree(adapters_pkg / "advisors" / advisor, root / "adapters/advisor")
     _copy_tree(adapters_pkg / "executors" / executor, root / "adapters/executor")
 
@@ -403,11 +506,15 @@ def run_init(args: argparse.Namespace) -> int:
         seed_demo(root)
 
     print("\nDone. Your loop:")
+    print(f"  root:     {root}")
     print(f"  preset:   {preset}" + (f"   main agent: {main.name}" if main else ""))
     print(f"  advisor:  {advisor}   (runbook: adapters/advisor/ADAPTER.md)")
     print(f"  executor: {executor}   (runbook: adapters/executor/ADAPTER.md)")
     print(f"  tracker:  {tracker}")
-    print(f"  governor: {'on' if governor else 'off'}   heartbeat: {'on' if heartbeat else 'off'}")
+    governor_note = "on" if governor else "off"
+    if governor:
+        governor_note += f"   quota source: {quota_provider}" + (f" ({quota_path})" if quota_path else "")
+    print(f"  governor: {governor_note}   heartbeat: {'on' if heartbeat else 'off'}")
     if seeded:
         print("\nSeeded for your main agent: " + ", ".join(seeded))
         print("\nHand over to it now — it will interview you and finish the setup:")
@@ -419,10 +526,13 @@ def run_init(args: argparse.Namespace) -> int:
     else:
         print("\nNext steps:")
         print("  1. Read adapters/advisor/ADAPTER.md and tune the prompts in adapters/advisor/prompts/.")
-        print("  2. Create your first job:   arthur queue create --job-id BQ-<PROJECT>-001 ...")
-        print("  3. See the whole loop:      arthur status")
+        print("  2. Create your first job:   arthur queue create --job-id BQ-<PROJECT>-001 --project-id <PROJECT> \\")
+        print("                                --target-chat-title \"<PROJECT> planning\" --target-chat-url manual")
+        print("  3. Walk one hop:            arthur queue claim → submit → arthur capture → arthur queue poll-result")
+        print("  4. See the whole loop:      arthur status   (README: Quickstart has the full manual walk-through)")
     if args.demo:
         print("\nDemo state is seeded — run `arthur status` right now to see a busy loop.")
+        print("The demo quota bar reads usage/demo-quota.json; edit it and run `arthur usage snapshot --snapshot-id x`.")
     return 0
 
 
@@ -487,29 +597,27 @@ def seed_demo(root: Path) -> None:
         activity="implementing sprint 2",
     )
 
-    append_snapshot(
-        root,
-        snapshot_from_codexbar_json(
-            [
-                {
-                    "provider": "codex",
-                    "usage": {
-                        "primary": {
-                            "usedPercent": 38,
-                            "windowMinutes": 300,
-                            "resetDescription": "Resets 4:00 AM",
-                        }
-                    },
-                }
-            ],
-            snapshot_id="demo-seed",
+    quota_file = root / DEMO_QUOTA_PATH
+    quota_file.parent.mkdir(parents=True, exist_ok=True)
+    quota_file.write_text(json.dumps(DEMO_QUOTA_PAYLOAD, indent=2) + "\n", encoding="utf-8")
+    append_snapshot(root, snapshot_from_codexbar_json(DEMO_QUOTA_PAYLOAD, snapshot_id="demo-seed"))
+
+
+def add_init_parser(subparsers: Any, add_root: Any = None) -> None:
+    init = subparsers.add_parser(
+        "init",
+        help="Set up an instance — pick your agents, flow preset, and tracker (use --yes when not at a terminal)",
+        description=(
+            "Interactive by default. Without a terminal (cron, CI, piped stdin) pass --yes to accept "
+            "defaults; every question also has a flag. Defaults with --yes: main agent = first detected CLI "
+            "(else none), preset = guided (custom when no agent), tracker = none, governor on only when codexbar "
+            "is installed, heartbeat on."
         ),
     )
-
-
-def add_init_parser(subparsers: Any) -> None:
-    init = subparsers.add_parser("init", help="Interactive setup — pick your agents, flow preset, and tracker")
-    init.add_argument("--root", default=".", help="Directory to initialize as an Arthur Loop instance")
+    if add_root is not None:
+        add_root(init)
+    else:
+        init.add_argument("--root", default=".", help="Directory to initialize as an Arthur Loop instance")
     init.add_argument("--yes", action="store_true", help="Accept defaults / provided flags, ask nothing")
     init.add_argument("--main-agent", choices=[a.agent_id for a in KNOWN_AGENTS] + ["none"],
                       help="Agent that runs the loop and the setup interview (default: first detected)")
