@@ -15,4 +15,4 @@ cd menubar/ArthurBar
 swift test
 ```
 
-Before handing work off, make sure both suites pass and the README still matches the actual CLI. Pull requests target `testing`; `main` is the production branch.
+Before handing work off, make sure both suites pass and the README still matches the actual CLI — `tests/test_quickstart.py` executes the README quickstart literally and fails if the two drift. Pull requests target `testing`; `main` is the production branch.
