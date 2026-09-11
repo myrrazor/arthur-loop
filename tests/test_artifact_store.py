@@ -5,12 +5,15 @@ import unittest
 from pathlib import Path
 
 from arthur_loop.artifact_store import (
+    implementation_gate,
     latest_artifacts,
     parse_control_block,
     parse_control_block_result,
     save_chatgpt_artifact,
 )
+from arthur_loop.decisions import open_decision
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
+from arthur_loop.tick import open_human_decision_projects
 
 
 SAMPLE_RESPONSE = """# Review
@@ -111,7 +114,9 @@ HAS_P0_P1: false
             self.assertIn("# Review", saved)
 
             index = root / "projects/DEMO_APP/artifacts/chatgpt/index.md"
-            self.assertIn("Read this index before opening full ChatGPT response files", index.read_text(encoding="utf-8"))
+            index_text = index.read_text(encoding="utf-8")
+            self.assertIn("Read this index before opening full advisor/executor response files", index_text)
+            self.assertIn("| ok |", index_text)
 
             records = latest_artifacts(root, "DEMO_APP")
             self.assertEqual(len(records), 1)
@@ -172,6 +177,224 @@ HAS_P0_P1: false
 
             self.assertNotEqual(first.path, second.path)
             self.assertTrue(second.path.endswith("-2.md"))
+
+
+PLAN_OK = """```text
+PROJECT_ID: DEMO_APP
+REVIEW_TYPE: CODEX_PLAN
+PLAN_STATUS: READY_FOR_CHATGPT_REVIEW
+IMPLEMENTATION_STARTED: false
+```"""
+
+PLAN_IMPLEMENTED = PLAN_OK.replace("IMPLEMENTATION_STARTED: false", "IMPLEMENTATION_STARTED: true")
+
+APPROVE = """```text
+PROJECT_ID: DEMO_APP
+REVIEW_TYPE: PLAN_APPROVAL
+APPROVAL_DECISION: APPROVE_PLAN
+PLAN_HAS_P0_P1: false
+```"""
+
+REVISE = APPROVE.replace("APPROVE_PLAN", "REVISE_PLAN")
+
+HANDOFF = """```text
+PROJECT_ID: DEMO_APP
+SPRINT_ID: S1
+REVIEW_TYPE: CODEX_IMPLEMENTATION_HANDOFF
+IMPLEMENTATION_STATUS: COMPLETE
+TESTS_RUN: true
+READY_FOR_CHATGPT_REVIEW: true
+```"""
+
+SPRINT_APPROVED = """```text
+PROJECT_ID: DEMO_APP
+SPRINT_ID: S1
+REVIEW_TYPE: SPRINT_REVIEW
+APPROVAL_DECISION: APPROVE_SPRINT
+HAS_P0_P1: false
+```"""
+
+NEEDS_HUMAN = """The scope is ambiguous; a human must pick.
+
+```text
+PROJECT_ID: DEMO_APP
+REVIEW_TYPE: NEXT_PLAN_REQUEST
+APPROVAL_DECISION: HUMAN_INPUT_REQUIRED
+HAS_P0_P1: false
+```"""
+
+
+def _capture(root: Path, kind: str, text: str, job_id: str = "BQ-DEMO_APP-001", project_id: str = "DEMO_APP", **extra):
+    return save_chatgpt_artifact(
+        root,
+        project_id=project_id,
+        job_id=job_id,
+        kind=kind,
+        source_chat_title="test",
+        text=text,
+        link_queue=False,
+        **extra,
+    )
+
+
+class ControlBlockRuleTests(unittest.TestCase):
+    def test_plan_that_already_implemented_is_invalid(self) -> None:
+        result = parse_control_block_result(PLAN_IMPLEMENTED, kind="plan", project_id="DEMO_APP")
+
+        self.assertFalse(result.valid)
+        self.assertTrue(any("implementation_started: true" in reason for reason in result.reasons))
+        self.assertTrue(parse_control_block_result(PLAN_OK, kind="plan", project_id="DEMO_APP").valid)
+
+    def test_review_type_must_match_the_captured_kind(self) -> None:
+        result = parse_control_block_result(APPROVE, kind="sprint-review", project_id="DEMO_APP")
+
+        self.assertFalse(result.valid)
+        self.assertTrue(any("does not match kind sprint-review" in reason for reason in result.reasons))
+
+    def test_project_id_must_match_the_captured_project(self) -> None:
+        result = parse_control_block_result(APPROVE, kind="plan-review", project_id="OTHER_APP")
+
+        self.assertFalse(result.valid)
+        self.assertTrue(any("does not match captured project OTHER_APP" in reason for reason in result.reasons))
+
+    def test_a_review_without_a_decision_is_not_a_decision(self) -> None:
+        text = "```text\nPROJECT_ID: DEMO_APP\nREVIEW_TYPE: PLAN_APPROVAL\nPLAN_HAS_P0_P1: false\n```"
+        result = parse_control_block_result(text, kind="plan-review", project_id="DEMO_APP")
+
+        self.assertFalse(result.valid)
+        self.assertIn("missing approval_decision for kind plan-review", result.reasons)
+
+    def test_unknown_kind_is_rejected_up_front(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_control_block_result(APPROVE, kind="vibes")
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                _capture(Path(tmp), "vibes", APPROVE)
+
+    def test_kind_agnostic_parse_keeps_old_behaviour(self) -> None:
+        # no kind/project → only the enum and structure rules apply
+        self.assertTrue(parse_control_block_result(APPROVE).valid)
+
+
+class EscalationTests(unittest.TestCase):
+    def test_quarantined_artifact_opens_a_decision_that_blocks_the_project(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = _capture(root, "plan", PLAN_IMPLEMENTED)
+
+            self.assertFalse(artifact.control_block_valid)
+            self.assertTrue(artifact.needs_human)
+            self.assertEqual(artifact.escalated_decision, "DEMO_APP Quarantined artifact — plan BQ-DEMO_APP-001")
+            open_md = (root / "human-decisions/open.md").read_text(encoding="utf-8")
+            self.assertIn("## DEMO_APP Quarantined artifact — plan BQ-DEMO_APP-001", open_md)
+            self.assertIn("Status: `OPEN`", open_md)
+            self.assertIn("implementation_started: true", open_md)
+            self.assertEqual(open_human_decision_projects(root), ["DEMO_APP"])
+            self.assertIn("QUARANTINED", (root / "projects/DEMO_APP/artifacts/chatgpt/index.md").read_text(encoding="utf-8"))
+
+    def test_human_input_required_opens_a_decision_even_when_the_block_is_valid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = _capture(root, "next-plan-request", NEEDS_HUMAN)
+
+            self.assertTrue(artifact.control_block_valid)
+            self.assertTrue(artifact.needs_human)
+            self.assertEqual(open_human_decision_projects(root), ["DEMO_APP"])
+            self.assertIn("Human input required", artifact.escalated_decision)
+
+    def test_capturing_the_same_bad_response_twice_opens_one_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _capture(root, "plan", PLAN_IMPLEMENTED)
+            second = _capture(root, "plan", PLAN_IMPLEMENTED)
+
+            self.assertEqual(second.escalated_decision, "DEMO_APP Quarantined artifact — plan BQ-DEMO_APP-001")
+            open_md = (root / "human-decisions/open.md").read_text(encoding="utf-8")
+            self.assertEqual(open_md.count("## DEMO_APP Quarantined artifact"), 1)
+
+    def test_no_escalate_saves_and_quarantines_without_a_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = _capture(root, "plan", PLAN_IMPLEMENTED, escalate=False)
+
+            self.assertFalse(artifact.control_block_valid)
+            self.assertIsNone(artifact.escalated_decision)
+            self.assertFalse((root / "human-decisions/open.md").exists())
+
+    def test_valid_trusted_artifacts_open_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = _capture(root, "plan-review", APPROVE)
+
+            self.assertFalse(artifact.needs_human)
+            self.assertIsNone(artifact.escalated_decision)
+            self.assertEqual(open_human_decision_projects(root), [])
+
+
+class ImplementationGateTests(unittest.TestCase):
+    def test_no_go_without_an_approved_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertFalse(implementation_gate(root, "DEMO_APP").go)
+
+            _capture(root, "plan-review", REVISE)
+            result = implementation_gate(root, "DEMO_APP")
+            self.assertFalse(result.go)
+            self.assertTrue(any("REVISE_PLAN, not APPROVE_PLAN" in reason for reason in result.reasons))
+
+    def test_go_after_a_valid_approval_and_no_go_once_planning_reopens(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            approval = _capture(root, "plan-review", APPROVE, created_at="2026-07-02T12:00:00Z")
+            result = implementation_gate(root, "DEMO_APP")
+            self.assertTrue(result.go, result.reasons)
+            self.assertEqual(result.approval_artifact, approval.artifact_id)
+
+            _capture(root, "plan", PLAN_OK, created_at="2026-07-02T12:00:00Z")  # same second: order still wins
+            result = implementation_gate(root, "DEMO_APP")
+            self.assertFalse(result.go)
+            self.assertTrue(any("planning re-opened" in reason for reason in result.reasons))
+
+    def test_no_go_once_the_sprint_is_approved_or_a_decision_is_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _capture(root, "plan-review", APPROVE, created_at="2026-07-02T12:00:00Z")
+            _capture(root, "implementation-handoff", HANDOFF, created_at="2026-07-02T12:30:00Z")
+            self.assertTrue(implementation_gate(root, "DEMO_APP").go)
+
+            _capture(root, "sprint-review", SPRINT_APPROVED, created_at="2026-07-02T13:00:00Z")
+            result = implementation_gate(root, "DEMO_APP")
+            self.assertFalse(result.go)
+            self.assertTrue(any("closed the approved sprint" in reason for reason in result.reasons))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _capture(root, "plan-review", APPROVE)
+            open_decision(root, project_id="DEMO_APP", title="Scope?", body="Pick one.")
+            result = implementation_gate(root, "DEMO_APP")
+            self.assertFalse(result.go)
+            self.assertTrue(any("open human decision" in reason for reason in result.reasons))
+
+    def test_implementation_handoff_without_an_approved_plan_is_quarantined(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            artifact = _capture(root, "implementation-handoff", HANDOFF)
+
+            self.assertFalse(artifact.control_block_valid)
+            self.assertTrue(any(reason.startswith("implementation gate:") for reason in artifact.control_block_reasons))
+            self.assertEqual(open_human_decision_projects(root), ["DEMO_APP"])
+            # evidence is kept even though it is not trusted
+            self.assertTrue((root / artifact.path).exists())
+
+    def test_gated_implementation_handoff_is_trusted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _capture(root, "plan-review", APPROVE)
+            artifact = _capture(root, "implementation-handoff", HANDOFF)
+
+            self.assertTrue(artifact.control_block_valid)
+            self.assertEqual(artifact.implementation_status, "COMPLETE")
+            self.assertEqual(open_human_decision_projects(root), [])
 
 
 if __name__ == "__main__":

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import shlex
 import subprocess
+from pathlib import Path
 from typing import Any
 
 
 ACTIONS = ("open_decision", "close_decision", "sprint_gate")
 
 # Presets for Atlas Tasker's `tracker` CLI (https://github.com/myrrazor/atlas-tasker).
+# This is the whole "integration": three command templates rendered to argv and
+# run from the instance root. No MCP, no callbacks, no gate logic lives here.
 # NOTE: verify these flags against the current tracker release before relying on
 # them — they follow the README quickstart surface (ticket create / ticket move).
 ATLAS_TEMPLATES = {
@@ -62,9 +65,15 @@ def run_action(
     config: dict[str, Any],
     action: str,
     dry_run: bool = False,
+    cwd: Path | None = None,
     **values: str,
 ) -> dict[str, Any]:
-    """Run one tracker operation through the configured adapter."""
+    """Run one tracker operation through the configured adapter.
+
+    `cwd` should be the instance root: tracker CLIs (Atlas Tasker included)
+    resolve their own workspace from the working directory, so running from
+    wherever the operator happened to be would file tickets in the wrong place.
+    """
 
     if action not in ACTIONS:
         raise ValueError(f"unknown tracker action {action!r} (valid: {ACTIONS})")
@@ -78,12 +87,16 @@ def run_action(
 
     cmd = render_command(template, {**DEFAULT_VALUES, **values})
     if dry_run:
-        return {"status": "dry_run", "cmd": cmd}
+        return {"status": "dry_run", "cmd": cmd, "cwd": str(cwd) if cwd else None}
 
-    proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    try:
+        proc = subprocess.run(cmd, text=True, capture_output=True, check=False, cwd=cwd)
+    except OSError as exc:
+        return {"status": "error", "cmd": cmd, "cwd": str(cwd) if cwd else None, "returncode": None, "stdout": "", "stderr": str(exc)}
     return {
         "status": "ok" if proc.returncode == 0 else "error",
         "cmd": cmd,
+        "cwd": str(cwd) if cwd else None,
         "returncode": proc.returncode,
         "stdout": proc.stdout.strip(),
         "stderr": proc.stderr.strip(),

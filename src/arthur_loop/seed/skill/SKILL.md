@@ -20,25 +20,34 @@ Use Arthur Loop to coordinate one project sprint at a time between an advisor (p
 ## Hard Rules
 
 - Follow your advisor adapter's transport rules (see `adapters/advisor/ADAPTER.md` in the instance); if it is a browser adapter, do not swap in an API silently.
-- Keep advisor/browser access serialized through the queue manager and its lock.
+- Keep advisor/browser access serialized through the queue manager and its lock. Move jobs only with `arthur queue`; the state machine refuses anything else.
 - Treat advisor conversation history and executor chat memory as recoverable context, not source of truth.
 - Store durable state in queue ledgers, project state files, human-decision files, your tracker, and artifacts.
-- Save advisor-produced text as a project artifact (`arthur capture`) before handing it to the executor.
-- Never act on an artifact with `control_block_valid: false` — treat it as human input required.
-- Stop before implementation if the advisor or executor returns human input required.
+- Save advisor/executor text as a project artifact (`arthur capture --kind <hop>`) before acting on it. Exit code `3` means it was quarantined or asked for a human: a decision is already open, stop that project.
+- Never act on an artifact with `control_block_valid: false`.
+- Run `arthur gate implementation --project-id PROJECT` before any implementation handoff; proceed only on GO. Handoffs captured while the gate is NO-GO are quarantined.
+- Escalate with `arthur decision open`, never by editing `human-decisions/open.md` by hand.
 - Keep the configured quota reserve; at or below reserve, only checkpoint and report.
 
 ## Commands
 
-From the instance root:
+From the instance root (or with `--root DIR` anywhere on the line):
 
 ```bash
 arthur status
 arthur tick --dry-run
 arthur queue due
-arthur queue create --job-id JOB --project-id PROJECT --target-chat-title "Conversation" --target-chat-url URL --prompt-path prompt.md
+arthur queue create --job-id JOB --project-id PROJECT --target-chat-title "Conversation" --target-chat-url URL --prompt-path prompt.md --idempotency-key KEY
+arthur queue claim --job-id JOB && arthur queue submit --job-id JOB
+arthur queue poll-result --job-id JOB --marker-found true --status completed
+arthur queue recover --job-id JOB --requeue          # abandoned job: parks it and frees the dead manager's lease
 arthur capture --project-id PROJECT --job-id JOB --kind next-plan-request --source-chat-title "Conversation" --source-file response.md
+arthur gate implementation --project-id PROJECT      # exit 0 GO, 3 NO-GO
+arthur decision open --project-id PROJECT --title "Question?" --body "Options and impact"
+arthur decision list
 arthur usage snapshot --snapshot-id before-task
 arthur usage task --task-id task --project-id PROJECT --role "Master Orchestrator" --task-label "Task label" --before before-task --after after-task
 arthur usage dashboard
 ```
+
+Capture kinds: `next-plan-request`, `plan`, `plan-review`, `implementation-handoff`, `sprint-review`, `human-decision`.

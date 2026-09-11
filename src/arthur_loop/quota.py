@@ -47,11 +47,14 @@ def fetch_quota_payload(
     *,
     codexbar_provider: str | None = None,
     input_json: str | None = None,
+    root: Path | None = None,
 ) -> QuotaFetch:
     """Fetch a codexbar-schema usage payload through the configured provider.
 
     Every provider must yield the same JSON shape codexbar prints
     (`codexbar usage --format json`), so downstream normalization stays single-path.
+    Relative `quota.path` values and `quota.command` runs resolve against `root`
+    (the instance), never the operator's current directory.
     """
 
     if input_json:
@@ -77,9 +80,12 @@ def fetch_quota_payload(
         path = settings.get("path")
         if not path:
             raise ValueError("quota.provider is 'file' but quota.path is not set")
+        resolved = Path(path)
+        if not resolved.is_absolute() and root is not None:
+            resolved = root / resolved
         return QuotaFetch(
-            payload=json.loads(Path(path).read_text(encoding="utf-8")),
-            source=f"file:{path}",
+            payload=json.loads(resolved.read_text(encoding="utf-8")),
+            source=f"file:{resolved}",
         )
 
     if provider == "command":
@@ -87,7 +93,7 @@ def fetch_quota_payload(
         if not template:
             raise ValueError("quota.provider is 'command' but quota.command is not set")
         proc = subprocess.run(
-            shlex.split(template), text=True, capture_output=True, check=False
+            shlex.split(template), text=True, capture_output=True, check=False, cwd=root
         )
         if proc.returncode != 0 and not proc.stdout.strip():
             return QuotaFetch(

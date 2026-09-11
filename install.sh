@@ -68,6 +68,6 @@ esac
 say ""
 say "Next:"
 say "  mkdir my-loop && cd my-loop"
-say "  arthur init          # detects your agent CLIs, picks a loop preset, seeds your main agent"
-say "  arthur init --demo   # or: see a busy example loop immediately"
+say "  arthur init                # detects your agent CLIs, picks a loop preset, seeds your main agent"
+say "  arthur init --yes --demo   # or: see a busy example loop immediately (no questions asked)"
 say "  arthur status"

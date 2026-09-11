@@ -1,4 +1,4 @@
-# Codex Implementation Handoff Placeholder
+# Executor Implementation Handoff Placeholder
 
 ```text
 Arthur Loop implementation handoff for {{PROJECT_ID}}.

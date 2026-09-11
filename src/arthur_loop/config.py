@@ -5,9 +5,14 @@ from pathlib import Path
 from typing import Any
 
 
-KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "api-model", "manual"}
+# every id here has a shipped pack under src/arthur_loop/adapters/ (tests enforce it)
+KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "manual"}
 KNOWN_EXECUTORS = {"codex", "claude-code", "manual"}
 KNOWN_TRACKERS = {"atlas-tasker", "command", "none"}
+
+# any of these makes a directory an Arthur Loop instance; none of them means a
+# dashboard would be describing an empty folder, not a loop
+INSTANCE_MARKERS = ("config/arthur-loop.json", "queue", "projects", "human-decisions")
 
 DEFAULTS: dict[str, Any] = {
     "version": 2,
@@ -30,6 +35,23 @@ def config_path(root: Path) -> Path:
     """Return the instance config path."""
 
     return root / "config/arthur-loop.json"
+
+
+def is_instance(root: Path) -> bool:
+    """True when `root` holds any Arthur Loop state."""
+
+    return any((root / marker).exists() for marker in INSTANCE_MARKERS)
+
+
+def require_instance(root: Path) -> None:
+    """Raise a clear error instead of rendering a calm dashboard for a random folder."""
+
+    if is_instance(root):
+        return
+    raise ValueError(
+        f"{root} is not an Arthur Loop instance (no config/arthur-loop.json, queue/, projects/ or "
+        "human-decisions/). Run `arthur init` there, or point at your loop with --root."
+    )
 
 
 def load_config(root: Path) -> dict[str, Any]:

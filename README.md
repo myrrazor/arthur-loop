@@ -42,9 +42,11 @@ curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.s
 
 From a checkout, `./install.sh` installs that checkout. Run `arthur --version` to confirm the installed release.
 
-One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: durable job queues, saved artifacts, validated approval gates, human-decision escalation, and a scheduler tick that always knows what should happen next.
+One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: a queue with a real state machine, saved artifacts, approval gates computed from those artifacts, human-decision escalation, and a scheduler tick that always knows what should happen next.
 
 No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI — built to be operated by coding agents (Codex, Claude Code, whatever you run) without letting them freelance.
+
+> **Status: alpha.** The file formats are plain and the CLI is tested on Linux and macOS, but command names and adapter contracts may still tighten before 1.0. Known limitations are listed in the [FAQ](#faq).
 
 <p align="center">
   <img src="assets/status-demo.svg" alt="arthur status — terminal dashboard showing loop state, sessions, queue, projects, decisions, and quota" width="880">
@@ -56,51 +58,81 @@ No daemon. No database. No API keys required by the core. Everything is markdown
 
 Long AI loops fail at the seams: duplicate prompts after a crash, "approved" plans nobody approved, one stuck question freezing every project, quota burned while idle. Arthur Loop is those seams, solved with boring files:
 
-- **Queue ledger** — append-only JSONL with idempotency keys; recover exact state after any crash. Duplicate job creation is refused, stale jobs get flagged and a recovery path.
-- **Artifact store** — every advisor response is saved and indexed *before* it's acted on. Control blocks are parsed only from the final fenced block and validated against enums — an unexpected decision value quarantines the artifact instead of steering the loop.
-- **Approval gates** — implementation never starts from a plan-only packet; sprints advance only on explicit advisor approval.
-- **Human decisions** — a blocking question pauses *its* project, never the others.
+- **Queue ledger** — append-only JSONL with a fixed state machine: `queued → claimed → submitted → waiting/stopped → completed | failed | cancelled`, plus `needs_recovery`. Illegal moves (completing work that was never submitted, touching a finished job) are refused. Duplicate job ids and reused `--idempotency-key`s are refused. After a crash the ledger replays to the last recorded step; `arthur queue recover` parks or requeues the abandoned job *and* releases the dead manager's browser lease.
+- **Artifact store** — every advisor and executor response is saved and indexed *before* it's acted on. Control blocks are parsed only from the final fenced block; values must match the enums, the `REVIEW_TYPE` must match the hop you captured, and a plan that says `IMPLEMENTATION_STARTED: true` is invalid. Anything that fails is **quarantined and opens a human decision**, which pauses that project until a person answers.
+- **Approval gates** — `arthur gate implementation --project-id X` answers GO/NO-GO from the saved artifacts alone (newest plan review is a valid `APPROVE_PLAN`, nothing re-opened planning since, no open decision). An implementation handoff captured while the gate is NO-GO is quarantined. Prompts still ask executors to behave; the gate is what the loop checks regardless.
+- **Human decisions** — `arthur decision open|answer|clear|list`. A blocking question pauses *its* project, never the others.
 - **Tick** — `arthur tick` reads durable state and answers WAIT / POLL_DUE / BLOCKED_BY_BROWSER_LOCK / BLOCKED_BY_QUOTA / HUMAN_INPUT_REQUIRED. Run it from cron if you want a heartbeat; it costs no tokens.
 - **Status** — `arthur status` renders all of it as the dashboard above; `--json` feeds bots and notifiers.
 
 ## Quickstart
 
-Make a loop. `arthur init` **detects the agent CLIs on your machine** (Codex, Claude Code, Gemini, Grok, Goose — see `arthur agents`), asks which one is your **main agent** and which **loop preset** you want:
+### 1. Feel the loop in five minutes (no agents, no automation)
 
-| Preset | Shape |
-| --- | --- |
-| `guided` (default) | Wizard writes a working base; your main agent interviews you and finishes the setup |
-| `solo` | One agent both plans and implements |
-| `pair` | Main agent implements, a second agent reviews |
-| `browser-advisor` | A browser AI (e.g. ChatGPT Pro) plans/reviews, your main agent implements |
-| `custom` | Pick adapters yourself |
-
-The wizard then seeds your main agent — the arthur-loop skill plus a `KICKOFF.md` interview — so *the agent itself* asks you how the flow should work, wires the adapters, and creates your projects:
+The `manual` advisor is you and two folders. Every command below runs non-interactively and is exercised by the test suite (`tests/test_quickstart.py`), so it works exactly as written:
 
 ```bash
 mkdir ~/my-loop && cd ~/my-loop
-arthur init
-```
+arthur init --yes --main-agent none --advisor manual --executor manual --tracker none --no-governor
 
-The wizard leaves `agent-setup/KICKOFF.md` for your main agent. Hand it over there; the agent interviews you, wires the adapters, and creates your projects.
-
-No agent CLIs installed? Five minutes, no automation — the `manual` advisor is a human and two folders, which is also the fastest way to *feel* the loop:
-
-```bash
+# 1. queue a planning request for a project
 arthur queue create --job-id BQ-MY_APP-001 --project-id MY_APP \
   --target-chat-title "MY_APP planning" --target-chat-url manual \
-  --expected-marker HELLO_LOOP
-arthur status                # -> POLL_DUE, one job ready
+  --expected-marker HELLO_LOOP --idempotency-key my-app-001
+arthur status                                   # -> POLL_DUE, one job ready
+
+# 2. claim it (takes the advisor lease), hand the prompt to your advisor, mark it submitted
+arthur queue claim --job-id BQ-MY_APP-001
+cp adapters/advisor/prompts/next-plan-request.md queue/manual/pending/BQ-MY_APP-001.md   # fill in the placeholders
+arthur queue submit --job-id BQ-MY_APP-001      # releases the lease; first poll due in 1 minute
+
+# 3. the advisor (you) answers in queue/manual/done/BQ-MY_APP-001.md, ending with a control block:
+#    ```text
+#    PROJECT_ID: MY_APP
+#    REVIEW_TYPE: NEXT_PLAN_REQUEST
+#    APPROVAL_DECISION: REQUEST_CODEX_PLAN
+#    HAS_P0_P1: false
+#    IDEMPOTENCY_KEY: my-app-001
+#    ```
+
+# 4. save the reply BEFORE acting on it, then close the job
+arthur capture --project-id MY_APP --job-id BQ-MY_APP-001 --kind next-plan-request \
+  --source-chat-title manual --source-file queue/manual/done/BQ-MY_APP-001.md
+arthur queue poll-result --job-id BQ-MY_APP-001 --marker-found true --status completed
+arthur status                                   # -> WAIT; the artifact is indexed under projects/MY_APP/artifacts/chatgpt/
 ```
 
-Prompts land in `queue/manual/pending/`, you drop replies in `queue/manual/done/`, and `arthur capture` files them. That's the whole advisor contract — swap in a real advisor when you're ready.
+`capture` exits `0` when the control block validates, `3` when the reply was saved but quarantined or asked for a human (a decision is opened and the project pauses — see `arthur decision list`), and `2` when nothing was saved. Run the same `queue create` again and it is refused on both the job id and the idempotency key. That is the whole advisor contract; swap in a real advisor when you're ready.
 
-Want the dashboard populated immediately? Seed a demo instance:
+### 2. Let your coding agent set up the real thing
+
+`arthur init` **detects the agent CLIs on your machine** (see `arthur agents`), asks which one is your **main agent** and which **loop preset** you want:
+
+| Preset | Shape | Needs |
+| --- | --- | --- |
+| `guided` (default) | Wizard writes a working base with the `manual` adapters; your main agent interviews you and finishes the setup | any agent, or none |
+| `solo` | One agent both plans and implements | an agent with shipped packs: Codex or Claude Code |
+| `pair` | Main agent implements, a second agent reviews | shipped packs for both agents |
+| `browser-advisor` | A browser AI (e.g. ChatGPT Pro) plans/reviews, your main agent implements | any agent (executor is `manual` without a pack) |
+| `custom` | Pick adapters yourself | — |
+
+Shipped adapter packs exist for **Codex** and **Claude Code** (both roles) plus `chatgpt-browser` and `manual`. Gemini, Grok, and Goose are *detected* so the kickoff can seed their instruction files, but no pack ships for them: `solo`/`pair` refuse them with an explanation instead of silently wiring `manual`, and `guided` says plainly that both roles start as `manual` until your agent authors an adapter ([docs/adapters.md](docs/adapters.md)).
 
 ```bash
-arthur init --demo           # sample projects, a job, sessions, a decision, a quota bar
+mkdir ~/my-loop && cd ~/my-loop
+arthur init                  # interactive; needs a terminal
+```
+
+The wizard leaves `agent-setup/KICKOFF.md` for your main agent. Hand it over there; the agent interviews you, wires the adapters, and creates your projects. Without a terminal (cron, CI, piped stdin) `arthur init` fails fast and tells you to pass `--yes`; with `--yes` the defaults are: main agent = first detected CLI, preset `guided` (or `custom` when no agent is found), tracker `none`, governor on only when `codexbar` is installed, heartbeat on. Every question is also a flag — see `arthur init --help`.
+
+### 3. Or just look at a busy dashboard
+
+```bash
+arthur init --yes --demo     # sample projects, a job, sessions, a decision, and a quota bar fed by usage/demo-quota.json
 arthur status
 ```
+
+`--demo` turns the quota governor on and points it at a JSON file inside the instance, so the bar you see is real and `arthur usage snapshot --snapshot-id x` works too.
 
 ## The status dashboard
 
@@ -113,6 +145,21 @@ arthur status clear --session-id my-app-loop
 ```
 
 Sessions that stop reporting go dim with a `(stale)` marker after an hour — a stale `working` row is exactly how you spot a session that died mid-task. `arthur status --json` prints the entire snapshot machine-readable, which is the integration point for Discord bots, desktop notifiers, or anything else that should know when the loop needs you.
+
+`--root DIR` works the same before or after any subcommand (`arthur --root ~/loop status set …`, `arthur status --root ~/loop set …`, `arthur status set … --root ~/loop`), and the dashboard refuses to render for a directory that isn't an instance instead of showing a calm, fake `WAIT`.
+
+## Human decisions
+
+When the loop needs a person, that is a file, not a chat message. `human-decisions/open.md` holds one `## PROJECT_ID title` section per decision; while a section says `Status: OPEN`, the tick reports `HUMAN_INPUT_REQUIRED` for that project and hands out none of its jobs. The loop opens decisions itself when an artifact is quarantined or says `HUMAN_INPUT_REQUIRED`; agents and humans open and close them with the CLI:
+
+```bash
+arthur decision open --project-id MY_APP --title "Session lifetime?" --body "24 hours or 7 days?"
+arthur decision list                     # what is waiting on you
+arthur decision answer --title "MY_APP Session lifetime?" --answer "7 days"
+arthur decision clear  --title "MY_APP Session lifetime?" --note "asked twice"   # withdraw without answering
+```
+
+`open` also runs your tracker's `open_decision` template when one is configured. The web console's "answer" action is the same code path.
 
 ## The web console
 
@@ -127,7 +174,7 @@ arthur web                 # serve this instance, open the browser
 arthur web --root ~/loop --port 8080 --no-open
 ```
 
-Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only, with a per-process session token guarding every write. It exposes exactly five human actions (answer a decision, recover a job, create a job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
+Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only; `arthur web` prints a URL carrying a per-process session token, and every read and write over the API requires that token, so another local user cannot read your loop or push its buttons. It exposes exactly five human actions (answer a decision, recover a job, create a job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
 
 ## The menu bar app (macOS)
 
@@ -144,13 +191,15 @@ cd menubar/ArthurBar && swift build -c release
 
 ## Desktop notifications
 
-And the loop can come find *you*: `arthur watch` polls the tick and fires **desktop notifications** (macOS `osascript`, Linux `notify-send`) the moment a human decision opens, quota blocks, work goes due, or a job goes stale — never on repeats. Run it in a spare pane for a live event tray, from cron with `--once`, or script your own alerts with `arthur notify --message "..."`:
+And the loop can come find *you*: `arthur watch` polls the tick and fires **desktop notifications** the moment a human decision opens, quota blocks, work goes due, or a job goes stale — never on repeats. It remembers its last observation in `runtime/watch-state.json`, so `--once` from cron only speaks when something changed. Run it in a spare pane for a live event tray, from cron with `--once --quiet`, or script your own alerts with `arthur notify --message "..."`:
 
 ```bash
-arthur watch                 # ping me when the loop needs a human
-arthur watch --once --no-desktop  # cron-friendly check that only prints
+arthur watch                        # ping me when the loop needs a human
+arthur watch --once --quiet         # cron: prints only new events (empty output = nothing new)
 arthur notify --message "sprint 2 approved"
 ```
+
+Notifiers: macOS uses `osascript`; Linux needs `notify-send` (libnotify — `apt install libnotify-bin` or your distro's equivalent). Without one, `watch` says so once and prints events instead, and `arthur notify` exits `2` with the same explanation (`--dry-run` included). Windows and headless servers have no desktop notifier; use `--no-desktop` and pipe the output wherever you want it.
 
 ## Pick your pieces
 
@@ -158,27 +207,27 @@ arthur notify --message "sprint 2 approved"
 
 | Piece | Options |
 | --- | --- |
-| Advisor (plans, reviews, approves) | `chatgpt-browser` · `claude-code` · `api-model` · `manual` |
+| Advisor (plans, reviews, approves) | `chatgpt-browser` · `claude-code` · `codex` · `manual` |
 | Executor (implements) | `codex` · `claude-code` · `manual` |
 | Tracker (tickets) | `atlas-tasker` · `command` (bring your own CLI) · `none` |
 | Quota governor | on/off — sources: [codexbar](https://github.com/steipete/CodexBar) (auto-detected) · your own `command` · a JSON `file` |
 | Heartbeat state files | on/off |
 
-**Trackers.** If you use [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) — Jira for your terminal, built for AI agents — Arthur Loop ships preset command templates and `arthur init` points you at its installer. Any other tracker with a CLI works through three command templates in config (`open_decision`, `close_decision`, `sprint_gate`) — no code, just your tool's commands. Or pick `none` and decisions live in `human-decisions/open.md` alone.
+**Trackers.** A tracker adapter is exactly three command templates in config — `open_decision`, `close_decision`, `sprint_gate` — rendered to argv (never a shell) and run from the instance root by `arthur tracker <action>`. There is no MCP, no callback, and no gate logic in it; `arthur decision open` calls `open_decision` for you, the other two are there for your agents to call. If you use [Atlas Tasker](https://github.com/myrrazor/atlas-tasker), presets for its `tracker` CLI ship in the box and `arthur init` points you at its installer; verify the flags against your installed release. Any other CLI tracker works with your own templates. Or pick `none` and decisions live in `human-decisions/open.md` alone.
 
-**Advisors.** Each adapter is a runbook plus a prompt pack, not code. The `chatgpt-browser` adapter drives a logged-in ChatGPT Pro conversation through the browser UI — the most battle-tested path and also fragile-by-nature; check the terms of any service you automate. The `manual` and `claude-code` adapters exist precisely so the core never depends on browser automation.
+**Advisors.** Each adapter is a runbook plus a prompt pack, not code — all four ship the same prompts, only the transport differs. `chatgpt-browser` drives a logged-in ChatGPT Pro conversation through the browser UI via your own agent; it is the original transport and fragile by nature (UIs change; check the terms of any service you automate). `codex` and `claude-code` run the advisor headlessly (`codex exec` / `claude -p`). `manual` is a human and two folders. The core never depends on browser automation.
 
-**Quota.** `auto` uses CodexBar when it is installed and otherwise stays out of the way. `command` accepts any executable that prints CodexBar-shaped JSON; `file` reads the same schema from disk; `none` disables collection. The core never requires CodexBar.
+**Quota.** `auto` uses CodexBar when it is installed and otherwise stays out of the way. `command` accepts any executable that prints CodexBar-shaped JSON; `file` reads the same schema from disk (relative paths resolve against the instance root); `none` disables collection. The core never requires CodexBar.
 
 ## The loop, end to end
 
-1. The advisor returns a next-plan instruction (control block: `REQUEST_CODEX_PLAN`).
-2. The executor produces a plan — plan only, enforced by prompt and by review.
-3. The advisor approves (`APPROVE_PLAN`) or sends it back (`REVISE_PLAN`).
-4. The executor implements exactly one approved packet, with tests and evidence.
-5. The advisor reviews the handoff; repeat until `RELEASE_READY` — or a `HUMAN_INPUT_REQUIRED` at any step pauses that project and surfaces on the dashboard.
+1. The advisor returns a next-plan instruction (`arthur capture --kind next-plan-request`, control block `REQUEST_CODEX_PLAN`).
+2. The executor produces a plan (`--kind plan`). Plan only: a plan whose control block admits `IMPLEMENTATION_STARTED: true` is quarantined.
+3. The advisor approves (`--kind plan-review`, `APPROVE_PLAN`) or sends it back (`REVISE_PLAN`).
+4. `arthur gate implementation --project-id X` says GO. The executor implements exactly one approved packet, with tests and evidence (`--kind implementation-handoff`); a handoff captured while the gate is NO-GO is quarantined.
+5. The advisor reviews the handoff (`--kind sprint-review`); repeat until `RELEASE_READY` — a `HUMAN_INPUT_REQUIRED` or an invalid control block at any step opens a decision that pauses that project and surfaces on the dashboard.
 
-Every hop is saved to the artifact store first, every decision is validated against an enum, and `arthur tick` tells you exactly where things stand after a crash, a nap, or a quota pause. The full operating manual is [docs/workflow-runbook.md](docs/workflow-runbook.md).
+Every hop is saved to the artifact store first, every decision is validated against an enum, and `arthur tick` tells you where things stand after a crash, a nap, or a quota pause. The full operating manual is [docs/workflow-runbook.md](docs/workflow-runbook.md).
 
 ## Adapters
 
@@ -186,10 +235,13 @@ The contract lives in [docs/adapters.md](docs/adapters.md); shipped adapters liv
 
 ## How it stays honest
 
-- Advisor text is untrusted input: control blocks parse from the final fenced block only, values must match the allowed vocabulary exactly, and anything ambiguous is saved with `control_block_valid: false` — which the loop treats as "get a human."
-- One browser, one lock: `claim`/`submit`/`poll-result` serialize advisor access through a lease file with stale takeover.
-- Idempotency keys ride every prompt, so crash recovery checks for an existing response before ever resending.
+- Advisor and executor text is untrusted input: control blocks parse from the final fenced block only, values must match the allowed vocabulary exactly, the block must belong to the hop and project it was captured as, and anything that fails is saved with `control_block_valid: false` *and* opens a human decision that pauses the project. The scheduler cannot ignore it.
+- The queue is a state machine, not a log of claims: `arthur queue` refuses transitions the loop never lived, and concurrent CLI runs on the same instance are serialized with a POSIX file lock so two of them cannot both pass a uniqueness check.
+- One browser, one lock: `claim`/`submit`/`poll-result` serialize advisor access through a lease file with stale takeover. A refused `claim` never leaves a lease behind; `arthur queue recover` frees the lease of a manager that died after claiming; `arthur lock break --force` is the human's last resort.
+- Idempotency keys are enforced at `queue create` — a retried create cannot fork the queue — and ride every prompt so recovery can look for an existing response before resending.
 - Quota reserve: at or below your reserve percent, the loop checkpoints and reports instead of starting new work.
+
+What it does **not** do: it cannot stop an executor process from editing files. It makes the executor's output worthless to the loop unless the gate was open, and it opens a human decision when that happens. Treat the gate as a check you run (and require your agents to run) before implementation starts.
 
 ## FAQ
 
@@ -199,9 +251,9 @@ The contract lives in [docs/adapters.md](docs/adapters.md); shipped adapters liv
 
 **Does the core call any AI APIs?** No. The core is files and a CLI. Adapters decide how prompts reach an advisor/executor — including entirely manual.
 
-**Does it automate ChatGPT?** Only if you choose the `chatgpt-browser` adapter, and then only via your own agent driving your own logged-in browser. Review the terms of the services you automate; the `manual` and `claude-code` adapters are first-class alternatives.
+**Does it automate ChatGPT?** Only if you choose the `chatgpt-browser` adapter, and then only via your own agent driving your own logged-in browser. Review the terms of the services you automate; the `manual`, `codex`, and `claude-code` adapters are first-class alternatives. (Some identifiers keep their historical ChatGPT names for compatibility — the `waiting_for_chatgpt` status, the `projects/<ID>/artifacts/chatgpt/` directory, `READY_FOR_CHATGPT_REVIEW` — regardless of which advisor you run.)
 
-**Which platforms work?** The Python CLI is exercised on Linux and macOS. The file formats are portable, but locks and browser adapters are untested on Windows. ArthurBar requires macOS 14 or newer.
+**Which platforms work?** The Python CLI is tested on Linux and macOS (CI runs both). Known limitations: the cross-process file locks use POSIX `flock` and degrade to no locking on Windows, where nothing is tested; desktop notifications need `osascript` (macOS) or `notify-send` (Linux) and are otherwise reported as unsupported; ArthurBar is macOS 14+ only and has no Linux or Windows equivalent — use `arthur watch` or `arthur status --json` there; only Codex and Claude Code have shipped adapter packs, other detected agents start as `manual`.
 
 **How do I update or uninstall it?** Repeat your `pipx install --force`, `uv tool install --force`, or curl command to update. For the curl install, remove `~/.arthur-loop` and `~/.local/bin/arthur` to uninstall; pipx and uv have their usual `uninstall arthur-loop` commands.
 

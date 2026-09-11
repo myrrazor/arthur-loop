@@ -11,9 +11,14 @@ arthur web --port 8080 --no-open
 ```
 
 The server binds `127.0.0.1` only, refuses any non-localhost `Host` header, and
-mints a per-process session token that every write action must carry. There is
-no auth, no multi-user, no remote hosting by design — it is a cockpit for the
-person sitting at the machine, not a hosted dashboard.
+mints a per-process session token. `arthur web` prints the one URL that carries
+it (`http://127.0.0.1:7433/?token=…`); the page loads only through that URL and
+every `/api/*` read and write must present the token (`X-Arthur-Token`). A bare
+`GET /` — from another local user, a browser tab you did not open yourself, or a
+guessing script — gets a 403 and never sees the token. There is no login, no
+multi-user, no remote hosting by design — it is a cockpit for the person
+sitting at the machine, not a hosted dashboard. The console refuses to serve a
+directory that is not an Arthur Loop instance.
 
 ## What it shows
 
@@ -42,13 +47,17 @@ The console exposes exactly five write actions, each a thin wrapper over the sam
 durable-state paths the CLI uses:
 
 1. **Answer a decision** — records the answer into `human-decisions/open.md`,
-   flips the section to `ANSWERED`, and unblocks the project.
-2. **Recover a job** — parks a stale job as `needs_recovery`, optionally requeues.
-   Finished jobs are refused.
-3. **Create a job** — the `arthur queue create` form, with the same dedupe guard.
+   flips the section to `ANSWERED`, and unblocks the project. Same code path as
+   `arthur decision answer`.
+2. **Recover a job** — parks a stale job as `needs_recovery`, optionally requeues,
+   and releases the browser lease of the manager that claimed it. Same code path
+   as `arthur queue recover`. Finished jobs are refused.
+3. **Create a job** — the `arthur queue create` form, with the same dedupe guard
+   on job id and idempotency key.
 4. **Clear a session** — drops a finished session from the dashboard.
 5. **Break a stale lock** — removes a browser lock whose holder went quiet past
-   its TTL. A fresh lock is refused; you can't yank the browser from a live agent.
+   its TTL. A fresh lock is refused; you can't yank the browser from a live agent
+   (the CLI's `arthur lock break --force` can, for a manager you know is dead).
 
 It deliberately does **not** offer claim/submit/poll buttons (those are the
 browser-lock lifecycle the queue-manager agent owns), an "approve plan" button

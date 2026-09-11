@@ -1,4 +1,4 @@
-# Codex Plan-Only Placeholder
+# Executor Plan-Only Placeholder
 
 ```text
 Arthur Loop handoff from ChatGPT browser review. PLAN ONLY.
