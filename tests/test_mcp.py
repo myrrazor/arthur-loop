@@ -126,7 +126,9 @@ class McpProtocolTests(unittest.TestCase):
                 ctx,
                 {"jsonrpc": "2.0", "id": 3, "method": "prompts/get", "params": {"name": "arthur-loop"}},
             )
-            self.assertIn("advisor", prompt["result"]["messages"][0]["content"]["text"])
+            text = prompt["result"]["messages"][0]["content"]["text"]
+            self.assertIn("Advisor", text)
+            self.assertIn("arthur.loop.create", text)
 
     def test_serve_ndjson_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

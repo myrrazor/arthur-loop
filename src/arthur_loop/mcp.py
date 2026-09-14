@@ -692,7 +692,7 @@ def serve(
         if reply is None:
             continue
         data = encode_message(reply, framing=reader.framing)
-        if out.encoding:
+        if getattr(out, "encoding", None) or not hasattr(out, "buffer"):
             out.write(data.decode("utf-8"))
         else:  # pragma: no cover - binary stdout
             out.buffer.write(data)  # type: ignore[attr-defined]
