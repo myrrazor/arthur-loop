@@ -8,9 +8,13 @@ from types import SimpleNamespace
 
 from arthur_loop.atlas_board import (
     is_ready_or_assigned,
+    next_entries,
     open_jobs_from_board,
     read_board,
+    read_next,
+    resolve_atlas_project,
     tickets_from_board,
+    walk_next,
 )
 from arthur_loop.cli import main
 from arthur_loop.queue_ledger import QueueLedger
@@ -54,6 +58,11 @@ class BoardParseTests(unittest.TestCase):
         ready_ids = {_ticket_id(t) for t in tickets if is_ready_or_assigned(t)}
         self.assertEqual(ready_ids, {"APP-1", "APP-2", "APP-3"})
         self.assertFalse(is_ready_or_assigned({"id": "APP-9", "status": "done"}))
+        self.assertFalse(
+            is_ready_or_assigned(
+                {"id": "APP-4", "status": "in_review", "assignee": "agent:builder-1"}
+            )
+        )
 
 
 def _ticket_id(ticket):
@@ -115,6 +124,105 @@ class BoardReadTests(unittest.TestCase):
             with patch("arthur_loop.atlas_board.tracker_binary", return_value=None):
                 with self.assertRaises(FileNotFoundError):
                     read_board(Path(tmp))
+
+    def test_runtime_error_from_tracker_is_not_a_traceback(self) -> None:
+        import io
+        from contextlib import redirect_stderr, redirect_stdout
+        from unittest.mock import patch
+
+        with tempfile.TemporaryDirectory() as tmp:
+            main(
+                [
+                    "init", "--root", tmp, "--yes", "--main-agent", "none",
+                    "--advisor", "manual", "--executor", "manual", "--tracker", "none",
+                    "--no-governor", "--no-integrations",
+                ]
+            )
+            with patch(
+                "arthur_loop.atlas_board.run_tracker_json",
+                side_effect=RuntimeError("tracker board failed: boom"),
+            ):
+                err = io.StringIO()
+                out = io.StringIO()
+                with redirect_stdout(out), redirect_stderr(err):
+                    code = main(["tracker", "--root", tmp, "board"])
+            self.assertEqual(code, 2)
+            self.assertIn("error:", err.getvalue())
+            self.assertIn("boom", err.getvalue())
+            self.assertNotIn("Traceback", err.getvalue())
+
+
+NEXT = {
+    "actor": "agent:builder-1",
+    "entries": [
+        {
+            "category": "ready_for_me",
+            "entry": {
+                "ticket": {
+                    "id": "APP-1",
+                    "project": "APP",
+                    "title": "Ship login",
+                    "status": "ready",
+                    "assignee": "agent:builder-1",
+                },
+                "reason": "ready and assignable",
+            },
+        },
+        {
+            "category": "needs_review",
+            "entry": {
+                "ticket": {
+                    "id": "APP-4",
+                    "project": "APP",
+                    "title": "In review",
+                    "status": "in_review",
+                    "assignee": "agent:builder-1",
+                },
+                "reason": "needs review",
+            },
+        },
+    ],
+}
+
+
+def _next_runner(payload):
+    def run(cmd, **kwargs):
+        assert cmd[1] == "next"
+        assert "--json" in cmd
+        return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+
+    return run
+
+
+class NextWalkTests(unittest.TestCase):
+    def test_next_walks_ready_and_skips_in_review(self) -> None:
+        tickets = next_entries(NEXT)
+        self.assertEqual([t["id"] for t in tickets], ["APP-1", "APP-4"])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            main(
+                [
+                    "init", "--root", tmp, "--yes", "--main-agent", "none",
+                    "--advisor", "manual", "--executor", "manual", "--tracker", "atlas-tasker",
+                    "--no-governor", "--no-integrations",
+                ]
+            )
+            nxt = read_next(root, actor="agent:builder-1", runner=_next_runner(NEXT))
+            self.assertEqual(nxt["walkable_count"], 1)
+            self.assertEqual(nxt["next"]["id"], "APP-1")
+            walked = walk_next(root, runner=_next_runner(NEXT), dry_run=True, limit=1)
+            self.assertEqual(walked["next"]["id"], "APP-1")
+            self.assertEqual(len(walked["opened"]["opened"]), 1)
+            self.assertEqual(QueueLedger(root).latest_jobs(), {})
+
+    def test_project_map_does_not_pass_shouty_snake_as_atlas_key(self) -> None:
+        config = {
+            "tracker": {"adapter": "atlas-tasker", "project_map": {"DEMO_APP": "DEMO"}},
+            "projects": [{"project_id": "DEMO_APP", "atlas_project": "DEMO"}],
+        }
+        self.assertEqual(resolve_atlas_project(config, "DEMO_APP"), "DEMO")
+        self.assertIsNone(resolve_atlas_project({"tracker": {"adapter": "atlas-tasker"}}, "DEMO_APP"))
+        self.assertEqual(resolve_atlas_project({"tracker": {"adapter": "atlas-tasker"}}, "APP"), "APP")
 
 
 if __name__ == "__main__":

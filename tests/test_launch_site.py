@@ -129,6 +129,9 @@ class LaunchSiteTests(unittest.TestCase):
             (ROOT / "site/logo.svg").read_bytes(),
             (ROOT / "assets/arthur-loop-wordmark.svg").read_bytes(),
         )
+        self.assertTrue((ROOT / "site/create-loop-wizard.png").is_file())
+        self.assertTrue((ROOT / "docs/assets/how-it-works.mp4").is_file())
+        self.assertLess((ROOT / "site/create-loop-wizard.png").stat().st_size, 2_000_000)
 
 
 if __name__ == "__main__":

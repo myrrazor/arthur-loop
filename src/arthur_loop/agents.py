@@ -30,9 +30,10 @@ class AgentCLI:
     def skill_install_path(self) -> str | None:
         """Directory that should contain SKILL.md for this client.
 
-        Claude/Codex/Cursor use a parent skills dir; Grok's path is the skill
-        folder itself (Atlas-shaped `*-agent-skill`), so kickoff must not nest
-        another `arthur-loop/` underneath it.
+        Claude/Codex/Cursor use a parent skills dir plus `arthur-loop/`.
+        Grok Build scans `./.grok/skills/` (and `~/.grok/skills/`); the skill
+        folder is `.grok/skills/arthur-loop`. Paths ending in `-skill` are
+        already the skill folder (no extra nest).
         """
 
         if not self.skills_dir:
@@ -107,8 +108,8 @@ KNOWN_AGENTS: tuple[AgentCLI, ...] = (
         executor_adapter="grok",
         advisor_adapter="grok",
         instructions_file="AGENTS.md",
-        skills_dir=".arthur/integrations/grok-agent-skill",
-        launch_hint='grok "$(cat agent-setup/KICKOFF.md)"',
+        skills_dir=".grok/skills",
+        launch_hint='grok -p --always-approve "$(cat agent-setup/KICKOFF.md)"',
         version_args=("version",),
         integration_target="grok",
     ),

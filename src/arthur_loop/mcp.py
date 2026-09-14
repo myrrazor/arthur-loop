@@ -8,10 +8,18 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from arthur_loop.artifact_store import ARTIFACT_KINDS, implementation_gate, save_chatgpt_artifact
-from arthur_loop.atlas_board import open_jobs_from_board, read_board
+from arthur_loop.atlas_board import (
+    open_jobs_from_board,
+    read_board,
+    read_next,
+    read_queue,
+    resolve_atlas_project,
+    walk_next,
+)
 from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision, list_decisions, open_decision
-from arthur_loop.loop_ops import claim_job, create_loop, list_loops, wizard_options
+from arthur_loop.follow import follow_loop
+from arthur_loop.loop_ops import claim_job, create_loop, list_loops, submit_job, wizard_options
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.recovery import recover_job
 from arthur_loop.status import collect_status, status_to_dict
@@ -33,6 +41,8 @@ WRITE_TOOLS = {
     "arthur.decision.answer",
     "arthur.loop.create",
     "arthur.board.open_jobs",
+    "arthur.follow.run",
+    "arthur.tracker.walk",
 }
 
 
@@ -121,7 +131,19 @@ TOOL_DEFS: list[dict[str, Any]] = [
     {
         "name": "arthur.board",
         "description": "Read the Atlas Tasker board via `tracker board --json` when tracker is installed.",
-        "inputSchema": _schema({"project": _str("Optional Atlas project key")}),
+        "inputSchema": _schema({"project": _str("Optional Atlas project key (not the Arthur project_id)")}),
+        "write": False,
+    },
+    {
+        "name": "arthur.tracker.next",
+        "description": "Walk ready work via `tracker next --json` (ready_for_me / unblocked_for_me).",
+        "inputSchema": _schema({"actor": _str("Optional Atlas actor")}),
+        "write": False,
+    },
+    {
+        "name": "arthur.tracker.queue",
+        "description": "Read the Atlas actor queue via `tracker queue --json`.",
+        "inputSchema": _schema({"actor": _str("Optional Atlas actor")}),
         "write": False,
     },
     {
@@ -165,7 +187,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "name": "arthur.queue.submit",
-        "description": "Record that the prompt was sent.",
+        "description": "Record that the prompt was sent. Refused when the project is paused.",
         "inputSchema": _schema(
             {
                 "job_id": _str("Job id"),
@@ -261,7 +283,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "name": "arthur.board.open_jobs",
-        "description": "Open Arthur queue jobs from Atlas ready/assigned tickets (`tracker board --json`).",
+        "description": "Open Arthur queue jobs from Atlas ready/in_progress tickets (`tracker board --json`). in_review is not ready.",
         "inputSchema": _schema(
             {
                 "project": _str("Optional Atlas project key"),
@@ -269,6 +291,34 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "dry_run": _bool("Preview without writing"),
                 "actor": _str("Who is opening jobs"),
                 "reason": _str("Why"),
+            }
+        ),
+        "write": True,
+    },
+    {
+        "name": "arthur.tracker.walk",
+        "description": "Walk tracker next (fallback: board) and open queue jobs for the next ready ticket.",
+        "inputSchema": _schema(
+            {
+                "actor": _str("Atlas actor"),
+                "project": _str("Optional Atlas project key"),
+                "limit": _int("How many tickets to walk"),
+                "dry_run": _bool("Preview without writing"),
+                "open_jobs": _bool("Open queue jobs (default true)"),
+            }
+        ),
+        "write": True,
+    },
+    {
+        "name": "arthur.follow.run",
+        "description": "Auto-follow: claim → invoke CLI adapter → submit → capture → gate. Stops on human gates.",
+        "inputSchema": _schema(
+            {
+                "once": _bool("One step only"),
+                "max_steps": _int("Cap when not once (default 12)"),
+                "project_id": _str("Limit to one Arthur project"),
+                "chain": _bool("Enqueue the next hop from a trusted control block (default true)"),
+                "dry_run": _bool("Classify only"),
             }
         ),
         "write": True,
@@ -389,17 +439,13 @@ def _handle_queue_claim(ctx: McpContext, arguments: dict[str, Any]) -> dict[str,
 
 
 def _handle_queue_submit(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
-    from arthur_loop.browser_lock import BrowserLockError, read_lock, release_lock
-
     holder = _s(arguments, "holder") or "mcp-agent"
-    lock = read_lock(ctx.root)
-    if not lock:
-        raise BrowserLockError("browser lock is not held; claim the job first")
-    if lock.holder != holder:
-        raise BrowserLockError(f"browser lock is held by {lock.holder}, not {holder}")
-    job = QueueLedger(ctx.root).transition(_s(arguments, "job_id") or "", "submitted")
-    if not arguments.get("keep_lock"):
-        release_lock(ctx.root, holder)
+    job = submit_job(
+        ctx.root,
+        _s(arguments, "job_id") or "",
+        holder=holder,
+        keep_lock=bool(arguments.get("keep_lock")),
+    )
     return _ok(job.to_record())
 
 
@@ -451,13 +497,66 @@ def _handle_capture(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any
 
 
 def _handle_decision_open(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    record = open_decision(
+        ctx.root,
+        project_id=_s(arguments, "project_id") or "",
+        title=_s(arguments, "title") or "",
+        body=_s(arguments, "body") or "",
+        source="mcp",
+    )
+    record["atlas_project"] = resolve_atlas_project(ctx.config, record.get("project_id"))
+    return _ok(record)
+
+
+def _handle_tracker_next(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _ok(read_next(ctx.root, actor=_s(arguments, "actor")))
+
+
+def _handle_tracker_queue(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _ok(read_queue(ctx.root, actor=_s(arguments, "actor")))
+
+
+def _handle_tracker_walk(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    limit = arguments.get("limit", 1)
+    try:
+        limit_n = int(limit)
+    except (TypeError, ValueError):
+        limit_n = 1
+    open_jobs = arguments.get("open_jobs")
+    if open_jobs is None:
+        open_jobs = True
     return _ok(
-        open_decision(
+        walk_next(
             ctx.root,
-            project_id=_s(arguments, "project_id") or "",
-            title=_s(arguments, "title") or "",
-            body=_s(arguments, "body") or "",
-            source="mcp",
+            actor=_s(arguments, "actor"),
+            project=_s(arguments, "project") or resolve_atlas_project(ctx.config, None),
+            limit=limit_n,
+            dry_run=bool(arguments.get("dry_run")),
+            open_jobs=bool(open_jobs),
+        )
+    )
+
+
+def _handle_follow_run(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    once = arguments.get("once")
+    if once is None:
+        once = True
+    chain = arguments.get("chain")
+    if chain is None:
+        chain = True
+    max_steps = arguments.get("max_steps", 12)
+    try:
+        max_n = int(max_steps)
+    except (TypeError, ValueError):
+        max_n = 12
+    return _ok(
+        follow_loop(
+            ctx.root,
+            once=bool(once),
+            max_steps=max_n,
+            project_id=_s(arguments, "project_id"),
+            chain=bool(chain),
+            dry_run=bool(arguments.get("dry_run")),
         )
     )
 
@@ -525,6 +624,10 @@ TOOL_HANDLERS.update(
         "arthur.decision.answer": _handle_decision_answer,
         "arthur.loop.create": _handle_loop_create,
         "arthur.board.open_jobs": _handle_board_open,
+        "arthur.tracker.next": _handle_tracker_next,
+        "arthur.tracker.queue": _handle_tracker_queue,
+        "arthur.tracker.walk": _handle_tracker_walk,
+        "arthur.follow.run": _handle_follow_run,
     }
 )
 
@@ -539,8 +642,10 @@ Interview the human, one topic at a time:
 5. Whether to seed the first next-plan-request job
 
 Then call arthur.loop.create (portable: arthur_loop_create) with those answers.
-After that, follow the loop: arthur.queue.claim → submit/capture → arthur.gate.implementation.
-Never hand-edit queue JSONL. Never claim a job on a project paused by an open human decision.
+After that, call arthur.follow.run (portable: arthur_follow_run) so claim/capture/gate
+are not hand-typed. Remaining human gates: open decisions, ChatGPT-browser/manual
+adapters, and implementation-gate NO-GO.
+Never hand-edit queue JSONL. Never claim or submit a job on a project paused by an open human decision.
 """
 
 

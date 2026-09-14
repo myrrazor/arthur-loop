@@ -33,22 +33,26 @@ Use Arthur Loop to coordinate one project sprint at a time between an advisor (p
 
 After `arthur init` or `arthur integrations install`, this skill is written where the client
 loads skills (Claude: `.claude/skills/arthur-loop`, Codex: `.codex/skills/arthur-loop`,
-Cursor: `.cursor/skills/arthur-loop` and `.cursor/commands/arthur-loop.md`, Grok: `.arthur/integrations/grok-agent-skill` plus
-`AGENTS.md`). MCP is registered in that client's real config (`.mcp.json`,
-`.codex/config.toml`, `.cursor/mcp.json`, `.grok/config.toml`). A written entry is
-**written**, not connected — restart the client.
+Cursor: `.cursor/skills/arthur-loop` and `.cursor/commands/arthur-loop.md`, Grok:
+`.grok/skills/arthur-loop` — the path Grok Build actually scans — plus `AGENTS.md`).
+MCP is registered in that client's real config. Grok install runs
+`grok mcp add --scope project arthur-loop -- arthur mcp serve --tool-name-style portable`
+when `grok` is on PATH so the server is trusted (prove with `grok mcp list` / `grok -p`).
+Other clients need a restart before tools appear.
 
 Prefer MCP tools over inventing shell. Dotted names (`arthur.status`, `arthur.loop.create`,
-`arthur.queue.claim`, `arthur.capture`, `arthur.gate.implementation`, `arthur.board`) are
-canonical. Grok registrations use portable names (`arthur_status`, `arthur_loop_create`).
+`arthur.follow.run`, `arthur.queue.claim`, `arthur.capture`, `arthur.gate.implementation`,
+`arthur.board`, `arthur.tracker.next`) are canonical. Grok registrations use portable names
+(`arthur_status`, `arthur_loop_create`, `arthur_follow_run`).
 
 `/arthur-loop` (Claude project command, or this skill) interviews for advisor / executor /
-tracker and calls `arthur.loop.create`. That creates a project and the first queue job.
-It is not a drag-drop graph composer.
+tracker and calls `arthur.loop.create`. Then call `arthur.follow.run` / `arthur follow`
+so claim → capture → gate is not hand-typed. It is not a drag-drop graph composer.
 
-If the tracker is Atlas Tasker, read the board with `arthur.board` / `arthur tracker board --json`
-and open jobs from ready/assigned tickets with `arthur.board.open_jobs`. The old three argv
-templates remain as a fallback for `open_decision` / `close_decision` / `sprint_gate`.
+If the tracker is Atlas Tasker, walk ready work with `arthur.tracker.next` /
+`arthur tracker next --json` / `arthur tracker walk`. `open-jobs` only opens
+ready/in_progress (not `in_review`). Map Arthur `project_id` to an Atlas key with
+`tracker.project_map`. The old three argv templates remain for decision/sprint hooks.
 
 ## Commands
 
@@ -58,8 +62,12 @@ From the instance root (or with `--root DIR` anywhere on the line):
 arthur status
 arthur tick --dry-run
 arthur loop create --project-id PROJECT --advisor grok --executor claude-code
+arthur follow --once
 arthur integrations install --targets claude,codex,cursor,grok
-arthur mcp serve
+arthur integrations probe --target grok
+arthur mcp serve --tool-name-style portable
+arthur tracker next --json
+arthur tracker walk --dry-run
 arthur tracker board --json
 arthur tracker open-jobs --dry-run
 arthur queue due

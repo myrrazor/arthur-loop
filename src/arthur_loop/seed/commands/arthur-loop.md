@@ -20,13 +20,14 @@ You are operating an Arthur Loop instance. There is no drag-and-drop graph compo
    arthur loop create --project-id PROJECT --advisor ADVISOR --executor EXECUTOR --tracker TRACKER
    ```
 
-5. Follow the loop yourself — do not wait for a human to type every CLI hop:
-   - `arthur.queue.claim` / `arthur queue claim`
-   - submit or capture the advisor/executor reply (`arthur.capture`)
-   - `arthur.gate.implementation` before any implementation handoff
+5. Follow the loop — do not wait for a human to type every CLI hop:
+   - MCP `arthur.follow.run` / `arthur follow --once`
+   - or claim → submit/capture → `arthur.gate.implementation` yourself
    - `arthur.decision.open` when a human is required
 
-If Atlas Tasker is the tracker and `tracker` is on PATH, read the board with `arthur.board` / `arthur tracker board --json` and open jobs from ready/assigned work with `arthur.board.open_jobs`.
+If Atlas Tasker is the tracker and `tracker` is on PATH, walk ready work with
+`arthur.tracker.next` / `arthur tracker walk` (not just `board --json`). `in_review`
+is not ready work. Pass Atlas `--project` keys via `tracker.project_map`.
 
 ## Hard rules
 

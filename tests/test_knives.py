@@ -106,6 +106,24 @@ class ClaimOnPausedTests(unittest.TestCase):
             self.assertEqual(QueueLedger(Path(tmp)).latest_jobs()["BQ-KN-001"].status, "queued")
             self.assertIsNone(read_lock(Path(tmp)))
 
+    def test_submit_is_refused_when_the_project_has_an_open_decision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            _run(
+                [
+                    "queue", "--root", tmp, "create",
+                    "--job-id", "BQ-KN-001", "--project-id", "KN",
+                    "--target-chat-title", "t", "--target-chat-url", "manual",
+                ]
+            )
+            code, _, err = _run(["queue", "--root", tmp, "claim", "--job-id", "BQ-KN-001"])
+            self.assertEqual(code, 0, err)
+            open_decision(Path(tmp), project_id="KN", title="Pause submit?", body="yes")
+            code, _, err = _run(["queue", "--root", tmp, "submit", "--job-id", "BQ-KN-001"])
+            self.assertEqual(code, 2)
+            self.assertIn("paused", err)
+            self.assertEqual(QueueLedger(Path(tmp)).latest_jobs()["BQ-KN-001"].status, "claimed")
+
 
 class RecoverLockStealTests(unittest.TestCase):
     def test_recover_of_a_queued_job_does_not_steal_another_manager_lock(self) -> None:

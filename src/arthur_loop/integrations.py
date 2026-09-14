@@ -58,12 +58,15 @@ TARGET_SPEC: dict[str, dict[str, Any]] = {
         "display_name": "Grok Build",
         "binary": "grok",
         "instruction_file": "AGENTS.md",
-        "skill_dir": ".arthur/integrations/grok-agent-skill",
+        # Grok Build walks from cwd to the repo root looking for ./.grok/skills/
+        # (and ~/.grok/skills/). It does not scan .arthur/integrations/.
+        "skill_dir": ".grok/skills/arthur-loop",
         "command_dir": None,
         "mcp_path": ".grok/config.toml",
         "mcp_format": "toml",
         "tool_name_style": "portable",
         "markers": ("<!-- arthur-loop:grok:begin -->", "<!-- arthur-loop:grok:end -->"),
+        "native_mcp": True,
     },
     "generic": {
         "display_name": "Generic agent",
@@ -116,9 +119,14 @@ def parse_targets(raw: str | None) -> list[str]:
 
 
 def detect_targets(workspace: Path, *, home: Path | None = None) -> list[Detection]:
-    """Read-only: PATH, home config dirs, and workspace markers."""
+    """Read-only: PATH binaries and workspace markers.
 
-    home = home or Path(os.path.expanduser("~"))
+    A home config dir (`~/.cursor`, `~/.grok`) is not a detection signal — those
+    exist on machines that never run the CLI (this was a false-positive).
+    """
+
+    # `home` is accepted so callers can still pass it; it is not a found-reason.
+    _ = home or Path(os.path.expanduser("~"))
     out: list[Detection] = []
     for target in TARGETS:
         spec = TARGET_SPEC[target]
@@ -128,9 +136,6 @@ def detect_targets(workspace: Path, *, home: Path | None = None) -> list[Detecti
             path = shutil.which(binary)
             if path:
                 reasons.append(f"binary on PATH ({path})")
-        home_dir = home / f".{binary}" if binary else None
-        if home_dir and home_dir.is_dir():
-            reasons.append(f"config dir ~/{home_dir.name}")
         rel_skill = spec["skill_dir"].split("/")[0]
         if (workspace / rel_skill).is_dir():
             reasons.append(f"workspace {rel_skill}/")
@@ -180,12 +185,18 @@ def _instruction_block(target: str) -> str:
         f"\n"
         f"1. Read `{spec['skill_dir']}/SKILL.md`.\n"
         f"2. Use `/arthur-loop` (or the skill) to pick advisor / executor / tracker and create a loop.\n"
-        f"3. Drive the loop through MCP or the `arthur` CLI: status, queue claim/submit, capture, gate, decision.\n"
-        f"4. Never hand-edit `queue/*.jsonl`. Never claim a job on a project paused by an open human decision.\n"
+        f"3. Drive the loop through MCP or the `arthur` CLI: status, follow, queue claim/submit, capture, gate, decision.\n"
+        f"4. Never hand-edit `queue/*.jsonl`. Never claim or submit a job on a project paused by an open human decision.\n"
         f"\n"
-        f"{mcp_hint} A written MCP entry is **written**, not connected — restart the client after install.\n"
-        f"There is no drag-drop graph composer. `arthur loop create` and the web wizard create a project "
-        f"and the first queue job.\n"
+        f"{mcp_hint} "
+        + (
+            "Install runs `grok mcp add --scope project arthur-loop -- arthur mcp serve --tool-name-style portable` "
+            "when `grok` is on PATH so the server is trusted. Prove with `grok mcp list` / `grok -p`.\n"
+            if target == "grok"
+            else "A written MCP entry still needs a client restart before tools appear.\n"
+        )
+        + "There is no drag-drop graph composer. `arthur loop create` and the web wizard create a project "
+        "and the first queue job. `arthur follow` drives claim → capture → gate.\n"
     )
 
 
@@ -210,10 +221,12 @@ def _write_text(path: Path, body: str) -> str:
 
 
 def _write_instruction(path: Path, body: str, begin: str, end: str, *, force: bool) -> str:
+    """Refresh only the managed marker block. `--force` does not wipe house rules."""
+
+    del force  # kept for call-site compatibility; never replace the whole file
     path.parent.mkdir(parents=True, exist_ok=True)
-    if force or not path.exists():
-        new = f"{begin}\n{body.rstrip()}\n{end}\n"
-        return _write_text(path, new)
+    if not path.exists():
+        return _write_text(path, f"{begin}\n{body.rstrip()}\n{end}\n")
     current = path.read_text(encoding="utf-8")
     updated = _replace_managed_block(current, body, begin, end)
     return _write_text(path, updated)
@@ -323,12 +336,25 @@ def install_target(
         else:
             change = _merge_json_mcp(mcp_path, "arthur-loop", entry)
         _note_change(result, spec["mcp_path"], change)
-        result.notes.append(
-            f"MCP entry written to {spec['mcp_path']} (command=arthur {' '.join(entry['args'])}). "
-            "Restart the client. Written is not connected."
-        )
+        if spec.get("native_mcp"):
+            from arthur_loop.grok_client import register_mcp
+
+            native = register_mcp(root)
+            result.notes.append(native.get("note") or json.dumps(native))
+            if native.get("trusted"):
+                result.status = "trusted"
+                result.notes.append("Grok MCP is trusted via grok mcp add (not just a written toml).")
+            else:
+                result.notes.append(
+                    "MCP toml written as fallback. Written ≠ trusted until `grok mcp add` succeeds."
+                )
+        else:
+            result.notes.append(
+                f"MCP entry written to {spec['mcp_path']} (command=arthur {' '.join(entry['args'])}). "
+                "Restart the client before tools appear."
+            )
         if spec["tool_name_style"] == "portable":
-            result.notes.append("Grok registration uses --tool-name-style portable.")
+            result.notes.append("Grok registration uses --tool-name-style portable (`arthur_status`).")
     else:
         result.notes.append("MCP registration skipped (--no-mcp).")
 
@@ -371,6 +397,24 @@ def integration_status(root: Path) -> list[dict[str, Any]]:
         spec = TARGET_SPEC[target]
         skill = root / spec["skill_dir"] / "SKILL.md"
         mcp = root / spec["mcp_path"]
+        state = "written" if skill.is_file() or mcp.is_file() else "missing"
+        note = "written — restart the client and check its MCP UI"
+        extra: dict[str, Any] = {}
+        if target == "grok":
+            from arthur_loop.grok_client import native_matches, read_stamp
+
+            stamp = read_stamp(root)
+            trusted = bool(stamp and stamp.get("trusted"))
+            extra["trusted"] = trusted
+            extra["config_matches"] = native_matches(root)
+            if trusted:
+                state = "trusted"
+                note = "grok mcp add succeeded; prove with grok mcp list / grok -p"
+            elif skill.is_file():
+                note = (
+                    "skill is at .grok/skills/arthur-loop (the path Grok scans). "
+                    "MCP toml is fallback until grok mcp add marks it trusted."
+                )
         rows.append(
             {
                 "target": target,
@@ -379,8 +423,17 @@ def integration_status(root: Path) -> list[dict[str, Any]]:
                 "mcp_present": mcp.is_file(),
                 "skill_path": spec["skill_dir"] + "/SKILL.md",
                 "mcp_path": spec["mcp_path"],
-                "state": "written" if skill.is_file() or mcp.is_file() else "missing",
-                "note": "written is not connected — restart the client and check its MCP UI",
+                "state": state,
+                "note": note,
+                **extra,
             }
         )
     return rows
+
+
+def probe_target(root: Path, target: str, *, live: bool = False) -> dict[str, Any]:
+    if target != "grok":
+        raise ValueError("probe currently covers grok (live grok -p / mcp list). Other clients: restart and check MCP UI.")
+    from arthur_loop.grok_client import probe
+
+    return probe(root, live=live)

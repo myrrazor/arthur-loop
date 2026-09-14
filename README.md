@@ -42,6 +42,14 @@ curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.s
 
 From a checkout, `./install.sh` installs that checkout. Run `arthur --version` to confirm the installed release.
 
+The three commands above track default git HEAD (usually `main`). The last tag is **v0.1.0** — `arthur --version` prints that package version until the next tag. To install **this** unreleased branch:
+
+```bash
+pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
+```
+
+See [docs/install.md](docs/install.md). How it works (video + wizard shot): [docs/how-it-works.md](docs/how-it-works.md). Auto-follow: `arthur follow --once`.
+
 One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: a queue with a real state machine, saved artifacts, approval gates computed from those artifacts, human-decision escalation, and a scheduler tick that always knows what should happen next.
 
 No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI **and** a stdio MCP server — so Grok Build, Claude Code, Codex, and Cursor can claim, capture, and gate without a human typing every hop. See [docs/how-it-works.md](docs/how-it-works.md).

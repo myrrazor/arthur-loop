@@ -22,7 +22,7 @@ class AgentRegistryTests(unittest.TestCase):
         grok = find_agent("grok")
         self.assertEqual(grok.advisor_adapter, "grok")
         self.assertEqual(grok.version_args, ("version",))
-        self.assertEqual(grok.skill_install_path(), ".arthur/integrations/grok-agent-skill")
+        self.assertEqual(grok.skill_install_path(), ".grok/skills/arthur-loop")
         self.assertEqual(find_agent("claude-code").skill_install_path(), ".claude/skills/arthur-loop")
         self.assertEqual(find_agent("cursor").integration_target, "cursor")
         self.assertIsNone(find_agent("hal9000"))

@@ -454,7 +454,11 @@ def _run_init(args: argparse.Namespace) -> int:
         "version": 2,
         "advisor": {"adapter": advisor},
         "executor": {"adapter": executor},
-        "tracker": {"adapter": tracker},
+        "tracker": (
+            {"adapter": tracker, "project_map": {}}
+            if tracker == "atlas-tasker"
+            else {"adapter": tracker}
+        ),
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
         "quota": quota_config,
         "reserve_policy": {"minimum_reserve_percent": float(args.reserve_percent)},

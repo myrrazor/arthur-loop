@@ -54,6 +54,32 @@ def claim_job(
     return ledger.transition(job_id, "claimed", now=now, holder=holder)
 
 
+def submit_job(
+    root: Path,
+    job_id: str,
+    *,
+    holder: str,
+    keep_lock: bool = False,
+    now=None,
+):
+    """Record that the prompt was sent. Refused when the project is paused."""
+
+    from arthur_loop.browser_lock import BrowserLockError, read_lock, release_lock
+
+    ledger = QueueLedger(root)
+    job = ledger.check_transition(job_id, "submitted")
+    ensure_project_not_paused(root, job.project_id)
+    lock = read_lock(root)
+    if not lock:
+        raise BrowserLockError("browser lock is not held; claim the job first")
+    if lock.holder != holder:
+        raise BrowserLockError(f"browser lock is held by {lock.holder}, not {holder}")
+    job = ledger.transition(job_id, "submitted", now=now)
+    if not keep_lock:
+        release_lock(root, holder, now=now)
+    return job
+
+
 def _copy_tree(source: Any, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     for item in source.iterdir():
@@ -268,9 +294,11 @@ def create_loop(
         "job": job_record,
         "honest_copy": (
             "Created a project and the first queue job. This is not a drag-drop "
-            "graph composer. Agents follow the loop with claim → submit → capture → gate."
+            "graph composer. Agents follow the loop with `arthur follow` "
+            "(claim → invoke → submit → capture → gate)."
         ),
         "next": [
+            "arthur follow --once",
             f"arthur queue claim --job-id {job_record['job_id']}" if job_record else "arthur status",
             "arthur tick --dry-run",
             "arthur gate implementation --project-id " + project_id,

@@ -74,6 +74,11 @@
         "@type": "Question",
         "name": "Why not use a shell script or a workflow engine?",
         "acceptedAnswer": { "@type": "Answer", "text": "Arthur Loop is for the trust seams around AI work: saving advisor output before acting on it, validating control blocks, refusing duplicate jobs, preserving review gates, and pausing only the project that needs a human. It stays small enough to inspect without turning the loop into a hosted platform." }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install this development branch?",
+        "acceptedAnswer": { "@type": "Answer", "text": "The three commands on this page install default git HEAD (usually main; last tag v0.1.0). This unreleased branch: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'. arthur --version still reports 0.1.0 until the next tag." }
       }
     ]
   }
@@ -365,6 +370,10 @@
             <img src="web-console.png" alt="Arthur Loop local web console with the advisor-to-human status map, + Loop wizard control, queued work, and an auth-scope decision awaiting a human" width="1440" height="900" />
             <figcaption>The localhost console exposes six human actions, including an honest create-loop wizard. The canvas is a status map, not a graph composer.</figcaption>
           </figure>
+          <figure class="web-proof">
+            <img src="create-loop-wizard.png" alt="Arthur Loop create-loop wizard choosing advisor, executor, and tracker — a form, not a drag-drop graph composer" width="1440" height="900" />
+            <figcaption>The create-loop wizard. How-it-works video: <a href="https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/assets/how-it-works.mp4">docs/assets/how-it-works.mp4</a>.</figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -403,7 +412,7 @@
               </div>
             </div>
           </div>
-          <p class="after-install">Then run <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. The wizard detects agent CLIs, writes skills and MCP where those clients load them, asks for a loop shape, and leaves a kickoff file. Restart the client; a written MCP file is not a live connection.</p>
+          <p class="after-install">Then run <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. The wizard detects agent CLIs on PATH, writes skills where those clients load them, and for Grok runs <code>grok mcp add</code> so tools are trusted. Then <code>arthur follow --once</code>.</p>
         </div>
       </div>
     </section>
@@ -421,6 +430,7 @@
           <details><summary>Which platforms are supported?</summary><p>The Python CLI is exercised on macOS and Linux with Python 3.9 or newer. The file formats are portable, but locks and browser adapters are not yet tested on Windows. ArthurBar requires macOS 14 or newer.</p></details>
           <details><summary>How do I update or uninstall it?</summary><p>Repeat the pipx, uv, or curl install command to update. Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs can be removed by deleting <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p></details>
           <details><summary>Why not use a shell script or a workflow engine?</summary><p>Arthur Loop is for the trust seams around AI work: saving advisor output before acting on it, validating control blocks, refusing duplicate jobs, preserving review gates, and pausing only the project that needs a human. It stays small enough to inspect without turning the loop into a hosted platform.</p></details>
+          <details><summary>How do I install this development branch?</summary><p>The three commands on this page install default git HEAD (usually main; last tag v0.1.0). This unreleased branch: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'. arthur --version still reports 0.1.0 until the next tag.</p></details>
         </div>
       </div>
     </section>

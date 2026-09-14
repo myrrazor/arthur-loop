@@ -14,9 +14,20 @@ from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.tracker import run_action as tracker_run_action
 
 
-# Atlas board columns that mean "this ticket is work an agent can open a job from"
+# Atlas board columns that mean "this ticket is work an agent can open a job from".
+# in_review / needs_review are review columns — not ready work. Assigned + in_review
+# used to leak into open-jobs; that was a product bug.
 READY_STATUSES = ("ready", "in_progress")
 TERMINAL_STATUSES = ("done", "canceled", "cancelled")
+NOT_OPENABLE_STATUSES = TERMINAL_STATUSES + (
+    "in_review",
+    "needs_review",
+    "review",
+    "blocked",
+    "backlog",
+    "awaiting_owner",
+)
+WALKABLE_NEXT_CATEGORIES = ("ready_for_me", "unblocked_for_me", "ready", "in_progress")
 
 Runner = Callable[..., subprocess.CompletedProcess]
 
@@ -120,19 +131,61 @@ def tickets_from_board(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def is_ready_or_assigned(ticket: dict[str, Any]) -> bool:
-    """Ready/in-progress work, or assigned work that is not finished."""
+    """Ready/in-progress work. Assigned + in_review/blocked/backlog is not ready."""
 
     status = _ticket_status(ticket)
-    if status in TERMINAL_STATUSES:
+    if status in NOT_OPENABLE_STATUSES:
         return False
     if status in READY_STATUSES:
         return True
-    if _ticket_assignee(ticket) and status not in {"backlog"}:
-        return True
-    # Atlas "assigned" sometimes means ready work with an assignee, still in ready
-    if _ticket_assignee(ticket) and status in {"ready", "in_progress", ""}:
+    # assigned with no status yet (column omitted) can still be work
+    if _ticket_assignee(ticket) and status in {"", "assigned"}:
         return True
     return False
+
+
+def resolve_atlas_project(config: dict[str, Any], project_id: str | None) -> str | None:
+    """Map an Arthur SHOUTY_SNAKE project_id to an Atlas project key.
+
+    Arthur uses `DEMO_APP`. Atlas `--project` wants the short key (`DEMO`, `APP`).
+    Passing the Arthur id through unchanged is the mismatch the re-test caught.
+    """
+
+    tracker = config.get("tracker") or {}
+    mapping = tracker.get("project_map") or {}
+    if not isinstance(mapping, dict):
+        mapping = {}
+    if project_id and project_id in mapping and mapping[project_id]:
+        return str(mapping[project_id])
+    for item in config.get("projects") or []:
+        if not isinstance(item, dict) or item.get("project_id") != project_id:
+            continue
+        if item.get("atlas_project"):
+            return str(item["atlas_project"])
+    default = tracker.get("project_key") or tracker.get("atlas_project")
+    if default:
+        return str(default)
+    if not project_id:
+        return None
+    # already looks like an Atlas key (APP, demo) — no underscore
+    if "_" not in project_id:
+        return project_id
+    return None
+
+
+def arthur_project_for_atlas(config: dict[str, Any], atlas_key: str, fallback: str) -> str:
+    """Reverse of resolve_atlas_project when opening queue jobs from tickets."""
+
+    tracker = config.get("tracker") or {}
+    mapping = tracker.get("project_map") or {}
+    if isinstance(mapping, dict):
+        for arthur_id, key in mapping.items():
+            if str(key) == atlas_key:
+                return str(arthur_id)
+    for item in config.get("projects") or []:
+        if isinstance(item, dict) and str(item.get("atlas_project") or "") == atlas_key:
+            return str(item.get("project_id") or fallback)
+    return fallback
 
 
 def read_board(
@@ -176,6 +229,34 @@ def open_jobs_from_board(
     """
 
     board = read_board(root, project=project, runner=runner)
+    opened = open_jobs_from_tickets(
+        root,
+        board["ready"][: max(0, limit)],
+        project=project,
+        dry_run=dry_run,
+        actor=actor,
+        reason=reason,
+    )
+    return {
+        "source": board["source"],
+        "dry_run": dry_run,
+        "opened": opened["opened"],
+        "skipped": opened["skipped"],
+        "ready_seen": board["ready_count"],
+    }
+
+
+def open_jobs_from_tickets(
+    root: Path,
+    tickets: list[dict[str, Any]],
+    *,
+    project: str | None = None,
+    dry_run: bool = False,
+    actor: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Open queue jobs for an explicit ticket list (`atlas:<ticket_id>` keys)."""
+
     ledger = QueueLedger(root)
     existing_keys = {
         job.idempotency_key: job.job_id
@@ -185,16 +266,18 @@ def open_jobs_from_board(
     reserved_ids = set(ledger.latest_jobs())
     opened: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
-    for ticket in board["ready"][: max(0, limit)]:
+    for ticket in tickets:
         ticket_id = _ticket_id(ticket)
+        if not ticket_id:
+            continue
         key = f"atlas:{ticket_id}"
         if key in existing_keys:
             skipped.append({"ticket_id": ticket_id, "reason": "already queued", "job_id": existing_keys[key]})
             continue
-        project_id = str(ticket.get("project") or project or ticket_id.split("-")[0] or "ATLAS").strip()
+        atlas_key = str(ticket.get("project") or project or ticket_id.split("-")[0] or "ATLAS").strip()
+        project_id = arthur_project_for_atlas(load_config(root), atlas_key, atlas_key)
         job_id = _next_job_id(root, project_id, reserved_ids)
         reserved_ids.add(job_id)
-        # if we already reserved this project id in this pass, bump again after create
         marker = f"ATLAS_{_slug(ticket_id)}"
         title = str(ticket.get("title") or ticket_id)
         record = {
@@ -236,14 +319,7 @@ def open_jobs_from_board(
         existing_keys[key] = job_id
         record["job"] = job.to_record()
         opened.append(record)
-
-    return {
-        "source": board["source"],
-        "dry_run": dry_run,
-        "opened": opened,
-        "skipped": skipped,
-        "ready_seen": board["ready_count"],
-    }
+    return {"opened": opened, "skipped": skipped}
 
 
 def tracker_or_fallback(
@@ -255,4 +331,192 @@ def tracker_or_fallback(
 ) -> dict[str, Any]:
     """Keep the three argv templates as the fallback for decision/sprint hooks."""
 
-    return tracker_run_action(load_config(root), action, dry_run=dry_run, cwd=root, **values)
+    config = load_config(root)
+    if "project" in values:
+        mapped = resolve_atlas_project(config, values["project"])
+        if mapped:
+            values = {**values, "project": mapped}
+        elif "_" in values["project"]:
+            return {
+                "status": "skipped",
+                "reason": (
+                    f"Arthur project_id {values['project']!r} is not an Atlas project key. "
+                    "Set tracker.project_map or tracker.project_key in config/arthur-loop.json, "
+                    "or pass --project <atlas-key>."
+                ),
+            }
+    return tracker_run_action(config, action, dry_run=dry_run, cwd=root, **values)
+
+
+def _ticket_from_next_item(item: Any) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    entry = item.get("entry") or item.get("Entry") or item
+    if not isinstance(entry, dict):
+        return None
+    ticket = entry.get("ticket") or entry.get("Ticket") or entry
+    if not isinstance(ticket, dict):
+        return None
+    row = dict(ticket)
+    category = str(item.get("category") or item.get("Category") or entry.get("category") or "")
+    if category:
+        row["category"] = category
+    if entry.get("reason") or entry.get("Reason"):
+        row["reason"] = entry.get("reason") or entry.get("Reason")
+    return row
+
+
+def next_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten `tracker next --json` (NextView) into ticket dicts."""
+
+    raw = payload.get("entries") or payload.get("Entries") or []
+    nested = payload.get("next") or payload.get("Next")
+    if isinstance(nested, dict):
+        raw = nested.get("entries") or nested.get("Entries") or raw
+    tickets: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw if isinstance(raw, list) else []:
+        ticket = _ticket_from_next_item(item)
+        if not ticket:
+            continue
+        ticket_id = _ticket_id(ticket)
+        if not ticket_id or ticket_id in seen:
+            continue
+        seen.add(ticket_id)
+        tickets.append(ticket)
+    return tickets
+
+
+def queue_entries(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten `tracker queue --json` categories into ticket dicts."""
+
+    categories = payload.get("categories") or payload.get("Categories") or {}
+    tickets: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(item: Any, category: str) -> None:
+        ticket = _ticket_from_next_item({"category": category, "entry": item}) if not (
+            isinstance(item, dict) and ("ticket" in item or "Ticket" in item)
+        ) else _ticket_from_next_item({"category": category, **item})
+        if ticket is None and isinstance(item, dict):
+            ticket = dict(item)
+            ticket["category"] = category
+        if not ticket:
+            return
+        ticket_id = _ticket_id(ticket)
+        if not ticket_id or ticket_id in seen:
+            return
+        seen.add(ticket_id)
+        ticket.setdefault("category", category)
+        tickets.append(ticket)
+
+    if isinstance(categories, dict):
+        for name, items in categories.items():
+            if isinstance(items, list):
+                for item in items:
+                    add(item, str(name))
+    return tickets
+
+
+def is_walkable_next(ticket: dict[str, Any]) -> bool:
+    category = str(ticket.get("category") or "").strip().lower()
+    if category in WALKABLE_NEXT_CATEGORIES:
+        return is_ready_or_assigned(ticket) or _ticket_status(ticket) in {"", "ready", "in_progress", "backlog"}
+    if category:
+        return False
+    return is_ready_or_assigned(ticket)
+
+
+def read_next(
+    root: Path,
+    *,
+    actor: str | None = None,
+    runner: Runner | None = None,
+) -> dict[str, Any]:
+    """Primary walk path: `tracker next --json`."""
+
+    args = ["next"]
+    if actor:
+        args.extend(["--actor", actor])
+    payload = run_tracker_json(args, cwd=root, runner=runner)
+    entries = next_entries(payload)
+    walkable = [ticket for ticket in entries if is_walkable_next(ticket)]
+    return {
+        "source": "tracker next --json",
+        "cwd": str(root),
+        "actor": actor or payload.get("actor"),
+        "ticket_count": len(entries),
+        "walkable_count": len(walkable),
+        "tickets": entries,
+        "walkable": walkable,
+        "next": walkable[0] if walkable else None,
+    }
+
+
+def read_queue(
+    root: Path,
+    *,
+    actor: str | None = None,
+    runner: Runner | None = None,
+) -> dict[str, Any]:
+    """`tracker queue --json` — actor queue, including unblocked_for_me."""
+
+    args = ["queue"]
+    if actor:
+        args.extend(["--actor", actor])
+    payload = run_tracker_json(args, cwd=root, runner=runner)
+    entries = queue_entries(payload)
+    walkable = [ticket for ticket in entries if is_walkable_next(ticket)]
+    return {
+        "source": "tracker queue --json",
+        "cwd": str(root),
+        "actor": actor or payload.get("actor"),
+        "ticket_count": len(entries),
+        "walkable_count": len(walkable),
+        "tickets": entries,
+        "walkable": walkable,
+    }
+
+
+def walk_next(
+    root: Path,
+    *,
+    actor: str | None = None,
+    project: str | None = None,
+    limit: int = 1,
+    dry_run: bool = False,
+    open_jobs: bool = True,
+    runner: Runner | None = None,
+    actor_audit: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """Walk ready/assigned work: prefer `tracker next`, fall back to board."""
+
+    source = "tracker next --json"
+    tickets: list[dict[str, Any]] = []
+    try:
+        nxt = read_next(root, actor=actor, runner=runner)
+        tickets = list(nxt["walkable"])
+        source = nxt["source"]
+    except (FileNotFoundError, RuntimeError) as exc:
+        board = read_board(root, project=project, runner=runner)
+        tickets = list(board["ready"])
+        source = f"tracker board --json (next failed: {exc})"
+    picked = tickets[: max(0, limit)]
+    opened = None
+    if open_jobs and picked:
+        opened = open_jobs_from_tickets(
+            root,
+            picked,
+            project=project,
+            dry_run=dry_run,
+            actor=actor_audit,
+            reason=reason or "arthur tracker walk",
+        )
+    return {
+        "source": source,
+        "dry_run": dry_run,
+        "next": picked[0] if picked else None,
+        "walkable": picked,
+        "opened": opened,
+    }

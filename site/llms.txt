@@ -6,8 +6,11 @@ Arthur Loop is free and MIT licensed, runs on macOS and Linux with Python 3.9 or
 and keeps queues, artifacts, decisions, and status as files you can inspect. Coding agents
 drive the loop through a stdio MCP server and skills written where those clients load them.
 There is no drag-drop graph composer; `arthur loop create` and the web wizard create a
-project and the first queue job. Install with
-`curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`.
+project and the first queue job. `arthur follow` drives claim/capture/gate.
+Grok skills live in `.grok/skills/arthur-loop`; install runs `grok mcp add` when grok is on PATH.
+Install with
+`curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`
+(last tag v0.1.0). This branch: `pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'`.
 
 ## Docs
 - [Getting started](https://github.com/myrrazor/arthur-loop#quickstart): install and first run

@@ -46,7 +46,7 @@ class InstallPathTests(unittest.TestCase):
             self.assertTrue((root / ".cursor/skills/arthur-loop/SKILL.md").is_file())
             self.assertTrue((root / ".cursor/commands/arthur-loop.md").is_file())
             self.assertTrue((root / ".cursor/mcp.json").is_file())
-            self.assertTrue((root / ".arthur/integrations/grok-agent-skill/SKILL.md").is_file())
+            self.assertTrue((root / ".grok/skills/arthur-loop/SKILL.md").is_file())
             self.assertIn("portable", (root / ".grok/config.toml").read_text(encoding="utf-8"))
 
             names = {tool["name"] for tool in tool_catalog("dotted")}
@@ -60,6 +60,9 @@ class InstallPathTests(unittest.TestCase):
                 "arthur.loop.create",
                 "arthur.board",
                 "arthur.board.open_jobs",
+                "arthur.follow.run",
+                "arthur.tracker.next",
+                "arthur.tracker.walk",
             ):
                 self.assertIn(required, names)
             portable = {tool["name"] for tool in tool_catalog("portable")}

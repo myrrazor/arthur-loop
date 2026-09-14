@@ -7,24 +7,25 @@ arthur mcp serve --root ~/my-loop
 arthur mcp serve --tool-name-style portable   # Grok: arthur_status, not arthur.status
 arthur mcp tools --json
 arthur mcp call arthur.status
+arthur mcp call arthur.follow.run --arguments '{"once":true}'
 ```
 
 Stdio accepts newline-delimited JSON-RPC and LSP-style `Content-Length` frames.
 
 ## What is shipped
 
-**Read:** `arthur.status`, `arthur.tick`, `arthur.queue.show`, `arthur.queue.due`, `arthur.gate.implementation`, `arthur.decision.list`, `arthur.loop.list`, `arthur.board`.
+**Read:** `arthur.status`, `arthur.tick`, `arthur.queue.show`, `arthur.queue.due`, `arthur.gate.implementation`, `arthur.decision.list`, `arthur.loop.list`, `arthur.board`, `arthur.tracker.next`, `arthur.tracker.queue`.
 
-**Gated write:** `arthur.queue.create`, `arthur.queue.claim`, `arthur.queue.submit`, `arthur.queue.poll_result`, `arthur.queue.recover`, `arthur.capture`, `arthur.decision.open`, `arthur.decision.answer`, `arthur.loop.create`, `arthur.board.open_jobs`.
+**Gated write:** `arthur.queue.create`, `arthur.queue.claim`, `arthur.queue.submit`, `arthur.queue.poll_result`, `arthur.queue.recover`, `arthur.capture`, `arthur.decision.open`, `arthur.decision.answer`, `arthur.loop.create`, `arthur.board.open_jobs`, `arthur.tracker.walk`, `arthur.follow.run`.
 
-Writes go through the same gates as the CLI (queue state machine, paused-project claim refusal, empty idempotency keys, marker collision, implementation gate on capture). This is not Atlas's high-impact approval ledger. There is no `approve-operation` flow.
+Writes go through the same gates as the CLI (queue state machine, paused-project claim **and submit** refusal, empty idempotency keys, marker collision, implementation gate on capture). This is not Atlas's high-impact approval ledger. There is no `approve-operation` flow.
 
-The `arthur-loop` MCP prompt (and the `/arthur-loop` slash command) interviews for advisor / executor / tracker and tells the agent to call `arthur.loop.create`.
+The `arthur-loop` MCP prompt (and the `/arthur-loop` slash command) interviews for advisor / executor / tracker, calls `arthur.loop.create`, then `arthur.follow.run`.
+
+Grok: `arthur integrations install --targets grok` runs `grok mcp add` when the CLI is present so tools appear as `arthur_status` / `arthur_follow_run`.
 
 ## What is not shipped
 
 - Resources / subscriptions / MCP Apps HTML boards
 - High-impact approval IDs
-- Claiming that a written client config means the server is connected
-
-`arthur integrations install` writes the client config. Restart the client. Check that client's MCP UI.
+- A headless ChatGPT browser inside follow

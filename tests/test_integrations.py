@@ -59,8 +59,10 @@ class InstallTests(unittest.TestCase):
 
             grok_toml = (root / ".grok/config.toml").read_text(encoding="utf-8")
             self.assertIn("portable", grok_toml)
-            self.assertTrue((root / ".arthur/integrations/grok-agent-skill/SKILL.md").is_file())
+            self.assertTrue((root / ".grok/skills/arthur-loop/SKILL.md").is_file())
+            self.assertFalse((root / ".arthur/integrations/grok-agent-skill/SKILL.md").is_file())
             self.assertIn("arthur-loop:grok:begin", (root / "AGENTS.md").read_text(encoding="utf-8"))
+            self.assertIn(".grok/skills/arthur-loop", (root / "AGENTS.md").read_text(encoding="utf-8"))
 
             portable = json.loads((root / ".arthur/integrations/arthur-mcp.json").read_text(encoding="utf-8"))
             self.assertIn("arthur-loop", portable["mcpServers"])
@@ -75,6 +77,30 @@ class InstallTests(unittest.TestCase):
             text = (root / "AGENTS.md").read_text(encoding="utf-8")
             self.assertIn("Do not delete me.", text)
             self.assertEqual(text.count("arthur-loop:codex:begin"), 1)
+
+    def test_force_does_not_wipe_agents_md_house_rules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text("# House rules\n\nDo not delete me.\n", encoding="utf-8")
+            install_target(root, "codex")
+            install_target(root, "grok", force=True)
+            text = (root / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("Do not delete me.", text)
+            self.assertIn("arthur-loop:codex:begin", text)
+            self.assertIn("arthur-loop:grok:begin", text)
+
+    def test_home_config_dir_alone_is_not_detection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "ws"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            (home / ".cursor").mkdir(parents=True)
+            (home / ".grok").mkdir()
+            with patch("arthur_loop.integrations.shutil.which", return_value=None):
+                found = {item.target: item for item in detect_targets(root, home=home)}
+            self.assertFalse(found["cursor"].found)
+            self.assertFalse(found["grok"].found)
+            self.assertFalse(found["claude"].found)
 
     def test_json_mcp_merge_keeps_other_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -101,9 +127,9 @@ class InstallTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(code, 0)
-            skill = Path(tmp) / ".arthur/integrations/grok-agent-skill/SKILL.md"
+            skill = Path(tmp) / ".grok/skills/arthur-loop/SKILL.md"
             self.assertTrue(skill.is_file())
-            self.assertFalse((Path(tmp) / ".arthur/integrations/grok-agent-skill/arthur-loop").exists())
+            self.assertFalse((Path(tmp) / ".grok/skills/arthur-loop/arthur-loop").exists())
             self.assertTrue((Path(tmp) / ".grok/config.toml").is_file())
 
     def test_init_installs_claude_integration_when_requested(self) -> None:

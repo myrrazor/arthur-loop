@@ -8,12 +8,17 @@ All notable changes to Arthur Loop will be documented here. The format follows
 
 Product-gap pass after the hardening review: Arthur Loop now installs into coding agents the way Atlas Tasker does (skills where those clients load them, plus MCP registration), agents can create and drive a loop without a human typing every hop, Atlas boards are a first-class read path, and the web console has an honest create-loop wizard.
 
+Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, auto-follow, Atlas next/walk, install honesty, and the how-it-works video.
+
 ### Added
 
 - Stdio MCP server (`arthur mcp serve`) with read tools (status, tick, queue, gate, decision, loop, board) and gated writes (queue, capture, decision, loop create, board open-jobs). Dotted names plus Grok-safe portable names (`arthur_status`). `/arthur-loop` prompt.
-- `arthur integrations detect|install|status` — writes skills, slash commands, and MCP config for Claude Code, Codex, Cursor, and Grok Build. Written ≠ connected.
+- `arthur integrations detect|install|status|probe` — writes skills, slash commands, and MCP config for Claude Code, Codex, Cursor, and Grok Build. Grok skill is `.grok/skills/arthur-loop`. `grok mcp add` when `grok` is on PATH (trusted, not just written toml).
+- `arthur follow` / MCP `arthur.follow.run` — auto-follow: claim → invoke → submit → capture → gate → next hop.
 - `arthur loop create|list` — project + first queue job. Shared by CLI, web wizard, and MCP. Not a graph composer.
-- Atlas board adapter: `arthur tracker board` / `open-jobs` run `tracker board --json` and open jobs from ready/assigned tickets (`atlas:<ticket_id>` keys). Argv templates remain for decision/sprint hooks.
+- Atlas board adapter: `arthur tracker next` / `queue` / `walk` / `board` / `open-jobs`. Ready/in_progress only (`in_review` is not opened). Arthur `project_id` maps to an Atlas key via `tracker.project_map`.
+- How-it-works video (`docs/assets/how-it-works.mp4`) and create-loop wizard shot on the launch site.
+- [docs/install.md](docs/install.md) — version honesty and how to install this branch.
 - Grok Build advisor and executor adapter packs.
 - Web console **+ Loop** wizard and `POST /api/actions/create-loop`.
 - Cursor as an integration target (skills + MCP). No advisor/executor pack — `solo`/`pair` still refuse it.
@@ -29,7 +34,10 @@ Product-gap pass after the hardening review: Arthur Loop now installs into codin
 
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).
 - Duplicate `expected_marker` across different job ids is refused; a blank marker is treated as omitted.
-- `queue claim` (CLI and MCP) refuses a project paused by an open human decision before taking the browser lease.
+- `queue claim` and `queue submit` (CLI and MCP) refuse a project paused by an open human decision.
+- `arthur integrations install --force` no longer replaces the whole `AGENTS.md` (managed blocks only).
+- Integration detect no longer treats `~/.cursor` / `~/.grok` as "found" without the binary.
+- `arthur tracker` RuntimeError from a failed `tracker --json` is `error:` exit 2, not a traceback.
 - `queue recover` of a queued/parked job no longer steals another manager's live lease via the default `--holder` hint.
 
 ### Changed
