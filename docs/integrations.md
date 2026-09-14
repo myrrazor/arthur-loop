@@ -17,7 +17,7 @@ This is the Atlas Tasker-shaped path: detect CLIs, write skills where those tool
 | --- | --- | --- | --- |
 | `claude` | `CLAUDE.md` (managed block) | `.claude/skills/arthur-loop/`, `.claude/commands/arthur-loop.md` (`/arthur-loop`) | `.mcp.json` |
 | `codex` | `AGENTS.md` (codex markers) | `.codex/skills/arthur-loop/` | `.codex/config.toml` `[mcp_servers.arthur-loop]` |
-| `cursor` | `AGENTS.md` (cursor markers) | `.cursor/skills/arthur-loop/` | `.cursor/mcp.json` |
+| `cursor` | `AGENTS.md` (cursor markers) | `.cursor/skills/arthur-loop/` plus `.cursor/commands/arthur-loop.md` (legacy slash; the skill is also `/arthur-loop`) | `.cursor/mcp.json` |
 | `grok` | `AGENTS.md` (grok markers) | `.arthur/integrations/grok-agent-skill/` | `.grok/config.toml` with `--tool-name-style portable` |
 | `generic` | `AGENTS.md` (generic markers) | `.arthur/integrations/generic-agent-skill/` | `.arthur/integrations/arthur-mcp.json` (portable descriptor) |
 

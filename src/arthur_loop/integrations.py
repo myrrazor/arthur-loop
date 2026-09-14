@@ -47,7 +47,8 @@ TARGET_SPEC: dict[str, dict[str, Any]] = {
         "binary": "cursor",
         "instruction_file": "AGENTS.md",
         "skill_dir": ".cursor/skills/arthur-loop",
-        "command_dir": None,
+        # legacy slash path still loads; current Cursor also surfaces the skill as /arthur-loop
+        "command_dir": ".cursor/commands",
         "mcp_path": ".cursor/mcp.json",
         "mcp_format": "json",
         "tool_name_style": "dotted",

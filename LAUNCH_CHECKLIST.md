@@ -26,7 +26,7 @@ Run the automated gate anytime:
 ## README and distribution
 
 - [ ] Confirm the GitHub-rendered first screen after push.
-- [x] Real terminal GIF is 321 KB; real web-console capture is 96 KB.
+- [x] Real terminal GIF is 321 KB; recaptured web-console status map is 96 KB.
 - [x] README workflows and clean local install equivalents pass.
 - [x] `uv tool install` from a local path and local Git URL produces a working `arthur` command.
 - [x] `install.sh` passes from outside the repo against a local Git remote.

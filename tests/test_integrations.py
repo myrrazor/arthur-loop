@@ -54,6 +54,8 @@ class InstallTests(unittest.TestCase):
             cursor = json.loads((root / ".cursor/mcp.json").read_text(encoding="utf-8"))
             self.assertEqual(cursor["mcpServers"]["arthur-loop"]["args"], ["mcp", "serve"])
             self.assertTrue((root / ".cursor/skills/arthur-loop/SKILL.md").is_file())
+            self.assertTrue((root / ".cursor/commands/arthur-loop.md").is_file())
+            self.assertIn("arthur.loop.create", (root / ".cursor/commands/arthur-loop.md").read_text(encoding="utf-8"))
 
             grok_toml = (root / ".grok/config.toml").read_text(encoding="utf-8")
             self.assertIn("portable", grok_toml)

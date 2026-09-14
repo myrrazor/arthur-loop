@@ -166,7 +166,7 @@ arthur decision clear  --title "MY_APP Session lifetime?" --note "asked twice"  
 ## The web console
 
 <p align="center">
-  <img src="docs/assets/web-console.png" alt="Arthur Loop web console showing the advisor-to-human canvas, one queued job, and an open auth-scope decision" width="100%">
+  <img src="docs/assets/web-console.png" alt="Arthur Loop web console showing the advisor-to-human status map, the + Loop wizard control, queued work, and an open auth-scope decision" width="100%">
 </p>
 
 `arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **status map** of the fixed pipeline (advisor → queue → in flight → executor → review gate → human): counts and flow move over those nodes, and the human-decision node is lit the loudest. Drag to pan, scroll to zoom. It is not a graph composer. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, inspect quarantined artifacts, and clear sessions.
