@@ -33,7 +33,7 @@ Use Arthur Loop to coordinate one project sprint at a time between an advisor (p
 
 After `arthur init` or `arthur integrations install`, this skill is written where the client
 loads skills (Claude: `.claude/skills/arthur-loop`, Codex: `.codex/skills/arthur-loop`,
-Cursor: `.cursor/skills/arthur-loop`, Grok: `.arthur/integrations/grok-agent-skill` plus
+Cursor: `.cursor/skills/arthur-loop` and `.cursor/commands/arthur-loop.md`, Grok: `.arthur/integrations/grok-agent-skill` plus
 `AGENTS.md`). MCP is registered in that client's real config (`.mcp.json`,
 `.codex/config.toml`, `.cursor/mcp.json`, `.grok/config.toml`). A written entry is
 **written**, not connected — restart the client.
