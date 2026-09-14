@@ -1,8 +1,8 @@
 "use strict";
 /* Arthur Loop web console — vanilla, no build step.
    Read-mostly control surface: polls arthur status, renders five views, and
-   offers a human exactly five write actions (answer decision, recover job,
-   create job, clear session, break stale lock). Everything else is agent-owned. */
+   offers a human six write actions (answer decision, recover job, create loop,
+   create job, clear session, break stale lock). Agents own claim/capture/gate. */
 
 const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
 const POLL_MS = 3000;
@@ -132,7 +132,7 @@ function render() {
   bind("skeleton").hidden = true;
 
   bind("instance").textContent = s.server.instance;
-  bind("adapters").textContent = `advisor: ${s.server.advisor}\nexecutor: ${s.server.executor}`;
+  bind("adapters").textContent = `advisor: ${s.server.advisor}\nexecutor: ${s.server.executor}${s.server.tracker ? `\ntracker: ${s.server.tracker}` : ""}`;
 
   const chip = bind("state-chip");
   chip.dataset.state = s.state;
@@ -422,7 +422,7 @@ function buildCanvasShell(panel) {
     const span = el("span"); const i = el("i"); i.style.background = c; span.append(i, document.createTextNode(t)); legend.append(span);
   });
   wrap.append(legend);
-  wrap.append((() => { const h = el("div", "canvas-hint", "drag to pan · scroll to zoom"); return h; })());
+  wrap.append((() => { const h = el("div", "canvas-hint", "status map — drag to pan · scroll to zoom · not a graph composer"); return h; })());
   const reset = el("button", "btn ghost sm canvas-reset", "Fit");
   reset.onclick = () => { fitCanvas(svg); };
   wrap.append(reset);
@@ -626,7 +626,7 @@ function jobCard(j, now) {
 
 function renderQueue(panel, s) {
   panel.replaceChildren(viewHead("Queue", `${s.queue.length} active jobs`));
-  if (!s.queue.length) { panel.append(emptyState("Queue is empty.", "Create a job to start a loop.", "+ Job", () => openJobModal())); return; }
+  if (!s.queue.length) { panel.append(emptyState("Queue is empty.", "Create a loop (project + first job) or a single queue job.", "+ Loop", () => openLoopWizard())); return; }
   const now = Date.now();
   const table = el("table", "tbl");
   const thead = el("thead"); const htr = el("tr");
@@ -725,6 +725,79 @@ function emptyState(title, body, cta, onCta) {
   return box;
 }
 
+/* ---- create-loop wizard (honest: not a graph composer) ---------------- */
+
+function openLoopWizard() {
+  const s = store.status;
+  const wizard = (s && s.loopWizard) || { advisors: [], executors: [], trackers: [], current: {}, copy: "" };
+  const body = bind("modal-body");
+  body.replaceChildren();
+  bind("modal-title").textContent = "Create a loop";
+  const intro = el("p", "wizard-copy", wizard.copy || "Creates a project and the first queue job. Not a drag-drop graph composer.");
+  body.append(intro);
+
+  const fields = {};
+  const addInput = (key, label, hint, value = "") => {
+    const f = el("div", "field");
+    const lab = el("label", null, label); lab.htmlFor = `f-${key}`; f.append(lab);
+    const input = el("input"); input.id = `f-${key}`; input.value = value; input.placeholder = hint || ""; fields[key] = input; f.append(input);
+    body.append(f);
+    return input;
+  };
+  const addSelect = (key, label, options, value) => {
+    const f = el("div", "field");
+    const lab = el("label", null, label); lab.htmlFor = `f-${key}`; f.append(lab);
+    const sel = el("select"); sel.id = `f-${key}`;
+    for (const opt of options) {
+      const o = el("option", null, opt); o.value = opt; if (opt === value) o.selected = true; sel.append(o);
+    }
+    fields[key] = sel; f.append(sel); body.append(f);
+  };
+
+  const current = wizard.current || {};
+  const proj = (s && s.projects[0] && s.projects[0].projectId) || "MY_APP";
+  addInput("project_id", "Project id", "SHOUTY_SNAKE", proj);
+  addInput("goal", "Goal (optional)", "One-line constitution for this project");
+  addSelect("advisor", "Advisor — plans and reviews", wizard.advisors || ["manual"], current.advisor || "manual");
+  addSelect("executor", "Executor — implements", wizard.executors || ["manual"], current.executor || "manual");
+  addSelect("tracker", "Tracker", wizard.trackers || ["none"], current.tracker || "none");
+  addInput("title", "First job title", proj + " planning", proj + " planning");
+  addInput("target_chat_url", "Advisor target", "manual", "manual");
+
+  const checkField = el("div", "field");
+  const checkLab = el("label", "check");
+  const box = el("input"); box.type = "checkbox"; box.checked = true; box.id = "f-seed";
+  checkLab.append(box, document.createTextNode(" Seed the first next-plan-request job"));
+  checkField.append(checkLab);
+  body.append(checkField);
+
+  const actions = el("div", "modal-actions");
+  const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeModal;
+  const create = el("button", "btn primary", "Create loop");
+  create.onclick = async () => {
+    const payload = {
+      project_id: fields.project_id.value.trim(),
+      goal: fields.goal.value.trim(),
+      advisor: fields.advisor.value,
+      executor: fields.executor.value,
+      tracker: fields.tracker.value,
+      title: fields.title.value.trim(),
+      target_chat_url: fields.target_chat_url.value.trim() || "manual",
+      seed_job: box.checked,
+    };
+    create.disabled = true;
+    try {
+      const record = await action("/api/actions/create-loop", payload);
+      const jobId = record.job && record.job.job_id;
+      toast("ok", "Loop created", jobId || payload.project_id);
+      closeModal();
+      poll();
+    } catch (e) { toast("err", "Could not create loop", e.message); create.disabled = false; }
+  };
+  actions.append(cancel, create); body.append(actions);
+  showModal(fields.project_id);
+}
+
 /* ---- create-job modal -------------------------------------------------- */
 
 function openJobModal() {
@@ -799,6 +872,7 @@ document.querySelectorAll(".railnav-item").forEach((b, i) => {
   b.onclick = () => setView(b.dataset.view);
   if (i < 5) b.title = `Shortcut: ${i + 1}`;
 });
+document.querySelector('[data-action="new-loop"]').onclick = openLoopWizard;
 document.querySelector('[data-action="new-job"]').onclick = openJobModal;
 document.querySelector('[data-action="modal-close"]').onclick = closeModal;
 bind("modal").addEventListener("click", (e) => { if (e.target === bind("modal")) closeModal(); });

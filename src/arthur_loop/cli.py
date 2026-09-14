@@ -18,7 +18,7 @@ from arthur_loop.browser_lock import (
     read_lock,
     release_lock,
 )
-from arthur_loop.config import load_config, require_instance
+from arthur_loop.config import KNOWN_ADVISORS, KNOWN_EXECUTORS, KNOWN_TRACKERS, load_config, require_instance
 from arthur_loop.decisions import answer_decision, clear_decision, list_decisions, open_decision
 from arthur_loop.init_cli import add_init_parser
 from arthur_loop.notify import (
@@ -145,12 +145,17 @@ def cmd_queue_create(args: argparse.Namespace) -> int:
 
 
 def cmd_queue_claim(args: argparse.Namespace) -> int:
+    from arthur_loop.loop_ops import claim_job
+
     root = resolve_root(args)
-    ledger = QueueLedger(root)
     # refuse before touching the lease so an illegal claim never leaves a lock behind
-    ledger.check_transition(args.job_id, "claimed")
-    acquire_lock(root, args.holder, ttl_minutes=args.ttl_minutes, now=parse_at(args.at))
-    job = ledger.transition(args.job_id, "claimed", now=parse_at(args.at), holder=args.holder)
+    job = claim_job(
+        root,
+        args.job_id,
+        holder=args.holder,
+        ttl_minutes=args.ttl_minutes,
+        now=parse_at(args.at),
+    )
     print_record(job)
     return EXIT_OK
 
@@ -596,7 +601,24 @@ def _parse_values(pairs: list[str] | None) -> dict[str, str]:
 
 
 def cmd_tracker(args: argparse.Namespace) -> int:
+    from arthur_loop.atlas_board import open_jobs_from_board, read_board
+
     root = resolve_root(args)
+    if args.tracker_action == "board":
+        record = read_board(root, project=args.project)
+        print_record(record)
+        return EXIT_OK
+    if args.tracker_action == "open-jobs":
+        record = open_jobs_from_board(
+            root,
+            project=args.project,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            actor=args.actor,
+            reason=args.reason,
+        )
+        print_record(record)
+        return EXIT_OK
     result = tracker_run_action(
         load_config(root),
         args.tracker_action,
@@ -611,12 +633,28 @@ def cmd_tracker(args: argparse.Namespace) -> int:
 def _build_tracker_parser(subparsers: Any) -> None:
     tracker = subparsers.add_parser(
         "tracker",
-        help="Run one configured tracker command template (rendered to argv, run from the instance root)",
+        help="Atlas board JSON (primary) or one argv template (fallback), always from the instance root",
+        description=(
+            "`board` and `open-jobs` read Atlas via `tracker board --json` when the CLI is installed. "
+            "open_decision / close_decision / sprint_gate still use the three argv templates."
+        ),
     )
-    tracker.add_argument("tracker_action", choices=list(TRACKER_ACTIONS))
+    tracker.add_argument(
+        "tracker_action",
+        choices=list(TRACKER_ACTIONS) + ["board", "open-jobs"],
+    )
     add_root_argument(tracker)
     tracker.add_argument("--value", action="append", help="key=value template inputs (repeatable)")
     tracker.add_argument("--dry-run", action="store_true")
+    tracker.add_argument("--project", help="Atlas project key for board / open-jobs")
+    tracker.add_argument("--limit", type=int, default=20, help="Max tickets for open-jobs")
+    tracker.add_argument(
+        "--json",
+        action="store_true",
+        help="Accepted for `tracker board --json` muscle memory; Arthur already prints JSON",
+    )
+    tracker.add_argument("--actor")
+    tracker.add_argument("--reason")
     tracker.set_defaults(func=cmd_tracker)
 
 
@@ -1000,6 +1038,173 @@ def _build_usage_parser(subparsers: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# mcp / integrations / loop
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from arthur_loop.mcp import dispatch_tool, serve, tool_catalog
+
+    root = resolve_root(args)
+    style = getattr(args, "tool_name_style", "dotted")
+    if args.mcp_action == "serve":
+        require_instance(root)
+        return serve(root, tool_name_style=style)
+    if args.mcp_action == "tools":
+        print_record(tool_catalog(style))
+        return EXIT_OK
+    if args.mcp_action == "schema":
+        print_record({"tools": tool_catalog(style), "tool_name_style": style})
+        return EXIT_OK
+    payload = dispatch_tool(root, args.tool, parse_data_json(args.arguments), tool_name_style=style)
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return EXIT_OK if not payload.get("isError") else EXIT_ERROR
+
+
+def _build_mcp_parser(subparsers: Any) -> None:
+    mcp = subparsers.add_parser(
+        "mcp",
+        help="Stdio MCP server and tool catalog for coding agents (status/queue/tick/gate/decision/loop/board)",
+    )
+    add_root_argument(mcp)
+    actions = mcp.add_subparsers(dest="mcp_action", required=True)
+    serve = actions.add_parser("serve", help="Serve MCP on stdio (NDJSON or Content-Length)")
+    add_root_argument(serve)
+    serve.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    serve.set_defaults(func=cmd_mcp)
+    tools = actions.add_parser("tools", help="List MCP tool names and schemas")
+    add_root_argument(tools)
+    tools.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    tools.add_argument("--json", action="store_true", help="Accepted; output is always JSON")
+    tools.set_defaults(func=cmd_mcp)
+    schema = actions.add_parser("schema", help="Same catalog as tools, wrapped for agents")
+    add_root_argument(schema)
+    schema.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    schema.add_argument("--json", action="store_true", help="Accepted; output is always JSON")
+    schema.set_defaults(func=cmd_mcp)
+    call = actions.add_parser("call", help="Call one MCP tool in-process (debugging)")
+    add_root_argument(call)
+    call.add_argument("tool")
+    call.add_argument("--arguments", dest="arguments")
+    call.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    call.set_defaults(func=cmd_mcp)
+
+
+def cmd_integrations(args: argparse.Namespace) -> int:
+    from arthur_loop.integrations import (
+        default_install_targets,
+        detect_targets,
+        install_targets,
+        integration_status,
+        parse_targets,
+    )
+
+    root = resolve_root(args)
+    if args.integrations_action == "detect":
+        rows = [item.to_record() for item in detect_targets(root)]
+        if args.json:
+            print_record(rows)
+        else:
+            for row in rows:
+                mark = "found" if row["found"] else "absent"
+                why = f"  ({', '.join(row['reasons'])})" if row["reasons"] else ""
+                print(f"{row['target']:<10} {mark}{why}")
+        return EXIT_OK
+    if args.integrations_action == "status":
+        rows = integration_status(root)
+        if args.json:
+            print_record(rows)
+            return EXIT_OK
+        for row in rows:
+            print(f"{row['target']:<10} {row['state']:<8} skill={row['skill_present']} mcp={row['mcp_present']}")
+        return EXIT_OK
+
+    targets = parse_targets(args.targets)
+    if not targets:
+        targets = default_install_targets(root)
+    if not targets:
+        print("error: no coding-agent clients detected; pass --targets claude,codex,cursor,grok", file=sys.stderr)
+        return EXIT_ERROR
+    results = install_targets(root, targets, force=args.force, include_mcp=not args.no_mcp)
+    print_record([item.to_record() for item in results])
+    return EXIT_OK
+
+
+def _build_integrations_parser(subparsers: Any) -> None:
+    integ = subparsers.add_parser(
+        "integrations",
+        help="Detect coding agents and write skills + MCP where those clients actually load them",
+    )
+    add_root_argument(integ)
+    actions = integ.add_subparsers(dest="integrations_action", required=True)
+    detect = actions.add_parser("detect", help="Read-only detection (PATH, home config, workspace)")
+    add_root_argument(detect)
+    detect.add_argument("--json", action="store_true")
+    detect.set_defaults(func=cmd_integrations)
+    install = actions.add_parser(
+        "install",
+        help="Write skills, slash commands, and MCP config (written ≠ connected; restart the client)",
+    )
+    add_root_argument(install)
+    install.add_argument("--targets", help="comma list: claude,codex,cursor,grok,generic")
+    install.add_argument("--force", action="store_true", help="replace the whole instruction file")
+    install.add_argument("--no-mcp", action="store_true", help="write skills only")
+    install.set_defaults(func=cmd_integrations)
+    status = actions.add_parser("status", help="Which integration files exist in this instance")
+    add_root_argument(status)
+    status.add_argument("--json", action="store_true")
+    status.set_defaults(func=cmd_integrations)
+
+
+def cmd_loop(args: argparse.Namespace) -> int:
+    from arthur_loop.loop_ops import create_loop, list_loops
+
+    root = resolve_root(args)
+    if args.loop_action == "list":
+        print_record(list_loops(root))
+        return EXIT_OK
+    record = create_loop(
+        root,
+        project_id=args.project_id,
+        advisor=args.advisor,
+        executor=args.executor,
+        tracker=args.tracker,
+        title=args.title,
+        target_chat_url=args.target_chat_url,
+        goal=args.goal or "",
+        seed_job=not args.no_job,
+        actor=args.actor,
+        reason=args.reason,
+    )
+    print_record(record)
+    return EXIT_OK
+
+
+def _build_loop_parser(subparsers: Any) -> None:
+    loop = subparsers.add_parser(
+        "loop",
+        help="Create or list a project loop (wizard: roles + first job — not a graph composer)",
+    )
+    add_root_argument(loop)
+    actions = loop.add_subparsers(dest="loop_action", required=True)
+    create = actions.add_parser("create", help="Create a project and the first queue job")
+    add_root_argument(create)
+    create.add_argument("--project-id", required=True)
+    create.add_argument("--advisor", choices=sorted(KNOWN_ADVISORS))
+    create.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS))
+    create.add_argument("--tracker", choices=sorted(KNOWN_TRACKERS))
+    create.add_argument("--title", help="Advisor conversation title")
+    create.add_argument("--target-chat-url", default="manual")
+    create.add_argument("--goal", help="One-line project goal written into state.md")
+    create.add_argument("--no-job", action="store_true", help="Skip the first queue job")
+    create.add_argument("--actor")
+    create.add_argument("--reason")
+    create.set_defaults(func=cmd_loop)
+    listing = actions.add_parser("list", help="Show projects and current roles")
+    add_root_argument(listing)
+    listing.set_defaults(func=cmd_loop)
+
+
+# ---------------------------------------------------------------------------
 # entry point
 
 
@@ -1017,6 +1222,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_init_parser(subparsers, add_root_argument)
     _build_agents_parser(subparsers)
+    _build_integrations_parser(subparsers)
+    _build_mcp_parser(subparsers)
+    _build_loop_parser(subparsers)
     _build_queue_parser(subparsers)
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)

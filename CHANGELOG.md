@@ -6,19 +6,36 @@ All notable changes to Arthur Loop will be documented here. The format follows
 
 ## [Unreleased]
 
-Hardening pass after the first external alpha review. The theme: gates the product claimed are now checked by the core, and the docs describe what the code does.
+Product-gap pass after the hardening review: Arthur Loop now installs into coding agents the way Atlas Tasker does (skills where those clients load them, plus MCP registration), agents can create and drive a loop without a human typing every hop, Atlas boards are a first-class read path, and the web console has an honest create-loop wizard.
 
 ### Added
 
+- Stdio MCP server (`arthur mcp serve`) with read tools (status, tick, queue, gate, decision, loop, board) and gated writes (queue, capture, decision, loop create, board open-jobs). Dotted names plus Grok-safe portable names (`arthur_status`). `/arthur-loop` prompt.
+- `arthur integrations detect|install|status` — writes skills, slash commands, and MCP config for Claude Code, Codex, Cursor, and Grok Build. Written ≠ connected.
+- `arthur loop create|list` — project + first queue job. Shared by CLI, web wizard, and MCP. Not a graph composer.
+- Atlas board adapter: `arthur tracker board` / `open-jobs` run `tracker board --json` and open jobs from ready/assigned tickets (`atlas:<ticket_id>` keys). Argv templates remain for decision/sprint hooks.
+- Grok Build advisor and executor adapter packs.
+- Web console **+ Loop** wizard and `POST /api/actions/create-loop`.
+- Cursor as an integration target (skills + MCP). No advisor/executor pack — `solo`/`pair` still refuse it.
+- Docs: [how-it-works](docs/how-it-works.md), [MCP](docs/mcp.md), [integrations](docs/integrations.md).
 - `arthur decision open|answer|clear|list` — the CLI path for human decisions; `open` also runs the tracker's `open_decision` template.
 - `arthur gate implementation --project-id X` — GO/NO-GO computed from saved artifacts (exit 0/3).
 - `arthur queue cancel` and `arthur lock break [--force]`.
 - `arthur watch --quiet`; `watch` persists its last observation so `--once` from cron only reports changes.
 - `manual` advisor and executor packs now ship prompt files.
-- Regression tests for every item below; the README quickstart runs end to end in `tests/test_quickstart.py`.
+- Regression tests for the items below; the README quickstart runs end to end in `tests/test_quickstart.py`.
+
+### Fixed
+
+- Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).
+- Duplicate `expected_marker` across different job ids is refused; a blank marker is treated as omitted.
+- `queue claim` (CLI and MCP) refuses a project paused by an open human decision before taking the browser lease.
+- `queue recover` of a queued/parked job no longer steals another manager's live lease via the default `--holder` hint.
 
 ### Changed
 
+- `arthur init` writes client integrations by default (`--no-integrations` skips).
+- Web console: six human actions (the wizard is the sixth). Canvas copy says status map, not graph composer.
 - The queue is a state machine: illegal transitions (complete from `queued`, claim a finished job, revive a terminal job) are refused with exit 2.
 - `queue create` refuses a reused `--idempotency-key`, not just a duplicate job id. Ledger and lease writes take a POSIX `flock` so concurrent CLI runs cannot both pass a uniqueness check.
 - `queue claim` records `claimed_by`; `queue recover` releases the lease of the manager that claimed the job (crash after claim no longer blocks the loop until the TTL expires). A refused `claim`/`poll-result` never takes the lease.

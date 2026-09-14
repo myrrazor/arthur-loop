@@ -20,6 +20,7 @@ BASE_ARGS = [
     "--executor", "manual",
     "--tracker", "none",
     "--no-governor",
+    "--no-integrations",
 ]
 
 
@@ -81,6 +82,7 @@ class InitTests(unittest.TestCase):
                     "--second-agent", "claude-code",
                     "--tracker", "none",
                     "--no-governor",
+                    "--no-integrations",
                 ]
             )
             self.assertEqual(code, 0)
@@ -107,6 +109,7 @@ class InitTests(unittest.TestCase):
                     "--preset", "solo",
                     "--tracker", "none",
                     "--no-governor",
+                    "--no-integrations",
                 ]
             )
             root = Path(tmp)
@@ -137,13 +140,32 @@ class InitTests(unittest.TestCase):
             self.assertTrue((root / "GEMINI.md").exists())
             self.assertTrue((root / "agent-setup/KICKOFF.md").exists())
 
+    def test_solo_preset_with_grok_wires_the_shipped_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code = main(
+                [
+                    "init", "--root", tmp, "--yes",
+                    "--main-agent", "grok",
+                    "--preset", "solo",
+                    "--tracker", "none",
+                    "--no-governor",
+                    "--no-integrations",
+                ]
+            )
+            self.assertEqual(code, 0)
+            config = json.loads((Path(tmp) / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["advisor"]["adapter"], "grok")
+            self.assertEqual(config["executor"]["adapter"], "grok")
+            self.assertTrue((Path(tmp) / "adapters/advisor/ADAPTER.md").is_file())
+            self.assertIn("Grok", (Path(tmp) / "adapters/advisor/ADAPTER.md").read_text(encoding="utf-8"))
+
     def test_solo_and_pair_refuse_agents_without_shipped_packs(self) -> None:
-        # Grok is detected, but no pack ships for it: the preset must not quietly become `manual`
+        # Gemini is detected, but no pack ships for it: the preset must not quietly become `manual`
         with tempfile.TemporaryDirectory() as tmp:
             for argv in (
-                ["--main-agent", "grok", "--preset", "solo"],
-                ["--main-agent", "grok", "--preset", "pair", "--second-agent", "codex"],
-                ["--main-agent", "codex", "--preset", "pair", "--second-agent", "grok"],
+                ["--main-agent", "gemini", "--preset", "solo"],
+                ["--main-agent", "gemini", "--preset", "pair", "--second-agent", "codex"],
+                ["--main-agent", "codex", "--preset", "pair", "--second-agent", "gemini"],
                 ["--main-agent", "codex", "--preset", "pair"],
             ):
                 err = io.StringIO()
@@ -156,7 +178,7 @@ class InitTests(unittest.TestCase):
 
     def test_api_model_is_not_a_choice_anymore(self) -> None:
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(SystemExit) as ctx, redirect_stderr(io.StringIO()):
-            main(["init", "--root", tmp, *BASE_ARGS[:-4], "--advisor", "api-model", "--executor", "manual"])
+            main(["init", "--root", tmp, "--yes", "--main-agent", "none", "--advisor", "api-model", "--executor", "manual"])
         self.assertEqual(ctx.exception.code, 2)
 
     def test_every_known_adapter_ships_a_pack_with_prompts(self) -> None:
@@ -240,6 +262,7 @@ class InitTests(unittest.TestCase):
                     "--tracker", "none",
                     "--no-governor",
                     "--no-kickoff",
+                    "--no-integrations",
                 ]
             )
             root = Path(tmp)

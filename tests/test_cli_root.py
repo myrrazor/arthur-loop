@@ -13,7 +13,7 @@ from arthur_loop.cli import build_parser, main
 
 INIT_ARGS = [
     "--yes", "--main-agent", "none", "--advisor", "manual", "--executor", "manual",
-    "--tracker", "none", "--no-governor",
+    "--tracker", "none", "--no-governor", "--no-integrations",
 ]
 
 

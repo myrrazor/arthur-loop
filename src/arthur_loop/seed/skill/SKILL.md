@@ -29,6 +29,27 @@ Use Arthur Loop to coordinate one project sprint at a time between an advisor (p
 - Escalate with `arthur decision open`, never by editing `human-decisions/open.md` by hand.
 - Keep the configured quota reserve; at or below reserve, only checkpoint and report.
 
+## MCP and slash
+
+After `arthur init` or `arthur integrations install`, this skill is written where the client
+loads skills (Claude: `.claude/skills/arthur-loop`, Codex: `.codex/skills/arthur-loop`,
+Cursor: `.cursor/skills/arthur-loop`, Grok: `.arthur/integrations/grok-agent-skill` plus
+`AGENTS.md`). MCP is registered in that client's real config (`.mcp.json`,
+`.codex/config.toml`, `.cursor/mcp.json`, `.grok/config.toml`). A written entry is
+**written**, not connected — restart the client.
+
+Prefer MCP tools over inventing shell. Dotted names (`arthur.status`, `arthur.loop.create`,
+`arthur.queue.claim`, `arthur.capture`, `arthur.gate.implementation`, `arthur.board`) are
+canonical. Grok registrations use portable names (`arthur_status`, `arthur_loop_create`).
+
+`/arthur-loop` (Claude project command, or this skill) interviews for advisor / executor /
+tracker and calls `arthur.loop.create`. That creates a project and the first queue job.
+It is not a drag-drop graph composer.
+
+If the tracker is Atlas Tasker, read the board with `arthur.board` / `arthur tracker board --json`
+and open jobs from ready/assigned tickets with `arthur.board.open_jobs`. The old three argv
+templates remain as a fallback for `open_decision` / `close_decision` / `sprint_gate`.
+
 ## Commands
 
 From the instance root (or with `--root DIR` anywhere on the line):
@@ -36,6 +57,11 @@ From the instance root (or with `--root DIR` anywhere on the line):
 ```bash
 arthur status
 arthur tick --dry-run
+arthur loop create --project-id PROJECT --advisor grok --executor claude-code
+arthur integrations install --targets claude,codex,cursor,grok
+arthur mcp serve
+arthur tracker board --json
+arthur tracker open-jobs --dry-run
 arthur queue due
 arthur queue create --job-id JOB --project-id PROJECT --target-chat-title "Conversation" --target-chat-url URL --prompt-path prompt.md --idempotency-key KEY
 arthur queue claim --job-id JOB && arthur queue submit --job-id JOB

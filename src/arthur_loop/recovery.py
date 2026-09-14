@@ -61,11 +61,12 @@ def recover_job(
 
     released: BrowserLock | None = None
     lock = read_lock(root)
+    owners = _lock_owners_for(current, holder_hint)
     if lock is None:
         lock_note = "no browser lock held"
     elif not release_lease:
         lock_note = f"browser lock left in place for {lock.holder} (--keep-lock)"
-    elif lock.holder in {h for h in (current.claimed_by, holder_hint) if h}:
+    elif lock.holder in owners:
         released = break_lock(root, force=True, via=f"recover:{job_id}", now=now)
         lock_note = f"released browser lock held by {lock.holder}"
     else:
@@ -75,3 +76,24 @@ def recover_job(
         )
     ledger.append_event(job_id, "job_recovered", {"requeue": requeue, "lock_note": lock_note}, at=now)
     return RecoveryResult(job=job, released_lock=released, lock_note=lock_note)
+
+
+# A job that never reached `claimed` cannot own the browser lease. Recovering
+# a queued/parked job with the CLI's default `--holder` must not steal a
+# live manager's lock (the leftover lock-steal knife).
+_LOCK_HOLDING_STATUSES = {
+    "claimed",
+    "submitted",
+    "waiting_for_chatgpt",
+    "stopped_no_output",
+}
+
+
+def _lock_owners_for(job: QueueJob, holder_hint: str | None) -> set[str]:
+    """Who is allowed to have their lease broken for this job."""
+
+    if job.claimed_by:
+        return {job.claimed_by}
+    if holder_hint and job.status in _LOCK_HOLDING_STATUSES:
+        return {holder_hint}
+    return set()

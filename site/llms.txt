@@ -3,11 +3,17 @@
 > File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
 
 Arthur Loop is free and MIT licensed, runs on macOS and Linux with Python 3.9 or newer,
-and keeps queues, artifacts, decisions, and status as files you can inspect. Install with
+and keeps queues, artifacts, decisions, and status as files you can inspect. Coding agents
+drive the loop through a stdio MCP server and skills written where those clients load them.
+There is no drag-drop graph composer; `arthur loop create` and the web wizard create a
+project and the first queue job. Install with
 `curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`.
 
 ## Docs
 - [Getting started](https://github.com/myrrazor/arthur-loop#quickstart): install and first run
+- [How it works](https://github.com/myrrazor/arthur-loop/blob/main/docs/how-it-works.md): download to a working multi-agent loop
+- [MCP](https://github.com/myrrazor/arthur-loop/blob/main/docs/mcp.md): tools agents call instead of typing every hop
+- [Integrations](https://github.com/myrrazor/arthur-loop/blob/main/docs/integrations.md): skills + MCP for Claude, Codex, Cursor, Grok
 - [Workflow runbook](https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md): the full operating loop
 - [Adapter contract](https://github.com/myrrazor/arthur-loop/blob/main/docs/adapters.md): add or tune advisors, executors, and trackers
 - [FAQ](https://arthur-loop.vercel.app/#faq): storage, platforms, updates, and tradeoffs
