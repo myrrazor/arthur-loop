@@ -9,4 +9,4 @@ Download → a working multi-agent loop in minutes. No daemon, no hosted dashboa
 5. **Agents follow the loop** through MCP or the CLI: claim → submit/capture → implementation gate. Humans answer decisions in the web console or `arthur decision answer`.
 6. **If Atlas Tasker is installed**, `arthur tracker board --json` / MCP `arthur.board` reads ready/assigned work and `open-jobs` turns those tickets into queue jobs.
 
-See the [workflow runbook](workflow-runbook.md), [MCP](mcp.md), and [integrations](integrations.md). Demo GIF: [arthur-loop-demo.gif](assets/arthur-loop-demo.gif). Web console shot: [web-console.png](assets/web-console.png).
+See the [workflow runbook](workflow-runbook.md), [MCP](mcp.md), and [integrations](integrations.md). Terminal demo: [arthur-loop-demo.gif](assets/arthur-loop-demo.gif). Web console status map: [web-console.png](assets/web-console.png). Create-loop wizard: [create-loop-wizard.png](assets/create-loop-wizard.png). There is no separate how-it-works video in this release.
