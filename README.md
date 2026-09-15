@@ -261,7 +261,7 @@ What it does **not** do: it cannot stop an executor process from editing files. 
 
 ## Contributing
 
-Issues and adapter contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local test commands and the `dev → testing → main` branch flow.
+Issues and adapter contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the local test commands. Pull requests target `main`.
 
 ## License
 
@@ -269,4 +269,4 @@ MIT — see [LICENSE](LICENSE). Release history lives in [CHANGELOG.md](CHANGELO
 
 ---
 
-Built by [myrrazor](https://github.com/myrrazor) · [more projects](https://github.com/myrrazor) · [source](https://github.com/myrrazor/arthur-loop) · [support the project](https://github.com/myrrazor). If Arthur Loop is useful, a ⭐ helps others find it.
+Maintained at [GitHub](https://github.com/myrrazor/arthur-loop). If Arthur Loop is useful, a ⭐ helps others find it.

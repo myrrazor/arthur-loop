@@ -11,7 +11,7 @@ Run the automated gate anytime:
 ## Placeholders and identity
 
 - [x] Public launch surfaces contain no unresolved double-brace launch tokens or launch-TODO markers.
-- [x] Donate link knowingly keeps the `github.com/myrrazor` personal-site fallback.
+- [x] Support links point at the GitHub repository, not a personal site.
 - [x] Favicon uses the Arthur Loop prompt glyph.
 - [x] Accent is the terminal-state green defined in `site/index.html`.
 - [x] Product one-liner is byte-identical in the README, site description/hero, and release metadata packet.
@@ -34,7 +34,7 @@ Run the automated gate anytime:
 
 ## Release
 
-- [ ] Push `dev` to the public repository and promote through the owner-approved branch gate.
+- [ ] Push `main` to the public repository through the owner-approved branch gate.
 - [ ] Create and push tag `v0.1.0`.
 - [ ] Publish the GitHub release with `RELEASE_NOTES_v0.1.0.md` and prepared Python assets/checksums.
 - [ ] Confirm the GitHub install URLs and latest-release URL return 200.
@@ -57,4 +57,3 @@ Run the automated gate anytime:
 
 - [ ] Upload `docs/assets/og.png` as the repository social preview.
 - [ ] Add repository topics: `python`, `cli`, `developer-tools`, `ai-agents`, `agentic-workflows`, `local-first`, `file-first`, `open-source`, `macos`, `automation`.
-- [ ] Replace the personal-site support fallback if a dedicated Buy Me a Coffee URL is chosen later.
