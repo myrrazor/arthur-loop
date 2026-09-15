@@ -27,7 +27,8 @@ You are operating an Arthur Loop instance. There is no drag-and-drop graph compo
 
 If Atlas Tasker is the tracker and `tracker` is on PATH, walk ready work with
 `arthur.tracker.next` / `arthur tracker walk` (not just `board --json`). `in_review`
-is not ready work. Pass Atlas `--project` keys via `tracker.project_map`.
+is not ready work. Pass Atlas `--project` keys via `tracker.project_map`
+(`arthur loop create` writes `MY_APP` → `MY`; do not walk an empty map).
 
 ## Hard rules
 

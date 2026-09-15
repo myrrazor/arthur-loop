@@ -19,8 +19,10 @@ An untrusted workspace does not spawn project MCP — written/add ≠ connected.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -69,28 +71,110 @@ def grok_binary() -> str | None:
     return shutil.which("grok")
 
 
-def parse_toml_server(text: str, name: str = SERVER_NAME) -> dict[str, Any] | None:
-    """Read one `[mcp_servers.<name>]` table. Not a general TOML parser."""
+def _strip_toml_comment(line: str) -> str:
+    """Drop a `#` comment that is not inside a quoted string."""
 
-    header = f"[mcp_servers.{name}]"
-    if header not in text:
+    in_str = False
+    quote = ""
+    out: list[str] = []
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if in_str:
+            out.append(ch)
+            if ch == "\\" and i + 1 < len(line):
+                out.append(line[i + 1])
+                i += 2
+                continue
+            if ch == quote:
+                in_str = False
+            i += 1
+            continue
+        if ch in "\"'":
+            in_str = True
+            quote = ch
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "#":
+            break
+        out.append(ch)
+        i += 1
+    return "".join(out).rstrip()
+
+
+def _parse_toml_scalar(raw: str) -> Any:
+    raw = raw.strip()
+    if not raw:
         return None
-    start = text.index(header) + len(header)
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    if len(raw) >= 2 and raw[0] == raw[-1] == "'":
+        return raw[1:-1]
+    return raw.strip('"').strip("'")
+
+
+def _join_toml_array(first_rhs: str, lines: list[str], start: int) -> tuple[str, int]:
+    """Join a TOML array that may span lines. `start` is the next line index."""
+
+    buf = first_rhs.strip()
+    idx = start
+    while idx < len(lines) and buf.count("[") > buf.count("]"):
+        buf += " " + _strip_toml_comment(lines[idx]).strip()
+        idx += 1
+    buf = re.sub(r",\s*]", "]", buf)
+    return buf, idx
+
+
+def parse_toml_server(text: str, name: str = SERVER_NAME) -> dict[str, Any] | None:
+    """Read one `[mcp_servers.<name>]` table, including multiline `args`.
+
+    Grok writes pretty-printed TOML arrays. A line-by-line `json.loads` of
+    `args = [` raises JSONDecodeError — probe must not crash on that.
+    """
+
+    headers = (
+        f"[mcp_servers.{name}]",
+        f'[mcp_servers."{name}"]',
+        f"[mcp_servers.'{name}']",
+    )
+    start = -1
+    for header in headers:
+        if header in text:
+            start = text.index(header) + len(header)
+            break
+    if start < 0:
+        return None
     rest = text[start:]
     end = rest.find("\n[")
     block = rest if end < 0 else rest[:end]
     command = None
     args: list[str] = []
-    for line in block.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("command"):
-            _, _, raw = stripped.partition("=")
-            command = json.loads(raw.strip())
-        elif stripped.startswith("args"):
-            _, _, raw = stripped.partition("=")
-            parsed = json.loads(raw.strip())
+    lines = block.splitlines()
+    i = 0
+    while i < len(lines):
+        stripped = _strip_toml_comment(lines[i]).strip()
+        i += 1
+        if not stripped:
+            continue
+        key, sep, raw = stripped.partition("=")
+        if not sep:
+            continue
+        key = key.strip()
+        raw = raw.strip()
+        if key == "args":
+            joined, i = _join_toml_array(raw, lines, i)
+            try:
+                parsed = json.loads(joined)
+            except json.JSONDecodeError:
+                parsed = None
             if isinstance(parsed, list):
                 args = [str(item) for item in parsed]
+            continue
+        if key == "command":
+            command = _parse_toml_scalar(raw)
     if command is None:
         return None
     return {"command": command, "args": args}
@@ -100,8 +184,11 @@ def native_matches(root: Path) -> bool:
     path = root / CONFIG_REL
     if not path.is_file():
         return False
-    entry = parse_toml_server(path.read_text(encoding="utf-8"))
-    if not entry:
+    try:
+        entry = parse_toml_server(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, ValueError, OSError):
+        return False
+    if not entry or entry.get("error"):
         return False
     expected = mcp_serve_argv()
     return entry["command"] == expected[0] and entry["args"] == expected[1:]
@@ -219,11 +306,77 @@ def register_mcp(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
     return result
 
 
+def trusted_folders_path(home: Path | None = None) -> Path:
+    return (home or Path.home()) / ".grok" / "trusted_folders.toml"
+
+
+def _is_enxio(exc: BaseException) -> bool:
+    if isinstance(exc, OSError) and getattr(exc, "errno", None) in {errno.ENXIO, 6}:
+        return True
+    text = str(exc).lower()
+    return "enxio" in text or "no such device or address" in text
+
+
+def folder_trust_recorded(root: Path, *, home: Path | None = None) -> bool:
+    """True when Grok (or a prior Arthur stamp) already granted this folder."""
+
+    resolved = str(root.resolve())
+    candidates = {resolved, str(root), resolved.replace("\\", "/")}
+    stamp = root / ".arthur" / "integrations" / "grok-folder-trust.json"
+    if stamp.is_file():
+        try:
+            data = json.loads(stamp.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict) and data.get("trusted_folder") and data.get("cwd") in candidates:
+            return True
+    path = trusted_folders_path(home)
+    if not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return any(item in text for item in candidates)
+
+
+def _stamp_folder_trust(root: Path, payload: dict[str, Any]) -> None:
+    path = root / ".arthur" / "integrations" / "grok-folder-trust.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _trust_success(result: dict[str, Any], *, note: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    result.update(
+        {
+            "status": "trusted_folder",
+            "trusted_folder": True,
+            "note": note,
+            **(extra or {}),
+        }
+    )
+    root = Path(result["cwd"])
+    _stamp_folder_trust(
+        root,
+        {
+            "trusted_folder": True,
+            "cwd": str(root.resolve()),
+            "at": isoformat(),
+            "note": note,
+        },
+    )
+    return result
+
+
 def grant_folder_trust(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
     """Grant Grok folder trust for this workspace (`grok --trust`).
 
     Untrusted folders do not spawn project MCP servers. That is a second gate
     after `grok mcp add`: add without trust is still disconnected.
+
+    Grok 1.0.x can write `~/.grok/trusted_folders.toml` and then fail with
+    ENXIO when it talks to a missing TTY (stdin is DEVNULL under Arthur).
+    If the grant is on disk, that is success — do not report trust failed.
     """
 
     binary = grok_binary()
@@ -241,25 +394,46 @@ def grant_folder_trust(root: Path, *, runner: Runner | None = None) -> dict[str,
             "Grok will not spawn project MCP (arthur_status) in an untrusted folder."
         )
         return result
+    if folder_trust_recorded(root):
+        return _trust_success(result, note="folder already in Grok trusted_folders / Arthur stamp")
     try:
         proc = _run(argv, cwd=root, runner=runner, timeout=20.0)
     except OSError as exc:
+        if folder_trust_recorded(root):
+            return _trust_success(
+                result,
+                note=(
+                    "grok --trust wrote the folder grant; the follow-up TTY error "
+                    f"({exc}) is ENXIO-after-write and is not a failed trust."
+                ),
+                extra={"os_error": str(exc), "enxio_after_grant": _is_enxio(exc)},
+            )
         result.update({"status": "error", "note": str(exc)})
         return result
     result["returncode"] = proc.returncode
     result["stdout"] = (proc.stdout or "").strip()
     result["stderr"] = (proc.stderr or "").strip()
-    if proc.returncode == 0:
-        result["status"] = "trusted_folder"
-        result["trusted_folder"] = True
-        result["note"] = "grok --trust granted this folder; project MCP may spawn."
-    else:
-        result["status"] = "error"
-        result["note"] = (
-            f"grok --trust failed (exit {proc.returncode}): "
-            f"{result['stderr'] or result['stdout'] or 'no output'}. "
-            "Untrusted folder = project MCP disconnected. Run `grok --trust` yourself."
+    combined = f"{result['stdout']}\n{result['stderr']}"
+    granted = folder_trust_recorded(root)
+    if proc.returncode == 0 or granted:
+        return _trust_success(
+            result,
+            note=(
+                "grok --trust granted this folder; project MCP may spawn."
+                if proc.returncode == 0
+                else (
+                    "grok --trust wrote the folder grant; a non-zero exit after the "
+                    "write (often ENXIO on a missing TTY) is not a failed trust."
+                )
+            ),
+            extra={"enxio_after_grant": _is_enxio(OSError(combined)) or "enxio" in combined.lower()},
         )
+    result["status"] = "error"
+    result["note"] = (
+        f"grok --trust failed (exit {proc.returncode}): "
+        f"{result['stderr'] or result['stdout'] or 'no output'}. "
+        "Untrusted folder = project MCP disconnected. Run `grok --trust` yourself."
+    )
     return result
 
 
@@ -279,7 +453,12 @@ def probe(root: Path, *, live: bool = False, runner: Runner | None = None) -> di
     binary = grok_binary()
     skill = skill_path(root)
     toml_path = root / CONFIG_REL
-    entry = parse_toml_server(toml_path.read_text(encoding="utf-8")) if toml_path.is_file() else None
+    entry: dict[str, Any] | None = None
+    if toml_path.is_file():
+        try:
+            entry = parse_toml_server(toml_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            entry = {"error": f"toml parse failed: {exc}"}
     stamp = read_stamp(root)
     report: dict[str, Any] = {
         "skill_path": SKILL_DIR + "/SKILL.md",

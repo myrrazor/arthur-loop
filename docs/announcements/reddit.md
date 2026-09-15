@@ -28,7 +28,7 @@ Install with uv:
 uv tool install git+https://github.com/myrrazor/arthur-loop.git
 ```
 
-Demo and install options: https://arthur-loop.vercel.app/
+Demo and install options: https://arthurloop.com/
 
 Source: https://github.com/myrrazor/arthur-loop
 

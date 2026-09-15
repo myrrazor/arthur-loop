@@ -144,11 +144,27 @@ def is_ready_or_assigned(ticket: dict[str, Any]) -> bool:
     return False
 
 
+def default_atlas_key(project_id: str) -> str:
+    """Usable Atlas `--project` key for an Arthur SHOUTY_SNAKE id.
+
+    `DEMO_APP` → `DEMO`, `APP` → `APP`. Init and `loop create` write this into
+    `tracker.project_map` so walk is not a silent empty trap.
+    """
+
+    value = (project_id or "").strip()
+    if not value:
+        return ""
+    if "_" in value:
+        return value.split("_", 1)[0]
+    return value
+
+
 def resolve_atlas_project(config: dict[str, Any], project_id: str | None) -> str | None:
     """Map an Arthur SHOUTY_SNAKE project_id to an Atlas project key.
 
     Arthur uses `DEMO_APP`. Atlas `--project` wants the short key (`DEMO`, `APP`).
     Passing the Arthur id through unchanged is the mismatch the re-test caught.
+    This function does **not** invent a key — the map must already be filled.
     """
 
     tracker = config.get("tracker") or {}
@@ -341,8 +357,10 @@ def tracker_or_fallback(
                 "status": "skipped",
                 "reason": (
                     f"Arthur project_id {values['project']!r} is not an Atlas project key. "
-                    "Set tracker.project_map or tracker.project_key in config/arthur-loop.json, "
-                    "or pass --project <atlas-key>."
+                    "Set tracker.project_map "
+                    f'(e.g. {{"{values["project"]}": "{default_atlas_key(values["project"])}"}}) '
+                    "or tracker.project_key in config/arthur-loop.json, "
+                    f"or pass --project {default_atlas_key(values['project'])}."
                 ),
             }
     return tracker_run_action(config, action, dry_run=dry_run, cwd=root, **values)

@@ -13,6 +13,7 @@
 set -eu
 
 REPO="${ARTHUR_LOOP_REPO:-https://github.com/myrrazor/arthur-loop.git}"
+REF="${ARTHUR_LOOP_REF:-}"
 DEST="${ARTHUR_LOOP_HOME:-$HOME/.arthur-loop}"
 BIN_DIR="${ARTHUR_LOOP_BIN:-$HOME/.local/bin}"
 
@@ -33,9 +34,13 @@ else
     say "Updating existing checkout at $DEST/src"
     git -C "$DEST/src" pull --ff-only --quiet || say "warning: could not fast-forward $DEST/src; installing what's there"
   else
-    say "Cloning $REPO -> $DEST/src"
+    say "Cloning $REPO${REF:+ (ref $REF)} -> $DEST/src"
     mkdir -p "$DEST"
-    git clone --depth 1 --quiet "$REPO" "$DEST/src"
+    if [ -n "$REF" ]; then
+      git clone --depth 1 --branch "$REF" --quiet "$REPO" "$DEST/src"
+    else
+      git clone --depth 1 --quiet "$REPO" "$DEST/src"
+    fi
   fi
   SRC="$DEST/src"
 fi

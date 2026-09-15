@@ -10,7 +10,7 @@ Product-gap pass after the hardening review: Arthur Loop now installs into codin
 
 Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, auto-follow, Atlas next/walk, install honesty, and the how-it-works video.
 
-Hostile re-test of tip `a83b29b` was ALMOST. This revision fixes Grok Build 1.0.30 prompt argv (`grok --always-approve -p`, not `-p --always-approve`), public-install marketing (main / v0.1.0 has no follow/MCP/walk), grok-on-PATH test isolation, empty `tracker.project_map` after init, and documents / optionally writes `grok --trust`.
+Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface honesty and the remaining blockers: live-site overclaims (no fake v0.2.0, no MCP/follow on curl-main, arthurloop.com canonical instead of Vercel 404, install.ps1 shipped here and not linked on `/main`), `grok --trust` ENXIO-after-grant, probe multiline TOML, usable `tracker.project_map` after init/loop create, and pause blocking poll/complete/fail.
 
 ### Added
 
@@ -40,8 +40,10 @@ Hostile re-test of tip `a83b29b` was ALMOST. This revision fixes Grok Build 1.0.
 - Grok follow/probe argv is `grok --always-approve -p PROMPT` (1.0.30). `-p --always-approve` does not run the prompt.
 - Public README/site/FAQ no longer claim that the three main / v0.1.0 install commands produce MCP, `arthur follow`, or Atlas walk.
 - Tests that write Grok integrations isolate `grok_binary` so a host `grok` on PATH cannot change assertions.
-- `arthur init` always writes `tracker.project_map: {}`.
-- `arthur integrations install` documents Grok folder trust and runs `grok --trust` unless `--no-trust-folder` (untrusted folder = project MCP disconnected).
+- `arthur init` always writes `tracker.project_map`. With no projects it is `{}` and init says so. `--project-id`, `--demo` + atlas-tasker, and `arthur loop create` write a usable default (`MY_APP` → `MY`).
+- `arthur integrations install` documents Grok folder trust and runs `grok --trust` unless `--no-trust-folder` (untrusted folder = project MCP disconnected). A grant that lands then ENXIO on a missing TTY is success, not a failed trust. Probe parses multiline TOML `args`.
+- `queue poll-result` / `complete` / `fail` (CLI and MCP poll) refuse a project paused by an open human decision.
+- Launch site canonical / robots / sitemap / OG / JSON-LD use `https://arthurloop.com/`. Docs pages spell public main vs this branch. Experimental `install.ps1` ships on this branch; `/main/install.ps1` is documented as a 404.
 - `arthur integrations install --force` no longer replaces the whole `AGENTS.md` (managed blocks only).
 - Integration detect no longer treats `~/.cursor` / `~/.grok` as "found" without the binary.
 - `arthur tracker` RuntimeError from a failed `tracker --json` is `error:` exit 2, not a traceback.

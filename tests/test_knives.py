@@ -124,6 +124,42 @@ class ClaimOnPausedTests(unittest.TestCase):
             self.assertIn("paused", err)
             self.assertEqual(QueueLedger(Path(tmp)).latest_jobs()["BQ-KN-001"].status, "claimed")
 
+    def test_poll_complete_and_fail_are_refused_when_paused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            _run(
+                [
+                    "queue", "--root", tmp, "create",
+                    "--job-id", "BQ-KN-001", "--project-id", "KN",
+                    "--target-chat-title", "t", "--target-chat-url", "manual",
+                ]
+            )
+            self.assertEqual(_run(["queue", "--root", tmp, "claim", "--job-id", "BQ-KN-001"])[0], 0)
+            self.assertEqual(_run(["queue", "--root", tmp, "submit", "--job-id", "BQ-KN-001"])[0], 0)
+            open_decision(Path(tmp), project_id="KN", title="Pause finish?", body="yes")
+
+            poll = _run(
+                [
+                    "queue", "--root", tmp, "poll-result",
+                    "--job-id", "BQ-KN-001", "--marker-found", "true",
+                ]
+            )
+            self.assertEqual(poll[0], 2)
+            self.assertIn("paused", poll[2])
+
+            complete = _run(["queue", "--root", tmp, "complete", "--job-id", "BQ-KN-001"])
+            self.assertEqual(complete[0], 2)
+            self.assertIn("paused", complete[2])
+
+            fail = _run(
+                ["queue", "--root", tmp, "fail", "--job-id", "BQ-KN-001", "--error", "nope"]
+            )
+            self.assertEqual(fail[0], 2)
+            self.assertIn("paused", fail[2])
+            self.assertEqual(
+                QueueLedger(Path(tmp)).latest_jobs()["BQ-KN-001"].status, "submitted"
+            )
+
 
 class RecoverLockStealTests(unittest.TestCase):
     def test_recover_of_a_queued_job_does_not_steal_another_manager_lock(self) -> None:

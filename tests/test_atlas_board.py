@@ -226,6 +226,52 @@ class NextWalkTests(unittest.TestCase):
         self.assertIsNone(resolve_atlas_project({"tracker": {"adapter": "atlas-tasker"}}, "DEMO_APP"))
         self.assertEqual(resolve_atlas_project({"tracker": {"adapter": "atlas-tasker"}}, "APP"), "APP")
 
+    def test_init_and_loop_create_write_a_usable_project_map(self) -> None:
+        from arthur_loop.atlas_board import default_atlas_key
+
+        self.assertEqual(default_atlas_key("DEMO_APP"), "DEMO")
+        self.assertEqual(default_atlas_key("APP"), "APP")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            code = main(
+                [
+                    "init", "--root", tmp, "--yes", "--main-agent", "none",
+                    "--advisor", "manual", "--executor", "manual",
+                    "--tracker", "atlas-tasker", "--project-id", "MY_APP",
+                    "--no-governor", "--no-integrations",
+                ]
+            )
+            self.assertEqual(code, 0)
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["tracker"]["project_map"], {"MY_APP": "MY"})
+            self.assertEqual(resolve_atlas_project(config, "MY_APP"), "MY")
+
+            code = main(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "OTHER_APP", "--tracker", "atlas-tasker",
+                    "--advisor", "manual", "--executor", "manual",
+                ]
+            )
+            self.assertEqual(code, 0)
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["tracker"]["project_map"]["OTHER_APP"], "OTHER")
+
+    def test_demo_atlas_init_maps_demo_projects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code = main(
+                [
+                    "init", "--root", tmp, "--yes", "--main-agent", "none",
+                    "--advisor", "manual", "--executor", "manual",
+                    "--tracker", "atlas-tasker", "--demo",
+                    "--no-governor", "--no-integrations",
+                ]
+            )
+            self.assertEqual(code, 0)
+            config = json.loads((Path(tmp) / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["tracker"]["project_map"]["DEMO_APP"], "DEMO")
+            self.assertEqual(config["tracker"]["project_map"]["SAMPLE_APP"], "SAMPLE")
+
 
 if __name__ == "__main__":
     unittest.main()

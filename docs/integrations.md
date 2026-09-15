@@ -10,7 +10,7 @@ arthur integrations status
 arthur integrations probe --target grok
 ```
 
-This is the Atlas Tasker-shaped path: detect CLIs on PATH, write skills where those tools actually load them, and register MCP. For Grok, registration is `grok mcp add` (trusted), not only a hand-written toml. Folder trust is a second gate: `grok --trust` (install runs it unless `--no-trust-folder`). An untrusted folder does not spawn project MCP.
+This is the Atlas Tasker-shaped path: detect CLIs on PATH, write skills where those tools actually load them, and register MCP. For Grok, registration is `grok mcp add` (trusted), not only a hand-written toml. Folder trust is a second gate: `grok --trust` (install runs it unless `--no-trust-folder`). An untrusted folder does not spawn project MCP. If `grok --trust` writes `~/.grok/trusted_folders.toml` and then fails with ENXIO (missing TTY), Arthur treats the written grant as success. Probe parses multiline TOML `args` arrays that Grok writes.
 
 ## What each target writes
 
