@@ -90,6 +90,20 @@ class McpDispatchTests(unittest.TestCase):
             dispatch_tool(root, "arthur.decision.answer", {"title": opened["structuredContent"]["title"], "answer": "7 days"})
             claimed = dispatch_tool(root, "arthur.queue.claim", {"job_id": job["job_id"], "holder": "mcp-agent"})
             self.assertEqual(claimed["structuredContent"]["status"], "claimed")
+            submitted = dispatch_tool(root, "arthur.queue.submit", {"job_id": job["job_id"], "holder": "mcp-agent"})
+            self.assertEqual(submitted["structuredContent"]["status"], "submitted")
+            dispatch_tool(
+                root,
+                "arthur.decision.open",
+                {"project_id": "MCP_APP", "title": "Pause poll?", "body": "yes"},
+            )
+            refused_poll = dispatch_tool(
+                root,
+                "arthur.queue.poll_result",
+                {"job_id": job["job_id"], "marker_found": True, "holder": "mcp-agent"},
+            )
+            self.assertTrue(refused_poll.get("isError"))
+            self.assertIn("paused", refused_poll["content"][0]["text"])
 
     def test_unknown_tool_and_empty_idempotency_are_errors(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

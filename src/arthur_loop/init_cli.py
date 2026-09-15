@@ -115,7 +115,10 @@ Ask, one topic at a time, and keep it conversational:
 3. **Projects.** Which projects should the loop manage? For each: a
    SHOUTY_SNAKE id, one-line goal, and (if the advisor is browser-based) the
    conversation title/URL. Create `projects/<ID>/state.md` and add each to
-   `projects` in `config/arthur-loop.json`.
+   `projects` in `config/arthur-loop.json`. If the tracker is `atlas-tasker`,
+   also set `tracker.project_map` (Arthur `DEMO_APP` → Atlas `--project` key
+   `DEMO`). `arthur loop create` writes that default for you; do not leave
+   the map empty and then call `arthur tracker walk`.
 4. **Cadence and quota.** Confirm polling cadence and the quota reserve in the
    config, and whether the governor should be on.
 
@@ -425,21 +428,46 @@ def _run_init(args: argparse.Namespace) -> int:
             print("      report how to wire one (codexbar, a custom command, or a JSON file).")
     heartbeat = not args.no_heartbeat and _ask_bool("Enable heartbeat state files (runtime/)?", True, yes)
 
+    from arthur_loop.atlas_board import default_atlas_key
+
     projects: list[dict[str, str]] = []
+    atlas_default = (getattr(args, "atlas_project", None) or "").strip() or None
+    yes_project = (getattr(args, "project_id", None) or "").strip() or None
+    if yes and yes_project:
+        projects.append(
+            {
+                "project_id": yes_project,
+                "advisor_target_title": f"{yes_project} planning",
+                "advisor_target_url": "",
+                "state_path": f"projects/{yes_project}/state.md",
+            }
+        )
     while not yes and _ask_bool("Add a project now?", False, False):
         project_id = _ask("  project id (SHOUTY_SNAKE)", "MY_APP", False)
         title = _ask("  advisor conversation/target title", f"{project_id} planning", False)
         url = _ask("  advisor target URL (blank if n/a)", "", False)
-        projects.append(
-            {
-                "project_id": project_id,
-                "advisor_target_title": title,
-                "advisor_target_url": url,
-                "state_path": f"projects/{project_id}/state.md",
-            }
-        )
+        entry = {
+            "project_id": project_id,
+            "advisor_target_title": title,
+            "advisor_target_url": url,
+            "state_path": f"projects/{project_id}/state.md",
+        }
+        if tracker == "atlas-tasker":
+            atlas_key = _ask(
+                f"  Atlas --project key for {project_id}",
+                atlas_default or default_atlas_key(project_id),
+                False,
+            )
+            entry["atlas_project"] = atlas_key
+        projects.append(entry)
     if not projects and main is not None:
         print("(no projects yet — your main agent's kickoff interview will create them)")
+        if tracker == "atlas-tasker":
+            print(
+                "  Atlas: tracker.project_map starts empty because there is no project yet. "
+                "`arthur loop create --project-id MY_APP` writes MY_APP → MY. "
+                "Do not run `arthur tracker walk` against an empty map."
+            )
 
     if tracker == "atlas-tasker" and shutil.which("tracker") is None:
         print("\nAtlas Tasker's `tracker` CLI is not on PATH. Install it from the open-source repo")
@@ -450,11 +478,20 @@ def _run_init(args: argparse.Namespace) -> int:
     quota_config: dict[str, Any] = {"provider": quota_provider, "codexbar_provider": "codex"}
     if quota_path:
         quota_config["path"] = quota_path
+    project_map: dict[str, str] = {}
+    if tracker == "atlas-tasker":
+        for item in projects:
+            pid = item["project_id"]
+            project_map[pid] = item.get("atlas_project") or atlas_default or default_atlas_key(pid)
+            item["atlas_project"] = project_map[pid]
+    tracker_block: dict[str, Any] = {"adapter": tracker, "project_map": project_map}
+    if atlas_default:
+        tracker_block["project_key"] = atlas_default
     config = {
         "version": 2,
         "advisor": {"adapter": advisor},
         "executor": {"adapter": executor},
-        "tracker": {"adapter": tracker, "project_map": {}},
+        "tracker": tracker_block,
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
         "quota": quota_config,
         "reserve_policy": {"minimum_reserve_percent": float(args.reserve_percent)},
@@ -526,6 +563,18 @@ def _run_init(args: argparse.Namespace) -> int:
     print(f"  advisor:  {advisor}   (runbook: adapters/advisor/ADAPTER.md)")
     print(f"  executor: {executor}   (runbook: adapters/executor/ADAPTER.md)")
     print(f"  tracker:  {tracker}")
+    if tracker == "atlas-tasker":
+        written_map = json.loads(config_path(root).read_text(encoding="utf-8")).get("tracker", {}).get("project_map") or {}
+        if written_map:
+            print("  Atlas project_map (Arthur id → Atlas --project key):")
+            for arthur_id, atlas_key in written_map.items():
+                print(f"    {arthur_id} → {atlas_key}")
+        else:
+            print(
+                "  Atlas project_map: {}  — empty because no projects exist yet. "
+                "Fill it (`arthur loop create --project-id MY_APP` writes MY_APP → MY) "
+                "before `arthur tracker next` / `walk`."
+            )
     governor_note = "on" if governor else "off"
     if governor:
         governor_note += f"   quota source: {quota_provider}" + (f" ({quota_path})" if quota_path else "")
@@ -623,6 +672,32 @@ def seed_demo(root: Path) -> None:
     quota_file.write_text(json.dumps(DEMO_QUOTA_PAYLOAD, indent=2) + "\n", encoding="utf-8")
     append_snapshot(root, snapshot_from_codexbar_json(DEMO_QUOTA_PAYLOAD, snapshot_id="demo-seed"))
 
+    path = config_path(root)
+    if path.is_file():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        tracker = data.get("tracker") or {}
+        if tracker.get("adapter") == "atlas-tasker":
+            from arthur_loop.atlas_board import default_atlas_key
+            from arthur_loop.loop_ops import _fill_project_map
+
+            projects = list(data.get("projects") or [])
+            known = {item.get("project_id") for item in projects if isinstance(item, dict)}
+            for project_id in demo_states:
+                if project_id not in known:
+                    projects.append(
+                        {
+                            "project_id": project_id,
+                            "advisor_target_title": f"{project_id} planning",
+                            "advisor_target_url": "manual",
+                            "state_path": f"projects/{project_id}/state.md",
+                            "atlas_project": default_atlas_key(project_id),
+                        }
+                    )
+                    known.add(project_id)
+            data["projects"] = projects
+            _fill_project_map(data)
+            path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
 
 def add_init_parser(subparsers: Any, add_root: Any = None) -> None:
     init = subparsers.add_parser(
@@ -649,6 +724,14 @@ def add_init_parser(subparsers: Any, add_root: Any = None) -> None:
     init.add_argument("--advisor", choices=sorted(KNOWN_ADVISORS), help="Override the advisor adapter")
     init.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS), help="Override the executor adapter")
     init.add_argument("--tracker", choices=sorted(KNOWN_TRACKERS))
+    init.add_argument(
+        "--project-id",
+        help="With --yes, create this project now (also fills tracker.project_map when tracker is atlas-tasker)",
+    )
+    init.add_argument(
+        "--atlas-project",
+        help="Default Atlas --project key / tracker.project_key (atlas-tasker)",
+    )
     init.add_argument("--no-governor", action="store_true")
     init.add_argument("--quota-provider", choices=["auto", "codexbar", "command", "file", "none"],
                       help="Where quota numbers come from (default auto: codexbar when installed)")

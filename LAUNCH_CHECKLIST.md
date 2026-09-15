@@ -43,7 +43,7 @@ Run the automated gate anytime:
 
 - [x] Static site, robots, sitemap, llms index, SVG identity, and real OG image are prepared.
 - [x] JSON-LD parses locally and FAQ answers match the visible page.
-- [ ] Confirm the production Vercel domain is `arthur-loop.vercel.app`; update canonical files if Vercel assigns a different domain.
+- [x] Canonical, robots, sitemap, OG, and JSON-LD use `https://arthurloop.com/` (not `arthur-loop.vercel.app`, which 404s).
 - [ ] Deploy production and confirm the site, `robots.txt`, `sitemap.xml`, `llms.txt`, and `og.png` return 200.
 - [ ] Submit the live domain and sitemap to Google Search Console; check the social card in an OG debugger.
 

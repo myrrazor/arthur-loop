@@ -18,7 +18,7 @@ Stdio accepts newline-delimited JSON-RPC and LSP-style `Content-Length` frames.
 
 **Gated write:** `arthur.queue.create`, `arthur.queue.claim`, `arthur.queue.submit`, `arthur.queue.poll_result`, `arthur.queue.recover`, `arthur.capture`, `arthur.decision.open`, `arthur.decision.answer`, `arthur.loop.create`, `arthur.board.open_jobs`, `arthur.tracker.walk`, `arthur.follow.run`.
 
-Writes go through the same gates as the CLI (queue state machine, paused-project claim **and submit** refusal, empty idempotency keys, marker collision, implementation gate on capture). This is not Atlas's high-impact approval ledger. There is no `approve-operation` flow.
+Writes go through the same gates as the CLI (queue state machine, paused-project claim / submit / **poll-result / complete / fail** refusal, empty idempotency keys, marker collision, implementation gate on capture). This is not Atlas's high-impact approval ledger. There is no `approve-operation` flow.
 
 The `arthur-loop` MCP prompt (and the `/arthur-loop` slash command) interviews for advisor / executor / tracker, calls `arthur.loop.create`, then `arthur.follow.run`.
 

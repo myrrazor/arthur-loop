@@ -58,6 +58,8 @@ class LoopCreateTests(unittest.TestCase):
             self.assertIn("Checkout should not lie", (Path(tmp) / "projects/SHOP/state.md").read_text(encoding="utf-8"))
             self.assertTrue((Path(tmp) / "adapters/advisor/ADAPTER.md").is_file())
             self.assertIn("Grok", (Path(tmp) / "adapters/advisor/ADAPTER.md").read_text(encoding="utf-8"))
+            config = json.loads((Path(tmp) / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["tracker"]["project_map"]["SHOP"], "SHOP")
 
             listed = list_loops(Path(tmp))
             self.assertEqual(listed["projects"][0]["project_id"], "SHOP")

@@ -11,9 +11,11 @@ from unittest.mock import patch
 
 from arthur_loop.cli import main
 from arthur_loop.grok_client import (
+    folder_trust_recorded,
     grant_folder_trust,
     mcp_add_argv,
     mcp_add_command,
+    parse_toml_server,
     probe,
     prompt_argv,
     register_mcp,
@@ -146,6 +148,65 @@ class GrokLoadTests(unittest.TestCase):
             self.assertIn(".grok/skills/arthur-loop", report["skill_path"])
             self.assertFalse(report.get("grok_binary"))
             self.assertIn("not on PATH", report["note"])
+
+    def test_parse_toml_server_accepts_multiline_args(self) -> None:
+        text = (
+            "[mcp_servers.arthur-loop]\n"
+            'command = "arthur"\n'
+            "args = [\n"
+            '  "mcp",\n'
+            '  "serve",\n'
+            '  "--tool-name-style",\n'
+            '  "portable",\n'
+            "]\n"
+        )
+        entry = parse_toml_server(text)
+        self.assertEqual(entry["command"], "arthur")
+        self.assertEqual(entry["args"], ["mcp", "serve", "--tool-name-style", "portable"])
+
+    def test_probe_does_not_crash_on_multiline_toml(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill = root / ".grok/skills/arthur-loop"
+            skill.mkdir(parents=True)
+            (skill / "SKILL.md").write_text("# skill\n", encoding="utf-8")
+            (root / ".grok/config.toml").write_text(
+                "[mcp_servers.arthur-loop]\n"
+                'command = "arthur"\n'
+                "args = [\n"
+                '  "mcp",\n'
+                '  "serve",\n'
+                '  "--tool-name-style",\n'
+                '  "portable",\n'
+                "]\n",
+                encoding="utf-8",
+            )
+            with patch("arthur_loop.grok_client.grok_binary", return_value=None):
+                report = probe(root)
+            self.assertNotIn("error", report.get("mcp_entry") or {})
+            self.assertEqual(report["mcp_entry"]["command"], "arthur")
+            self.assertTrue(report["config_matches"])
+
+    def test_trust_enxio_after_grant_is_success(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "instance"
+            home = Path(tmp) / "home"
+            root.mkdir()
+            (home / ".grok").mkdir(parents=True)
+
+            def boom(*_args, **_kwargs):
+                (home / ".grok/trusted_folders.toml").write_text(
+                    f'trusted = ["{root.resolve()}"]\n', encoding="utf-8"
+                )
+                raise OSError(6, "No such device or address")
+
+            with patch("arthur_loop.grok_client.grok_binary", return_value="/bin/grok"):
+                with patch("arthur_loop.grok_client.Path.home", return_value=home):
+                    result = grant_folder_trust(root, runner=boom)
+            self.assertTrue(result["trusted_folder"])
+            self.assertEqual(result["status"], "trusted_folder")
+            self.assertIn("grant", result["note"].lower())
+            self.assertTrue(folder_trust_recorded(root, home=home))
 
 
 if __name__ == "__main__":

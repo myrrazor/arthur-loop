@@ -31,8 +31,92 @@ def ensure_project_not_paused(root: Path, project_id: str) -> None:
     if project_id in paused:
         raise ValueError(
             f"project {project_id} is paused by an open human decision; "
-            "answer or clear it before claiming work (`arthur decision list`)"
+            "answer or clear it before claiming, submitting, polling, "
+            "completing, or failing work (`arthur decision list`)"
         )
+
+
+def poll_job(
+    root: Path,
+    job_id: str,
+    *,
+    marker_found: bool,
+    status: str | None = None,
+    holder: str,
+    ttl_minutes: int = 15,
+    keep_lock: bool = False,
+    now=None,
+    data: dict[str, Any] | None = None,
+    error: str | None = None,
+    output_artifact_paths: list[str] | None = None,
+):
+    """Record a poll. Refused when the project is paused."""
+
+    from arthur_loop.browser_lock import acquire_lock, release_lock
+
+    ledger = QueueLedger(root)
+    resolved = status or ("completed" if marker_found else "waiting_for_chatgpt")
+    job = ledger.check_transition(job_id, resolved)
+    ensure_project_not_paused(root, job.project_id)
+    acquire_lock(root, holder, ttl_minutes=ttl_minutes, now=now)
+    job = ledger.record_poll_result(
+        job_id,
+        marker_found=marker_found,
+        status=resolved,
+        now=now,
+        data=data,
+        error=error,
+        output_artifact_paths=output_artifact_paths,
+    )
+    if resolved in {"completed", "completed_with_warnings"}:
+        ledger.append_event(
+            job_id,
+            "job_completed",
+            {"status": resolved, "artifact_paths": output_artifact_paths or []},
+            at=now,
+        )
+    if not keep_lock:
+        release_lock(root, holder, now=now)
+    return job
+
+
+def complete_job(
+    root: Path,
+    job_id: str,
+    *,
+    now=None,
+    warning: str | None = None,
+    output_artifact_paths: list[str] | None = None,
+):
+    """Finish a submitted job. Refused when the project is paused."""
+
+    ledger = QueueLedger(root)
+    status = "completed_with_warnings" if warning else "completed"
+    job = ledger.check_transition(job_id, status)
+    ensure_project_not_paused(root, job.project_id)
+    job = ledger.transition(
+        job_id,
+        status,
+        now=now,
+        error=warning,
+        output_artifact_paths=output_artifact_paths,
+    )
+    ledger.append_event(
+        job_id,
+        "job_completed",
+        {"status": status, "artifact_paths": output_artifact_paths or []},
+        at=now,
+    )
+    return job
+
+
+def fail_job(root: Path, job_id: str, *, error: str, now=None):
+    """Mark a job failed. Refused when the project is paused."""
+
+    ledger = QueueLedger(root)
+    job = ledger.check_transition(job_id, "failed")
+    ensure_project_not_paused(root, job.project_id)
+    return ledger.transition(job_id, "failed", now=now, error=error)
 
 
 def claim_job(
@@ -135,9 +219,33 @@ def apply_role_updates(
         _copy_tree(adapters_pkg / "executors" / executor, root / "adapters/executor")
     if tracker:
         data.setdefault("tracker", {})["adapter"] = tracker
+        if tracker == "atlas-tasker":
+            _fill_project_map(data)
     if data:
         write_user_config(root, data)
     return load_config(root)
+
+
+def _fill_project_map(data: dict[str, Any], atlas_key: str | None = None) -> dict[str, str]:
+    """Write a usable Atlas key for every known Arthur project. No silent empty trap."""
+
+    from arthur_loop.atlas_board import default_atlas_key
+
+    tracker = data.setdefault("tracker", {})
+    mapping = dict(tracker.get("project_map") or {})
+    if not isinstance(mapping, dict):
+        mapping = {}
+    for item in data.get("projects") or []:
+        if not isinstance(item, dict):
+            continue
+        pid = str(item.get("project_id") or "").strip()
+        if not pid:
+            continue
+        existing = str(mapping.get(pid) or item.get("atlas_project") or "").strip()
+        mapping[pid] = atlas_key or existing or default_atlas_key(pid)
+    tracker["project_map"] = mapping
+    data["tracker"] = tracker
+    return {str(k): str(v) for k, v in mapping.items()}
 
 
 def _next_job_id(root: Path, project_id: str, reserved: set[str] | None = None) -> str:
@@ -220,7 +328,10 @@ def ensure_project(root: Path, project_id: str, *, goal: str = "") -> dict[str, 
             }
         )
         data["projects"] = projects
-        write_user_config(root, data)
+    tracker = data.get("tracker") or {}
+    if isinstance(tracker, dict) and tracker.get("adapter") == "atlas-tasker":
+        _fill_project_map(data)
+    write_user_config(root, data)
     return {"project_id": project_id, "state_path": state_rel, "created": created}
 
 

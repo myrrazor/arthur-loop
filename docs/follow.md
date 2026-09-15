@@ -24,7 +24,7 @@ MCP: `arthur.follow.run` / portable `arthur_follow_run`.
 
 ## What stays human-gated (honest)
 
-- An **open human decision** pauses that project. Answer it; follow will not skip it.
+- An **open human decision** pauses that project. Answer it; follow will not skip it. Pause also refuses `queue poll-result`, `complete`, and `fail` (exit 2).
 - **chatgpt-browser** and **manual** adapters have no headless transport. Follow claims, writes `runtime/follow/<job>.inbox.md`, and exits 3.
 - **Implementation-gate NO-GO.** Follow will not invent `APPROVE_PLAN`.
 - A missing or failing agent CLI (not on PATH, not logged in).

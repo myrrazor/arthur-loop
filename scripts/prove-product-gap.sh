@@ -31,7 +31,7 @@ echo "== 3. Atlas next/walk =="
 echo "arthur tracker next --json"
 echo "arthur tracker queue --json"
 echo "arthur tracker walk --dry-run"
-echo "Decision Atlas key: set tracker.project_map {\"DEMO_APP\":\"DEMO\"} or --project DEMO"
+echo "Decision Atlas key: init --project-id / loop create writes MY_APP → MY; or set tracker.project_map"
 arthur tracker next --json || true
 
 echo "== 4. Install honesty =="

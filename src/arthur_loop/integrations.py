@@ -186,7 +186,7 @@ def _instruction_block(target: str) -> str:
         f"1. Read `{spec['skill_dir']}/SKILL.md`.\n"
         f"2. Use `/arthur-loop` (or the skill) to pick advisor / executor / tracker and create a loop.\n"
         f"3. Drive the loop through MCP or the `arthur` CLI: status, follow, queue claim/submit, capture, gate, decision.\n"
-        f"4. Never hand-edit `queue/*.jsonl`. Never claim or submit a job on a project paused by an open human decision.\n"
+        f"4. Never hand-edit `queue/*.jsonl`. Never claim, submit, poll, complete, or fail a job on a project paused by an open human decision.\n"
         f"\n"
         f"{mcp_hint} "
         + (

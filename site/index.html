@@ -8,14 +8,14 @@
   <meta name="color-scheme" content="light dark" />
   <meta name="robots" content="index, follow" />
   <meta name="googlebot" content="index, follow" />
-  <link rel="canonical" href="https://arthur-loop.vercel.app/" />
+  <link rel="canonical" href="https://arthurloop.com/" />
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://arthur-loop.vercel.app/" />
+  <meta property="og:url" content="https://arthurloop.com/" />
   <meta property="og:title" content="Arthur Loop — File-first AI dev loop control plane" />
   <meta property="og:description" content="Durable queues, approval gates, local state, and human decisions for long-running AI dev loops." />
-  <meta property="og:image" content="https://arthur-loop.vercel.app/og.png" />
+  <meta property="og:image" content="https://arthurloop.com/og.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
   <meta property="og:image:alt" content="Arthur Loop wordmark beside a real terminal status view with queued work and a human decision gate." />
@@ -23,7 +23,7 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Arthur Loop — File-first AI dev loop control plane" />
   <meta name="twitter:description" content="Durable queues, approval gates, local state, and human decisions for long-running AI dev loops." />
-  <meta name="twitter:image" content="https://arthur-loop.vercel.app/og.png" />
+  <meta name="twitter:image" content="https://arthurloop.com/og.png" />
 
   <script type="application/ld+json">
   {
@@ -31,7 +31,7 @@
     "@type": "SoftwareApplication",
     "name": "Arthur Loop",
     "description": "File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.",
-    "url": "https://arthur-loop.vercel.app/",
+    "url": "https://arthurloop.com/",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, Linux",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
@@ -78,7 +78,7 @@
       {
         "@type": "Question",
         "name": "How do I install this development branch?",
-        "acceptedAnswer": { "@type": "Answer", "text": "The three commands on this page install default git HEAD (usually main; last tag v0.1.0). That public tree has no arthur follow, no MCP server, and no Atlas walk. This unreleased branch adds those: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'. arthur --version still reports 0.1.0 until the next tag." }
+        "acceptedAnswer": { "@type": "Answer", "text": "The three commands on this page install default git HEAD (usually main; last tag v0.1.0). That public tree has no arthur follow, no MCP server, and no Atlas walk. There is no tagged v0.2.0 release; arthur --version prints arthur 0.1.0. This unreleased branch adds those: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'." }
       }
     ]
   }
@@ -296,7 +296,7 @@
       <a class="brand" href="#top" aria-label="Arthur Loop home"><img src="logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
         <a href="#proof">Demo</a>
-        <a href="https://github.com/myrrazor/arthur-loop/tree/main/docs">Docs</a>
+        <a href="docs/index.html">Docs</a>
         <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="#install">Install</a>
       </div>
@@ -412,7 +412,7 @@
               </div>
             </div>
           </div>
-          <p class="after-install">Then run <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. The three commands above install main / v0.1.0: a file cockpit (queue, capture, gate, status, web). They do not install <code>arthur follow</code>, MCP, or Atlas walk. Those are on the unreleased branch in the FAQ.</p>
+          <p class="after-install">Then run <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. The three commands above install main / v0.1.0: a file cockpit (queue, capture, gate, status, web). They do not install <code>arthur follow</code>, MCP, or Atlas walk, and they are not a working auto-follow in minutes. Those commands live on the unreleased branch in the FAQ. Public main has no <code>install.ps1</code> (that URL 404s). Canonical site: <a href="https://arthurloop.com/">arthurloop.com</a> — not arthur-loop.vercel.app.</p>
         </div>
       </div>
     </section>
@@ -430,7 +430,7 @@
           <details><summary>Which platforms are supported?</summary><p>The Python CLI is exercised on macOS and Linux with Python 3.9 or newer. The file formats are portable, but locks and browser adapters are not yet tested on Windows. ArthurBar requires macOS 14 or newer.</p></details>
           <details><summary>How do I update or uninstall it?</summary><p>Repeat the pipx, uv, or curl install command to update. Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs can be removed by deleting <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p></details>
           <details><summary>Why not use a shell script or a workflow engine?</summary><p>Arthur Loop is for the trust seams around AI work: saving advisor output before acting on it, validating control blocks, refusing duplicate jobs, preserving review gates, and pausing only the project that needs a human. It stays small enough to inspect without turning the loop into a hosted platform.</p></details>
-          <details><summary>How do I install this development branch?</summary><p>The three commands on this page install default git HEAD (usually main; last tag v0.1.0). That public tree has no arthur follow, no MCP server, and no Atlas walk. This unreleased branch adds those: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'. arthur --version still reports 0.1.0 until the next tag.</p></details>
+          <details><summary>How do I install this development branch?</summary><p>The three commands on this page install default git HEAD (usually main; last tag v0.1.0). That public tree has no arthur follow, no MCP server, and no Atlas walk. There is no tagged v0.2.0 release; arthur --version prints arthur 0.1.0. This unreleased branch adds those: pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'.</p></details>
         </div>
       </div>
     </section>
@@ -454,7 +454,7 @@
   <footer>
     <div class="wrap">
       <span>Maintained at <a href="https://github.com/myrrazor">@myrrazor</a></span><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop/tree/main/docs">Docs</a><span>·</span>
+      <a href="docs/index.html">Docs</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop">GitHub</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
