@@ -105,10 +105,10 @@ Ask, one topic at a time, and keep it conversational:
    reviews), browser-advisor (a browser AI like ChatGPT Pro plans/reviews).
    Confirm or change the adapters accordingly in `config/arthur-loop.json`
    (valid advisors: {known_advisors}; executors: {known_executors}). If they
-   want an agent with no shipped adapter (e.g. Gemini or Grok), author
+   want an agent with no shipped adapter (e.g. Gemini or Goose), author
    `adapters/advisor/ADAPTER.md` or `adapters/executor/ADAPTER.md` for it
    yourself, following `docs/adapters.md` — the contract is a runbook + the
-   standard control blocks, no core code.
+   standard control blocks, no core code. Grok Build has a shipped pack.
 2. **Review strictness.** What blocks a sprint: P0/P1 only, or any finding?
    When must a human approve — every implementation handoff, or only flagged
    ones? Record the answers in a new `FLOW.md` at the instance root.
@@ -125,8 +125,10 @@ Ask, one topic at a time, and keep it conversational:
 - Update `config/arthur-loop.json` to match. Validate by running `arthur status`.
 - Report to your session registry: `arthur status set --session-id master
   --role master --state working --activity "setting up the loop"`.
-- If a project is ready, seed its first job with `arthur queue create` and walk
-  the human through one full planning cycle per the skill.
+- If a project is ready, create the loop (`arthur loop create --project-id …`)
+  or seed its first job with `arthur queue create` and walk the human through
+  one full planning cycle per the skill. Prefer MCP tools when this client
+  loaded `arthur mcp serve`.
 
 ## Hard rules (from the skill — these override enthusiasm)
 
@@ -301,9 +303,10 @@ def seed_agent_kickoff(
     (setup_dir / "KICKOFF.md").write_text(kickoff, encoding="utf-8")
 
     seeded: list[str] = ["agent-setup/KICKOFF.md", "agent-setup/skill/"]
-    if main.skills_dir:
-        _copy_tree(seed_pkg, root / main.skills_dir / "arthur-loop")
-        seeded.append(f"{main.skills_dir}/arthur-loop/")
+    skill_dest = main.skill_install_path()
+    if skill_dest:
+        _copy_tree(seed_pkg, root / skill_dest)
+        seeded.append(skill_dest.rstrip("/") + "/")
     if main.instructions_file:
         pointer = root / main.instructions_file
         if not pointer.exists():
@@ -451,7 +454,7 @@ def _run_init(args: argparse.Namespace) -> int:
         "version": 2,
         "advisor": {"adapter": advisor},
         "executor": {"adapter": executor},
-        "tracker": {"adapter": tracker},
+        "tracker": {"adapter": tracker, "project_map": {}},
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
         "quota": quota_config,
         "reserve_policy": {"minimum_reserve_percent": float(args.reserve_percent)},
@@ -502,6 +505,18 @@ def _run_init(args: argparse.Namespace) -> int:
             detected=detected,
         )
 
+    installed: list[str] = []
+    if not getattr(args, "no_integrations", False):
+        from arthur_loop.integrations import default_install_targets, install_targets
+
+        targets = default_install_targets(root)
+        if main and main.integration_target and main.integration_target not in targets:
+            targets.append(main.integration_target)
+        if targets:
+            for result in install_targets(root, targets, include_mcp=True):
+                installed.extend(result.written + result.updated)
+                seeded.extend(result.written)
+
     if args.demo:
         seed_demo(root)
 
@@ -515,6 +530,12 @@ def _run_init(args: argparse.Namespace) -> int:
     if governor:
         governor_note += f"   quota source: {quota_provider}" + (f" ({quota_path})" if quota_path else "")
     print(f"  governor: {governor_note}   heartbeat: {'on' if heartbeat else 'off'}")
+    if installed:
+        print("\nIntegrations written (restart the client; written is not connected):")
+        for path in installed[:12]:
+            print(f"  • {path}")
+        if len(installed) > 12:
+            print(f"  • … {len(installed) - 12} more")
     if seeded:
         print("\nSeeded for your main agent: " + ", ".join(seeded))
         print("\nHand over to it now — it will interview you and finish the setup:")
@@ -633,6 +654,11 @@ def add_init_parser(subparsers: Any, add_root: Any = None) -> None:
                       help="Where quota numbers come from (default auto: codexbar when installed)")
     init.add_argument("--no-heartbeat", action="store_true")
     init.add_argument("--no-kickoff", action="store_true", help="Skip seeding the main agent's setup interview")
+    init.add_argument(
+        "--no-integrations",
+        action="store_true",
+        help="Skip writing client skills, slash commands, and MCP config",
+    )
     init.add_argument("--reserve-percent", type=float, default=5.0)
     init.add_argument("--demo", action="store_true", help="Seed sample projects, a job, sessions, and a decision")
     init.add_argument("--force", action="store_true")

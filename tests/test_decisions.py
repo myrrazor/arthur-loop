@@ -25,7 +25,7 @@ T0 = datetime(2026, 7, 2, 12, 0, tzinfo=UTC)
 
 INIT_ARGS = [
     "--yes", "--main-agent", "none", "--advisor", "manual", "--executor", "manual",
-    "--tracker", "none", "--no-governor",
+    "--tracker", "none", "--no-governor", "--no-integrations",
 ]
 
 

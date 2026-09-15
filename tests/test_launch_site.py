@@ -89,6 +89,8 @@ class LaunchSiteTests(unittest.TestCase):
     def test_launch_copy_and_install_commands_stay_in_sync(self) -> None:
         self.assertIn(ONE_LINER, self.readme)
         self.assertIn(ONE_LINER, self.index)
+        self.assertIn('Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>', self.index)
+        self.assertNotRegex(self.index, r'href="[^"]+"@')
         for command in INSTALL_COMMANDS:
             self.assertIn(command, self.readme)
             self.assertIn(command, self.index)
@@ -129,6 +131,9 @@ class LaunchSiteTests(unittest.TestCase):
             (ROOT / "site/logo.svg").read_bytes(),
             (ROOT / "assets/arthur-loop-wordmark.svg").read_bytes(),
         )
+        self.assertTrue((ROOT / "site/create-loop-wizard.png").is_file())
+        self.assertTrue((ROOT / "docs/assets/how-it-works.mp4").is_file())
+        self.assertLess((ROOT / "site/create-loop-wizard.png").stat().st_size, 2_000_000)
 
 
 if __name__ == "__main__":

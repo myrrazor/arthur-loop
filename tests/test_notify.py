@@ -88,7 +88,7 @@ class WatchEventTests(unittest.TestCase):
 
 INIT_ARGS = [
     "--yes", "--main-agent", "none", "--advisor", "manual", "--executor", "manual",
-    "--tracker", "none", "--no-governor",
+    "--tracker", "none", "--no-governor", "--no-integrations",
 ]
 
 

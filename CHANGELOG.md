@@ -6,19 +6,51 @@ All notable changes to Arthur Loop will be documented here. The format follows
 
 ## [Unreleased]
 
-Hardening pass after the first external alpha review. The theme: gates the product claimed are now checked by the core, and the docs describe what the code does.
+Product-gap pass after the hardening review: Arthur Loop now installs into coding agents the way Atlas Tasker does (skills where those clients load them, plus MCP registration), agents can create and drive a loop without a human typing every hop, Atlas boards are a first-class read path, and the web console has an honest create-loop wizard.
+
+Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, auto-follow, Atlas next/walk, install honesty, and the how-it-works video.
+
+Hostile re-test of tip `a83b29b` was ALMOST. This revision fixes Grok Build 1.0.30 prompt argv (`grok --always-approve -p`, not `-p --always-approve`), public-install marketing (main / v0.1.0 has no follow/MCP/walk), grok-on-PATH test isolation, empty `tracker.project_map` after init, and documents / optionally writes `grok --trust`.
 
 ### Added
 
+- Stdio MCP server (`arthur mcp serve`) with read tools (status, tick, queue, gate, decision, loop, board) and gated writes (queue, capture, decision, loop create, board open-jobs). Dotted names plus Grok-safe portable names (`arthur_status`). `/arthur-loop` prompt.
+- `arthur integrations detect|install|status|probe` — writes skills, slash commands, and MCP config for Claude Code, Codex, Cursor, and Grok Build. Grok skill is `.grok/skills/arthur-loop`. `grok mcp add` when `grok` is on PATH (trusted, not just written toml).
+- `arthur follow` / MCP `arthur.follow.run` — auto-follow: claim → invoke → submit → capture → gate → next hop.
+- `arthur loop create|list` — project + first queue job. Shared by CLI, web wizard, and MCP. Not a graph composer.
+- Atlas board adapter: `arthur tracker next` / `queue` / `walk` / `board` / `open-jobs`. Ready/in_progress only (`in_review` is not opened). Arthur `project_id` maps to an Atlas key via `tracker.project_map`.
+- How-it-works video (`docs/assets/how-it-works.mp4`) and create-loop wizard shot on the launch site.
+- [docs/install.md](docs/install.md) — version honesty and how to install this branch.
+- Grok Build advisor and executor adapter packs.
+- Web console **+ Loop** wizard and `POST /api/actions/create-loop`.
+- Cursor as an integration target (skills + MCP). No advisor/executor pack — `solo`/`pair` still refuse it.
+- Docs: [how-it-works](docs/how-it-works.md), [MCP](docs/mcp.md), [integrations](docs/integrations.md).
 - `arthur decision open|answer|clear|list` — the CLI path for human decisions; `open` also runs the tracker's `open_decision` template.
 - `arthur gate implementation --project-id X` — GO/NO-GO computed from saved artifacts (exit 0/3).
 - `arthur queue cancel` and `arthur lock break [--force]`.
 - `arthur watch --quiet`; `watch` persists its last observation so `--once` from cron only reports changes.
 - `manual` advisor and executor packs now ship prompt files.
-- Regression tests for every item below; the README quickstart runs end to end in `tests/test_quickstart.py`.
+- Regression tests for the items below; the README quickstart runs end to end in `tests/test_quickstart.py`.
+
+### Fixed
+
+- Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).
+- Duplicate `expected_marker` across different job ids is refused; a blank marker is treated as omitted.
+- `queue claim` and `queue submit` (CLI and MCP) refuse a project paused by an open human decision.
+- Grok follow/probe argv is `grok --always-approve -p PROMPT` (1.0.30). `-p --always-approve` does not run the prompt.
+- Public README/site/FAQ no longer claim that the three main / v0.1.0 install commands produce MCP, `arthur follow`, or Atlas walk.
+- Tests that write Grok integrations isolate `grok_binary` so a host `grok` on PATH cannot change assertions.
+- `arthur init` always writes `tracker.project_map: {}`.
+- `arthur integrations install` documents Grok folder trust and runs `grok --trust` unless `--no-trust-folder` (untrusted folder = project MCP disconnected).
+- `arthur integrations install --force` no longer replaces the whole `AGENTS.md` (managed blocks only).
+- Integration detect no longer treats `~/.cursor` / `~/.grok` as "found" without the binary.
+- `arthur tracker` RuntimeError from a failed `tracker --json` is `error:` exit 2, not a traceback.
+- `queue recover` of a queued/parked job no longer steals another manager's live lease via the default `--holder` hint.
 
 ### Changed
 
+- `arthur init` writes client integrations by default (`--no-integrations` skips).
+- Web console: six human actions (the wizard is the sixth). Canvas copy says status map, not graph composer.
 - The queue is a state machine: illegal transitions (complete from `queued`, claim a finished job, revive a terminal job) are refused with exit 2.
 - `queue create` refuses a reused `--idempotency-key`, not just a duplicate job id. Ledger and lease writes take a POSIX `flock` so concurrent CLI runs cannot both pass a uniqueness check.
 - `queue claim` records `claimed_by`; `queue recover` releases the lease of the manager that claimed the job (crash after claim no longer blocks the loop until the TTL expires). A refused `claim`/`poll-result` never takes the lease.

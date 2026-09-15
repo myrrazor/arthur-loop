@@ -1,6 +1,6 @@
 # Adapter Contract
 
-Arthur Loop's core is transport-agnostic: a durable job queue, an artifact store with control-block validation, a tick classifier, a status dashboard, a browser/advisor lock, and optional quota + tracker hooks. Adapters supply the transport — and an adapter is a runbook plus a prompt pack, not code.
+Arthur Loop's core is transport-agnostic: a durable job queue, an artifact store with control-block validation, a tick classifier, a status dashboard, a browser/advisor lock, optional quota, and tracker hooks. Adapters supply the transport — and an adapter is a runbook plus a prompt pack, not code.
 
 ## Advisor adapter
 
@@ -8,7 +8,7 @@ Consumes: a rendered prompt (markdown) for a queue job.
 Produces: a saved artifact (`arthur capture --kind next-plan-request|plan-review|sprint-review`) whose text ends in a control block (see `src/arthur_loop/seed/skill/references/control-blocks.md`).
 Must: respect the lock, respect the polling cadence, save the raw response before acting on it, and stop the project when `capture` exits `3` (the artifact was quarantined or asked for a human; a decision is already open).
 
-Shipped: `chatgpt-browser` (the original transport — a user-controlled browser session, fragile by nature because UIs change), `codex` and `claude-code` (headless, synchronous: `codex exec` / `claude -p`), `manual` (a human and two folders — also the quickest way to feel the loop). All four ship the same three prompts; only the runbook differs.
+Shipped: `chatgpt-browser` (the original transport — a user-controlled browser session, fragile by nature because UIs change), `codex`, `claude-code`, and `grok` (headless when the CLI supports it: `codex exec` / `claude -p` / `grok --always-approve -p`), `manual` (a human and two folders — also the quickest way to feel the loop). All five ship the same three prompts; only the runbook differs.
 
 ## Executor adapter
 
@@ -18,29 +18,28 @@ Must: run `arthur gate implementation --project-id <ID>` and proceed only on GO;
 
 What the core enforces regardless of the runbook: a plan whose block says `IMPLEMENTATION_STARTED: true` is quarantined, and an implementation handoff captured while the gate is NO-GO is quarantined. Both open a human decision that pauses the project.
 
-Shipped: `codex`, `claude-code`, `manual` (all with `prompts/plan-only.md` and `prompts/implementation-handoff.md`).
+Shipped: `codex`, `claude-code`, `grok`, `manual` (all with `prompts/plan-only.md` and `prompts/implementation-handoff.md`).
 
-Not shipped: packs for Gemini, Grok, or Goose. `arthur agents` detects those CLIs so `arthur init` can seed their instruction files, but the wizard wires `manual` for both roles and says so; `--preset solo`/`pair` refuse them.
+Not shipped: packs for Gemini, Goose, or Cursor. `arthur agents` detects those CLIs so `arthur init` can seed instruction files and integrations; the wizard wires `manual` for both roles and says so; `--preset solo`/`pair` refuse them. Cursor is a first-class **integration** target (skills + MCP), not an advisor/executor pack — there is no honest headless `cursor exec` in this release.
 
 ## Tracker adapter
 
-Honest scope: a tracker adapter is three command templates, rendered to argv (never a shell) and run from the **instance root** — not an MCP server, not a webhook, and not where gate logic lives. Operations: `open_decision`, `close_decision`, `sprint_gate`. Placeholders: `{project}`, `{title}`, `{reason}`, `{ticket_id}`.
+Two paths, in this order:
 
-- `atlas-tasker` — presets for [Atlas Tasker](https://github.com/myrrazor/atlas-tasker)'s `tracker` CLI (`tracker ticket create` / `tracker ticket move`). Verify the flags against your installed release.
-- `command` — you supply the templates in config; any ticket tool with a CLI works:
+1. **Board read (primary, Atlas Tasker).** `arthur tracker board` and MCP `arthur.board` run `tracker board --json` from the instance root and flatten `columns`. `arthur tracker open-jobs` / `arthur.board.open_jobs` create queue jobs for ready/assigned (`ready`, `in_progress`) tickets. Idempotency key is `atlas:<ticket_id>`, so a second pass will not fork the queue. Requires the `tracker` binary on PATH.
+2. **Argv templates (fallback).** Three command templates, rendered to argv (never a shell) and run from the instance root: `open_decision`, `close_decision`, `sprint_gate`. Placeholders: `{project}`, `{title}`, `{reason}`, `{ticket_id}`. This is not an MCP server and not where gate logic lives.
 
-      "tracker": {
-        "adapter": "command",
-        "command_templates": {
-          "open_decision": "mytool add --project {project} --name {title}"
-        }
-      }
-
+- `atlas-tasker` — board JSON when `tracker` is installed; argv presets for [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) ticket create/move remain for decision hooks. Verify flags against your installed release.
+- `command` — you supply the templates in config; any ticket tool with a CLI works.
 - `none` — tracker sync disabled; decisions live in `human-decisions/open.md` alone.
 
-Who calls what: `arthur decision open` runs `open_decision` automatically (skip with `--no-tracker`); `close_decision` and `sprint_gate` are for your agents to call through `arthur tracker <action> --value key=value`. Arthur Loop does not parse tracker output or store ticket ids — pass `{ticket_id}` yourself.
+Who calls what: `arthur decision open` still runs the `open_decision` template (skip with `--no-tracker`). Agents should prefer `arthur tracker board` / `open-jobs` for work intake.
 
 Try a template without running it: `arthur tracker open_decision --value project=X --value "title=Pick one" --dry-run`.
+
+## Agent integrations (skills + MCP)
+
+`arthur integrations install` writes skills where each client loads them and registers `arthur mcp serve` in that client's real config. It does not claim the client is connected. See [integrations.md](integrations.md) and [mcp.md](mcp.md).
 
 ## Adding an adapter
 

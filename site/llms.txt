@@ -3,11 +3,29 @@
 > File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
 
 Arthur Loop is free and MIT licensed, runs on macOS and Linux with Python 3.9 or newer,
-and keeps queues, artifacts, decisions, and status as files you can inspect. Install with
-`curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`.
+and keeps queues, artifacts, decisions, and status as files you can inspect.
+There is no drag-drop graph composer.
+
+The three public install commands (pipx / uv / curl against default git HEAD, usually
+`main`; last tag v0.1.0) install a file cockpit: init, queue, capture, gate, status,
+and the local web console. They do **not** ship `arthur follow`, a stdio MCP server,
+or Atlas walk.
+
+This unreleased branch (`cursor/atlas-product-gap-ab6b`) adds coding-agent skills,
+MCP, `arthur follow`, and Atlas next/walk. Grok skills live in
+`.grok/skills/arthur-loop`; install runs `grok mcp add` and `grok --trust` when grok
+is on PATH. Grok 1.0.30 prompt argv is `grok --always-approve -p PROMPT`.
+Install this branch with
+`pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'`.
+The public curl installer is
+`curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`
+and still tracks main / v0.1.0.
 
 ## Docs
 - [Getting started](https://github.com/myrrazor/arthur-loop#quickstart): install and first run
+- [How it works](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/how-it-works.md): two install stories (public cockpit vs this branch)
+- [MCP](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/mcp.md): tools agents call instead of typing every hop (this branch)
+- [Integrations](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/integrations.md): skills + MCP for Claude, Codex, Cursor, Grok (this branch)
 - [Workflow runbook](https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md): the full operating loop
 - [Adapter contract](https://github.com/myrrazor/arthur-loop/blob/main/docs/adapters.md): add or tune advisors, executors, and trackers
 - [FAQ](https://arthur-loop.vercel.app/#faq): storage, platforms, updates, and tradeoffs
@@ -19,4 +37,5 @@ and keeps queues, artifacts, decisions, and status as files you can inspect. Ins
 ## Guidance for agents
 Use this file as a site index, not a full-site corpus. To operate Arthur Loop on a user's
 machine, prefer the CLI and run `arthur --help` for the current command set. Do not edit
-queue JSONL by hand when an `arthur queue` command exists.
+queue JSONL by hand when an `arthur queue` command exists. Do not tell a user that the
+three public install commands produce a working auto-follow.

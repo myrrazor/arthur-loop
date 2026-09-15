@@ -4,7 +4,7 @@
 
 - **Purpose:** File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
 - **Maturity:** Alpha, preparing the v0.1.0 public release.
-- **Surfaces:** Python CLI, localhost web console, native macOS menu bar companion, and static launch site.
+- **Surfaces:** Python CLI, stdio MCP server, localhost web console (status map + create-loop wizard), native macOS menu bar companion, and static launch site.
 - **Model:** Free and MIT licensed.
 
 ## User and job
@@ -28,7 +28,7 @@ On the launch site, their arrival question is: “Does this solve the trust and 
 1. Understand that Arthur Loop coordinates existing tools rather than replacing them.
 2. See the real terminal and web-console state.
 3. Pick pipx, uv, or the shell installer.
-4. Run `arthur init` and hand the generated kickoff to the main agent.
+4. Run `arthur init` (detects agent CLIs, writes skills + MCP where those clients load them) and hand the generated kickoff to the main agent, or create a loop with `arthur loop create`, the web wizard, or `/arthur-loop`.
 
 ## Constraints
 

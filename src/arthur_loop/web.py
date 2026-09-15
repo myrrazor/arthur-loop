@@ -17,6 +17,7 @@ from arthur_loop.browser_lock import BrowserLockError, break_lock, read_lock
 from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision as _answer_decision
 from arthur_loop.decisions import list_decisions
+from arthur_loop.loop_ops import create_loop, wizard_options
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
 from arthur_loop.recovery import recover_job
 from arthur_loop.status import clear_session, collect_status, status_to_dict
@@ -94,7 +95,9 @@ class WebApp:
             "instance": self.root.name or "arthur-loop",
             "advisor": self.config["advisor"]["adapter"],
             "executor": self.config["executor"]["adapter"],
+            "tracker": self.config["tracker"]["adapter"],
         }
+        payload["loopWizard"] = wizard_options(self.root)
         return payload
 
     def _decision_bodies(self) -> dict[str, str]:
@@ -195,9 +198,35 @@ class WebApp:
             idempotency_key=str(body.get("idempotency_key") or "").strip() or None,
         )
         with self._write_lock:
-            # same dedupe rules as the CLI: duplicate id or reused idempotency key → refused
+            # same dedupe rules as the CLI: duplicate id, reused key, colliding marker
             QueueLedger(self.root).create_job(job)
         return job.to_record()
+
+    def create_loop(self, body: dict[str, Any]) -> dict[str, Any]:
+        """Wizard path: project + optional first job. Not a graph composer."""
+
+        project_id = str(body.get("project_id") or "").strip()
+        if not project_id:
+            raise ValueError("project_id is required")
+        seed = body.get("seed_job")
+        if seed is None:
+            seed = True
+        with self._write_lock:
+            record = create_loop(
+                self.root,
+                project_id=project_id,
+                advisor=str(body["advisor"]).strip() if body.get("advisor") else None,
+                executor=str(body["executor"]).strip() if body.get("executor") else None,
+                tracker=str(body["tracker"]).strip() if body.get("tracker") else None,
+                title=str(body.get("title") or "").strip() or None,
+                target_chat_url=str(body.get("target_chat_url") or "manual").strip() or "manual",
+                goal=str(body.get("goal") or ""),
+                seed_job=bool(seed),
+                actor="web-console",
+                reason="create-loop wizard",
+            )
+            self.config = load_config(self.root)
+        return record
 
     def clear_session_action(self, session_id: str) -> dict[str, Any]:
         cleared = clear_session(self.root, session_id)
@@ -342,6 +371,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             if self.path == "/api/actions/create-job":
                 return self._send_json(self.app.create_job(body))
+            if self.path == "/api/actions/create-loop":
+                return self._send_json(self.app.create_loop(body))
             if self.path == "/api/actions/clear-session":
                 return self._send_json(self.app.clear_session_action(str(body.get("session_id", ""))))
             if self.path == "/api/actions/break-lock":
@@ -390,7 +421,7 @@ def cmd_web(args: Any) -> int:
     print(f"arthur web console: {url}")
     print(f"instance: {root}")
     print("localhost only; the token in the URL is this session's key — other local users cannot read or write without it.")
-    print("read-only for agents; humans get five actions. Ctrl+C stops it.")
+    print("read-only for agents; humans get six actions (including the create-loop wizard). Ctrl+C stops it.")
     if not args.no_open:
         webbrowser.open(url)
     try:

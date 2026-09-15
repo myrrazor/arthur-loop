@@ -8,6 +8,8 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
+from unittest.mock import patch
+
 from arthur_loop.cli import main
 
 
@@ -64,6 +66,9 @@ class QuickstartTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self._previous = os.getcwd()
         os.chdir(self._tmp.name)
+        self._grok = patch("arthur_loop.grok_client.grok_binary", return_value=None)
+        self._grok.start()
+        self.addCleanup(self._grok.stop)
 
     def tearDown(self) -> None:
         os.chdir(self._previous)

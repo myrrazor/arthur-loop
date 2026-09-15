@@ -6,8 +6,8 @@ from typing import Any
 
 
 # every id here has a shipped pack under src/arthur_loop/adapters/ (tests enforce it)
-KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "manual"}
-KNOWN_EXECUTORS = {"codex", "claude-code", "manual"}
+KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "grok", "manual"}
+KNOWN_EXECUTORS = {"codex", "claude-code", "grok", "manual"}
 KNOWN_TRACKERS = {"atlas-tasker", "command", "none"}
 
 # any of these makes a directory an Arthur Loop instance; none of them means a

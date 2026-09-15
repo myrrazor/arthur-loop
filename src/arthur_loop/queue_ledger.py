@@ -124,6 +124,32 @@ class IllegalTransition(ValueError):
     """Raised when a job is asked to move along an edge the state machine forbids."""
 
 
+def normalize_idempotency_key(value: str | None) -> str | None:
+    """Return a real key, or None when the caller omitted one.
+
+    An explicit empty or whitespace-only key is a knife: it would bypass the
+    uniqueness check (`if key:`) and let two creates fork the queue. Refuse it.
+    """
+
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(
+            "idempotency key is empty; omit --idempotency-key or pass a non-empty key"
+        )
+    return stripped
+
+
+def normalize_marker(value: str | None) -> str | None:
+    """Treat blank markers as omitted; keep a non-empty marker intact."""
+
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
 def validate_transition(job_id: str, current: str, target: str) -> None:
     """Raise IllegalTransition unless current -> target is a legal queue edge."""
 
@@ -198,6 +224,9 @@ class QueueLedger:
         id is always a conflict: the key exists so retries cannot fork the queue.
         """
 
+        job.idempotency_key = normalize_idempotency_key(job.idempotency_key)
+        job.expected_marker = normalize_marker(job.expected_marker)
+
         with self._exclusive():
             jobs = self.latest_jobs()
             if job.idempotency_key:
@@ -206,6 +235,13 @@ class QueueLedger:
                         raise ValueError(
                             f"idempotency key {job.idempotency_key!r} is already used by "
                             f"{other.job_id} ({other.status}); reuse the existing job or pick a new key"
+                        )
+            if job.expected_marker:
+                for other in jobs.values():
+                    if other.job_id != job.job_id and other.expected_marker == job.expected_marker:
+                        raise ValueError(
+                            f"expected marker {job.expected_marker!r} is already used by "
+                            f"{other.job_id}; reuse that job or pick a unique marker"
                         )
             if job.job_id in jobs and not force:
                 existing = jobs[job.job_id]

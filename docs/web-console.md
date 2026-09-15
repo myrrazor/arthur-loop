@@ -22,11 +22,11 @@ directory that is not an Arthur Loop instance.
 
 ## What it shows
 
-- **Loop canvas** — the pipeline as a live map (advisor → queue → in flight →
-  executor → review gate → human), with counts and badges flowing over fixed
-  nodes. The human-decision node is the loudest thing on screen. Drag to pan,
-  scroll to zoom, `Fit` to recenter. It never draws one node per job; work is
-  traffic on the map.
+- **Loop canvas** — a **status map** of the fixed pipeline (advisor → queue →
+  in flight → executor → review gate → human), with counts and badges flowing
+  over those nodes. The human-decision node is the loudest thing on screen.
+  Drag to pan, scroll to zoom, `Fit` to recenter. It is not a graph composer
+  and never draws one node per job; work is traffic on the map.
 - **Board** — the queue as kanban columns by status.
 - **Queue** — the dense table twin of the terminal dashboard, with recover
   actions inline.
@@ -43,7 +43,7 @@ project never hides due work in another.
 
 ## What a human can do here (and what they can't)
 
-The console exposes exactly five write actions, each a thin wrapper over the same
+The console exposes exactly six write actions, each a thin wrapper over the same
 durable-state paths the CLI uses:
 
 1. **Answer a decision** — records the answer into `human-decisions/open.md`,
@@ -52,10 +52,13 @@ durable-state paths the CLI uses:
 2. **Recover a job** — parks a stale job as `needs_recovery`, optionally requeues,
    and releases the browser lease of the manager that claimed it. Same code path
    as `arthur queue recover`. Finished jobs are refused.
-3. **Create a job** — the `arthur queue create` form, with the same dedupe guard
-   on job id and idempotency key.
-4. **Clear a session** — drops a finished session from the dashboard.
-5. **Break a stale lock** — removes a browser lock whose holder went quiet past
+3. **Create a loop** — the `arthur loop create` wizard: project id, advisor /
+   executor / tracker, optional first queue job. Same code path as the CLI and
+   MCP. The copy on the form says this is not a drag-drop graph composer.
+4. **Create a job** — the `arthur queue create` form, with the same dedupe guard
+   on job id, idempotency key, and colliding markers.
+5. **Clear a session** — drops a finished session from the dashboard.
+6. **Break a stale lock** — removes a browser lock whose holder went quiet past
    its TTL. A fresh lock is refused; you can't yank the browser from a live agent
    (the CLI's `arthur lock break --force` can, for a manager you know is dead).
 

@@ -42,9 +42,19 @@ curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.s
 
 From a checkout, `./install.sh` installs that checkout. Run `arthur --version` to confirm the installed release.
 
+The three commands above track default git HEAD (usually `main`). The last tag is **v0.1.0** — `arthur --version` prints that package version until the next tag. That public tree is a **file cockpit**: `init`, queue, capture, gate, `status`, `arthur web`. It does **not** ship `arthur follow`, the MCP server, or Atlas walk.
+
+To install **this** unreleased branch (integrations, MCP, `arthur follow`, Atlas next/walk):
+
+```bash
+pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
+```
+
+See [docs/install.md](docs/install.md). How it works (video + wizard shot): [docs/how-it-works.md](docs/how-it-works.md). On this branch only: `arthur follow --once` (Grok transport is `grok --always-approve -p PROMPT`).
+
 One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: a queue with a real state machine, saved artifacts, approval gates computed from those artifacts, human-decision escalation, and a scheduler tick that always knows what should happen next.
 
-No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI — built to be operated by coding agents (Codex, Claude Code, whatever you run) without letting them freelance.
+No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI. On this branch, a stdio MCP server is also present so Grok Build, Claude Code, Codex, and Cursor can claim, capture, and gate without a human typing every hop. See [docs/how-it-works.md](docs/how-it-works.md).
 
 > **Status: alpha.** The file formats are plain and the CLI is tested on Linux and macOS, but command names and adapter contracts may still tighten before 1.0. Known limitations are listed in the [FAQ](#faq).
 
@@ -111,12 +121,14 @@ arthur status                                   # -> WAIT; the artifact is index
 | Preset | Shape | Needs |
 | --- | --- | --- |
 | `guided` (default) | Wizard writes a working base with the `manual` adapters; your main agent interviews you and finishes the setup | any agent, or none |
-| `solo` | One agent both plans and implements | an agent with shipped packs: Codex or Claude Code |
+| `solo` | One agent both plans and implements | an agent with shipped packs: Codex, Claude Code, or Grok Build |
 | `pair` | Main agent implements, a second agent reviews | shipped packs for both agents |
 | `browser-advisor` | A browser AI (e.g. ChatGPT Pro) plans/reviews, your main agent implements | any agent (executor is `manual` without a pack) |
 | `custom` | Pick adapters yourself | — |
 
-Shipped adapter packs exist for **Codex** and **Claude Code** (both roles) plus `chatgpt-browser` and `manual`. Gemini, Grok, and Goose are *detected* so the kickoff can seed their instruction files, but no pack ships for them: `solo`/`pair` refuse them with an explanation instead of silently wiring `manual`, and `guided` says plainly that both roles start as `manual` until your agent authors an adapter ([docs/adapters.md](docs/adapters.md)).
+Shipped adapter packs exist for **Codex**, **Claude Code**, and **Grok Build** (both roles) plus `chatgpt-browser` and `manual`. Gemini, Goose, and Cursor are *detected* so integrations can seed skills/MCP; they have no advisor/executor pack: `solo`/`pair` refuse them with an explanation instead of silently wiring `manual`, and `guided` says plainly that both roles start as `manual` until your agent authors an adapter ([docs/adapters.md](docs/adapters.md)).
+
+`arthur init` also writes skills and slash commands **where those clients actually load them** and registers `arthur mcp serve` in `.mcp.json` / `.codex/config.toml` / `.cursor/mcp.json` / `.grok/config.toml`. A written MCP entry is **written**, not connected — restart the client. Use `--no-integrations` to skip that step. Details: [docs/integrations.md](docs/integrations.md), [docs/mcp.md](docs/mcp.md).
 
 ```bash
 mkdir ~/my-loop && cd ~/my-loop
@@ -164,17 +176,17 @@ arthur decision clear  --title "MY_APP Session lifetime?" --note "asked twice"  
 ## The web console
 
 <p align="center">
-  <img src="docs/assets/web-console.png" alt="Arthur Loop web console showing the advisor-to-human canvas, one queued job, and an open auth-scope decision" width="100%">
+  <img src="docs/assets/web-console.png" alt="Arthur Loop web console showing the advisor-to-human status map, the + Loop wizard control, queued work, and an open auth-scope decision" width="100%">
 </p>
 
-`arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **live loop canvas**: the pipeline (advisor → queue → in flight → executor → review gate → human) as a map you pan and zoom, with counts and flow moving over fixed nodes and the human-decision node lit the loudest. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, inspect quarantined artifacts, and clear sessions.
+`arthur web` serves a local, single-operator control surface for one instance — the browser twin of `arthur status`, plus the handful of write actions that genuinely belong to a human. The signature view is a **status map** of the fixed pipeline (advisor → queue → in flight → executor → review gate → human): counts and flow move over those nodes, and the human-decision node is lit the loudest. Drag to pan, scroll to zoom. It is not a graph composer. Alongside it: a kanban board, the dense queue table, an artifact reader, an activity timeline, and an always-on **Needs you** rail where you answer decisions, recover stale jobs, inspect quarantined artifacts, and clear sessions.
 
 ```bash
 arthur web                 # serve this instance, open the browser
 arthur web --root ~/loop --port 8080 --no-open
 ```
 
-Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only; `arthur web` prints a URL carrying a per-process session token, and every read and write over the API requires that token, so another local user cannot read your loop or push its buttons. It exposes exactly five human actions (answer a decision, recover a job, create a job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. Agents own the loop; the console is where you answer the questions only a human can. Full details in [docs/web-console.md](docs/web-console.md).
+Vanilla JS over a stdlib server — no build step, no framework, no npm; it runs on a machine that only has Python. Localhost-only; `arthur web` prints a URL carrying a per-process session token, and every read and write over the API requires that token, so another local user cannot read your loop or push its buttons. It exposes six human actions (answer a decision, recover a job, **create a loop** via a wizard, create a single job, clear a session, break a stale browser lock) and deliberately withholds the agent-owned ones — no claim/submit/poll buttons, no "approve plan" bypass. The **+ Loop** wizard creates a project and the first queue job. It is not a drag-drop graph composer; the canvas is a status map of the fixed pipeline. Agents own claim/capture/gate through MCP or the CLI. Full details in [docs/web-console.md](docs/web-console.md).
 
 ## The menu bar app (macOS)
 
@@ -207,17 +219,26 @@ Notifiers: macOS uses `osascript`; Linux needs `notify-send` (libnotify — `apt
 
 | Piece | Options |
 | --- | --- |
-| Advisor (plans, reviews, approves) | `chatgpt-browser` · `claude-code` · `codex` · `manual` |
-| Executor (implements) | `codex` · `claude-code` · `manual` |
+| Advisor (plans, reviews, approves) | `chatgpt-browser` · `claude-code` · `codex` · `grok` · `manual` |
+| Executor (implements) | `codex` · `claude-code` · `grok` · `manual` |
 | Tracker (tickets) | `atlas-tasker` · `command` (bring your own CLI) · `none` |
 | Quota governor | on/off — sources: [codexbar](https://github.com/steipete/CodexBar) (auto-detected) · your own `command` · a JSON `file` |
 | Heartbeat state files | on/off |
 
-**Trackers.** A tracker adapter is exactly three command templates in config — `open_decision`, `close_decision`, `sprint_gate` — rendered to argv (never a shell) and run from the instance root by `arthur tracker <action>`. There is no MCP, no callback, and no gate logic in it; `arthur decision open` calls `open_decision` for you, the other two are there for your agents to call. If you use [Atlas Tasker](https://github.com/myrrazor/atlas-tasker), presets for its `tracker` CLI ship in the box and `arthur init` points you at its installer; verify the flags against your installed release. Any other CLI tracker works with your own templates. Or pick `none` and decisions live in `human-decisions/open.md` alone.
+**Trackers.** For [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) the primary path is the board: `arthur tracker board --json` / MCP `arthur.board` reads `tracker board --json`, and `arthur tracker open-jobs` opens queue jobs from ready/assigned tickets (`atlas:<ticket_id>` idempotency keys). The three argv templates (`open_decision`, `close_decision`, `sprint_gate`) remain as a fallback — rendered to argv, never a shell, run from the instance root. Gate logic still lives in the artifact store, not the tracker. `arthur decision open` still calls `open_decision`. Any other CLI tracker works with your own templates. Or pick `none` and decisions live in `human-decisions/open.md` alone.
 
-**Advisors.** Each adapter is a runbook plus a prompt pack, not code — all four ship the same prompts, only the transport differs. `chatgpt-browser` drives a logged-in ChatGPT Pro conversation through the browser UI via your own agent; it is the original transport and fragile by nature (UIs change; check the terms of any service you automate). `codex` and `claude-code` run the advisor headlessly (`codex exec` / `claude -p`). `manual` is a human and two folders. The core never depends on browser automation.
+**Advisors.** Each adapter is a runbook plus a prompt pack, not code — the shipped packs share the same prompts, only the transport differs. `chatgpt-browser` drives a logged-in ChatGPT Pro conversation through the browser UI via your own agent; it is the original transport and fragile by nature (UIs change; check the terms of any service you automate). `codex`, `claude-code`, and `grok` run the advisor headlessly when the CLI supports it (`codex exec` / `claude -p` / `grok --always-approve -p`). `manual` is a human and two folders. The core never depends on browser automation.
 
 **Quota.** `auto` uses CodexBar when it is installed and otherwise stays out of the way. `command` accepts any executable that prints CodexBar-shaped JSON; `file` reads the same schema from disk (relative paths resolve against the instance root); `none` disables collection. The core never requires CodexBar.
+
+## Create a loop (terminal, web, or slash)
+
+```bash
+arthur loop create --project-id MY_APP --advisor grok --executor claude-code --tracker atlas-tasker
+arthur web          # + Loop wizard — project + first job, not a graph composer
+```
+
+Inside Claude Code, `/arthur-loop` (or the installed skill) interviews for roles and calls MCP `arthur.loop.create`. Agents then follow claim → capture → gate themselves.
 
 ## The loop, end to end
 
@@ -253,7 +274,7 @@ What it does **not** do: it cannot stop an executor process from editing files. 
 
 **Does it automate ChatGPT?** Only if you choose the `chatgpt-browser` adapter, and then only via your own agent driving your own logged-in browser. Review the terms of the services you automate; the `manual`, `codex`, and `claude-code` adapters are first-class alternatives. (Some identifiers keep their historical ChatGPT names for compatibility — the `waiting_for_chatgpt` status, the `projects/<ID>/artifacts/chatgpt/` directory, `READY_FOR_CHATGPT_REVIEW` — regardless of which advisor you run.)
 
-**Which platforms work?** The Python CLI is tested on Linux and macOS (CI runs both). Known limitations: the cross-process file locks use POSIX `flock` and degrade to no locking on Windows, where nothing is tested; desktop notifications need `osascript` (macOS) or `notify-send` (Linux) and are otherwise reported as unsupported; ArthurBar is macOS 14+ only and has no Linux or Windows equivalent — use `arthur watch` or `arthur status --json` there; only Codex and Claude Code have shipped adapter packs, other detected agents start as `manual`.
+**Which platforms work?** The Python CLI is tested on Linux and macOS (CI runs both). Known limitations: the cross-process file locks use POSIX `flock` and degrade to no locking on Windows, where nothing is tested; desktop notifications need `osascript` (macOS) or `notify-send` (Linux) and are otherwise reported as unsupported; ArthurBar is macOS 14+ only and has no Linux or Windows equivalent — use `arthur watch` or `arthur status --json` there; Codex, Claude Code, and Grok Build have shipped adapter packs; Gemini, Goose, and Cursor start as `manual` for those roles (Cursor still gets skills + MCP).
 
 **How do I update or uninstall it?** Repeat your `pipx install --force`, `uv tool install --force`, or curl command to update. For the curl install, remove `~/.arthur-loop` and `~/.local/bin/arthur` to uninstall; pipx and uv have their usual `uninstall arthur-loop` commands.
 

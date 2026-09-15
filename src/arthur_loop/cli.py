@@ -18,7 +18,7 @@ from arthur_loop.browser_lock import (
     read_lock,
     release_lock,
 )
-from arthur_loop.config import load_config, require_instance
+from arthur_loop.config import KNOWN_ADVISORS, KNOWN_EXECUTORS, KNOWN_TRACKERS, load_config, require_instance
 from arthur_loop.decisions import answer_decision, clear_decision, list_decisions, open_decision
 from arthur_loop.init_cli import add_init_parser
 from arthur_loop.notify import (
@@ -145,22 +145,31 @@ def cmd_queue_create(args: argparse.Namespace) -> int:
 
 
 def cmd_queue_claim(args: argparse.Namespace) -> int:
+    from arthur_loop.loop_ops import claim_job
+
     root = resolve_root(args)
-    ledger = QueueLedger(root)
     # refuse before touching the lease so an illegal claim never leaves a lock behind
-    ledger.check_transition(args.job_id, "claimed")
-    acquire_lock(root, args.holder, ttl_minutes=args.ttl_minutes, now=parse_at(args.at))
-    job = ledger.transition(args.job_id, "claimed", now=parse_at(args.at), holder=args.holder)
+    job = claim_job(
+        root,
+        args.job_id,
+        holder=args.holder,
+        ttl_minutes=args.ttl_minutes,
+        now=parse_at(args.at),
+    )
     print_record(job)
     return EXIT_OK
 
 
 def cmd_queue_submit(args: argparse.Namespace) -> int:
-    root = resolve_root(args)
-    require_lock(root, args.holder)
-    job = QueueLedger(root).transition(args.job_id, "submitted", now=parse_at(args.at))
-    if not args.keep_lock:
-        release_lock(root, args.holder, now=parse_at(args.at))
+    from arthur_loop.loop_ops import submit_job
+
+    job = submit_job(
+        resolve_root(args),
+        args.job_id,
+        holder=args.holder,
+        keep_lock=args.keep_lock,
+        now=parse_at(args.at),
+    )
     print_record(job)
     return EXIT_OK
 
@@ -596,13 +605,62 @@ def _parse_values(pairs: list[str] | None) -> dict[str, str]:
 
 
 def cmd_tracker(args: argparse.Namespace) -> int:
+    from arthur_loop.atlas_board import (
+        open_jobs_from_board,
+        read_board,
+        read_next,
+        read_queue,
+        resolve_atlas_project,
+        tracker_or_fallback,
+        walk_next,
+    )
+
     root = resolve_root(args)
-    result = tracker_run_action(
-        load_config(root),
+    config = load_config(root) if (root / "config/arthur-loop.json").exists() else {}
+    project = args.project or resolve_atlas_project(config, None)
+    if args.tracker_action == "board":
+        record = read_board(root, project=project)
+        print_record(record)
+        return EXIT_OK
+    if args.tracker_action == "next":
+        print_record(read_next(root, actor=getattr(args, "atlas_actor", None)))
+        return EXIT_OK
+    if args.tracker_action == "queue":
+        print_record(read_queue(root, actor=getattr(args, "atlas_actor", None)))
+        return EXIT_OK
+    if args.tracker_action == "walk":
+        print_record(
+            walk_next(
+                root,
+                actor=getattr(args, "atlas_actor", None),
+                project=project,
+                limit=args.limit,
+                dry_run=args.dry_run,
+                open_jobs=not getattr(args, "no_open", False),
+                actor_audit=args.actor,
+                reason=args.reason,
+            )
+        )
+        return EXIT_OK
+    if args.tracker_action == "open-jobs":
+        record = open_jobs_from_board(
+            root,
+            project=project,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            actor=args.actor,
+            reason=args.reason,
+        )
+        print_record(record)
+        return EXIT_OK
+    values = _parse_values(args.value)
+    if args.project and "project" not in values:
+        values["project"] = args.project
+    result = tracker_or_fallback(
+        root,
         args.tracker_action,
         dry_run=args.dry_run,
-        cwd=root,
-        **_parse_values(args.value),
+        **values,
     )
     print_record(result)
     return EXIT_OK if result["status"] in ("ok", "dry_run", "skipped") else EXIT_ERROR
@@ -611,12 +669,32 @@ def cmd_tracker(args: argparse.Namespace) -> int:
 def _build_tracker_parser(subparsers: Any) -> None:
     tracker = subparsers.add_parser(
         "tracker",
-        help="Run one configured tracker command template (rendered to argv, run from the instance root)",
+        help="Atlas board JSON (primary) or one argv template (fallback), always from the instance root",
+        description=(
+            "`next`, `queue`, `walk`, `board`, and `open-jobs` call the Atlas `tracker` CLI "
+            "(`tracker next --json` / `queue` / `board`). open_decision / close_decision / "
+            "sprint_gate still use the three argv templates. Arthur project_id is mapped to "
+            "an Atlas key via tracker.project_map / tracker.project_key — it is not passed through."
+        ),
     )
-    tracker.add_argument("tracker_action", choices=list(TRACKER_ACTIONS))
+    tracker.add_argument(
+        "tracker_action",
+        choices=list(TRACKER_ACTIONS) + ["board", "open-jobs", "next", "queue", "walk"],
+    )
     add_root_argument(tracker)
     tracker.add_argument("--value", action="append", help="key=value template inputs (repeatable)")
     tracker.add_argument("--dry-run", action="store_true")
+    tracker.add_argument("--project", help="Atlas project key (not the Arthur SHOUTY_SNAKE id)")
+    tracker.add_argument("--atlas-actor", help="Atlas actor for next / queue / walk")
+    tracker.add_argument("--no-open", action="store_true", help="walk: list only, do not open jobs")
+    tracker.add_argument("--limit", type=int, default=20, help="Max tickets for open-jobs / walk")
+    tracker.add_argument(
+        "--json",
+        action="store_true",
+        help="Accepted for `tracker board --json` muscle memory; Arthur already prints JSON",
+    )
+    tracker.add_argument("--actor")
+    tracker.add_argument("--reason")
     tracker.set_defaults(func=cmd_tracker)
 
 
@@ -650,14 +728,27 @@ def cmd_decision(args: argparse.Namespace) -> int:
             body = Path(args.body_file).read_text(encoding="utf-8")
         record = open_decision(root, project_id=args.project_id, title=args.title, body=body, now=at)
         if not args.no_tracker:
-            record["tracker"] = tracker_run_action(
-                load_config(root),
-                "open_decision",
-                cwd=root,
-                project=args.project_id,
-                title=record["title"],
-                reason="human decision opened by arthur-loop",
-            )
+            from arthur_loop.atlas_board import resolve_atlas_project, tracker_or_fallback
+
+            config = load_config(root)
+            atlas_project = args.project or resolve_atlas_project(config, args.project_id)
+            if atlas_project:
+                record["atlas_project"] = atlas_project
+                record["tracker"] = tracker_or_fallback(
+                    root,
+                    "open_decision",
+                    project=atlas_project,
+                    title=record["title"],
+                    reason="human decision opened by arthur-loop",
+                )
+            else:
+                record["tracker"] = {
+                    "status": "skipped",
+                    "reason": (
+                        f"Arthur project_id {args.project_id!r} is not an Atlas project key. "
+                        "Set tracker.project_map / tracker.project_key or pass --project."
+                    ),
+                }
             if record["tracker"]["status"] == "error":
                 sys.stderr.write("note: the decision is open in human-decisions/open.md, but the tracker call failed\n")
         print_record(record)
@@ -699,6 +790,10 @@ def _build_decision_parser(subparsers: Any) -> None:
     opener.add_argument("--title", required=True, help="short question, e.g. 'Session lifetime: 24h or 7d?'")
     opener.add_argument("--body", help="details, options, what is blocked")
     opener.add_argument("--body-file", help="read the details from a file instead")
+    opener.add_argument(
+        "--project",
+        help="Atlas project key (defaults to tracker.project_map[project_id] or tracker.project_key)",
+    )
     opener.add_argument("--no-tracker", action="store_true", help="skip the tracker open_decision call")
     opener.add_argument("--at")
     opener.set_defaults(func=cmd_decision)
@@ -1000,6 +1095,252 @@ def _build_usage_parser(subparsers: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
+# mcp / integrations / loop
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from arthur_loop.mcp import dispatch_tool, serve, tool_catalog
+
+    root = resolve_root(args)
+    style = getattr(args, "tool_name_style", "dotted")
+    if args.mcp_action == "serve":
+        require_instance(root)
+        return serve(root, tool_name_style=style)
+    if args.mcp_action == "tools":
+        print_record(tool_catalog(style))
+        return EXIT_OK
+    if args.mcp_action == "schema":
+        print_record({"tools": tool_catalog(style), "tool_name_style": style})
+        return EXIT_OK
+    payload = dispatch_tool(root, args.tool, parse_data_json(args.arguments), tool_name_style=style)
+    print(json.dumps(payload, indent=2, sort_keys=True, default=str))
+    return EXIT_OK if not payload.get("isError") else EXIT_ERROR
+
+
+def _build_mcp_parser(subparsers: Any) -> None:
+    mcp = subparsers.add_parser(
+        "mcp",
+        help="Stdio MCP server and tool catalog for coding agents (status/queue/tick/gate/decision/loop/board)",
+    )
+    add_root_argument(mcp)
+    actions = mcp.add_subparsers(dest="mcp_action", required=True)
+    serve = actions.add_parser("serve", help="Serve MCP on stdio (NDJSON or Content-Length)")
+    add_root_argument(serve)
+    serve.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    serve.set_defaults(func=cmd_mcp)
+    tools = actions.add_parser("tools", help="List MCP tool names and schemas")
+    add_root_argument(tools)
+    tools.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    tools.add_argument("--json", action="store_true", help="Accepted; output is always JSON")
+    tools.set_defaults(func=cmd_mcp)
+    schema = actions.add_parser("schema", help="Same catalog as tools, wrapped for agents")
+    add_root_argument(schema)
+    schema.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    schema.add_argument("--json", action="store_true", help="Accepted; output is always JSON")
+    schema.set_defaults(func=cmd_mcp)
+    call = actions.add_parser("call", help="Call one MCP tool in-process (debugging)")
+    add_root_argument(call)
+    call.add_argument("tool")
+    call.add_argument("--arguments", dest="arguments")
+    call.add_argument("--tool-name-style", choices=["dotted", "portable"], default="dotted")
+    call.set_defaults(func=cmd_mcp)
+
+
+def cmd_integrations(args: argparse.Namespace) -> int:
+    from arthur_loop.integrations import (
+        default_install_targets,
+        detect_targets,
+        install_targets,
+        integration_status,
+        parse_targets,
+    )
+
+    root = resolve_root(args)
+    if args.integrations_action == "detect":
+        rows = [item.to_record() for item in detect_targets(root)]
+        if args.json:
+            print_record(rows)
+        else:
+            for row in rows:
+                mark = "found" if row["found"] else "absent"
+                why = f"  ({', '.join(row['reasons'])})" if row["reasons"] else ""
+                print(f"{row['target']:<10} {mark}{why}")
+        return EXIT_OK
+    if args.integrations_action == "status":
+        rows = integration_status(root)
+        if args.json:
+            print_record(rows)
+            return EXIT_OK
+        for row in rows:
+            print(f"{row['target']:<10} {row['state']:<8} skill={row['skill_present']} mcp={row['mcp_present']}")
+        return EXIT_OK
+    if args.integrations_action == "probe":
+        from arthur_loop.integrations import probe_target
+
+        print_record(probe_target(root, args.target, live=args.live))
+        return EXIT_OK
+
+    targets = parse_targets(args.targets)
+    if not targets:
+        targets = default_install_targets(root)
+    if not targets:
+        print("error: no coding-agent clients detected; pass --targets claude,codex,cursor,grok", file=sys.stderr)
+        return EXIT_ERROR
+    results = install_targets(
+        root,
+        targets,
+        force=args.force,
+        include_mcp=not args.no_mcp,
+        trust_folder=not getattr(args, "no_trust_folder", False),
+    )
+    print_record([item.to_record() for item in results])
+    return EXIT_OK
+
+
+def _build_integrations_parser(subparsers: Any) -> None:
+    integ = subparsers.add_parser(
+        "integrations",
+        help="Detect coding agents and write skills + MCP where those clients actually load them",
+    )
+    add_root_argument(integ)
+    actions = integ.add_subparsers(dest="integrations_action", required=True)
+    detect = actions.add_parser("detect", help="Read-only detection (PATH binaries and workspace markers)")
+    add_root_argument(detect)
+    detect.add_argument("--json", action="store_true")
+    detect.set_defaults(func=cmd_integrations)
+    install = actions.add_parser(
+        "install",
+        help=(
+            "Write skills, slash commands, and MCP config; Grok also runs grok mcp add "
+            "and grok --trust when grok is on PATH (untrusted folder = MCP disconnected)"
+        ),
+    )
+    add_root_argument(install)
+    install.add_argument("--targets", help="comma list: claude,codex,cursor,grok,generic")
+    install.add_argument(
+        "--force",
+        action="store_true",
+        help="refresh managed instruction blocks (never wipes AGENTS.md house rules)",
+    )
+    install.add_argument("--no-mcp", action="store_true", help="write skills only")
+    install.add_argument(
+        "--no-trust-folder",
+        action="store_true",
+        help="do not run grok --trust (untrusted folder = project MCP disconnected)",
+    )
+    install.set_defaults(func=cmd_integrations)
+    status = actions.add_parser("status", help="Which integration files exist in this instance")
+    add_root_argument(status)
+    status.add_argument("--json", action="store_true")
+    status.set_defaults(func=cmd_integrations)
+    probe = actions.add_parser(
+        "probe",
+        help="Prove a client can see Arthur (Grok: mcp list / inspect / optional --always-approve -p)",
+    )
+    add_root_argument(probe)
+    probe.add_argument("--target", default="grok", help="currently: grok")
+    probe.add_argument(
+        "--live",
+        action="store_true",
+        help="also run grok --always-approve -p (Grok Build 1.0.30 flag order; needs login)",
+    )
+    probe.set_defaults(func=cmd_integrations)
+
+
+def cmd_loop(args: argparse.Namespace) -> int:
+    from arthur_loop.loop_ops import create_loop, list_loops
+
+    root = resolve_root(args)
+    if args.loop_action == "list":
+        print_record(list_loops(root))
+        return EXIT_OK
+    record = create_loop(
+        root,
+        project_id=args.project_id,
+        advisor=args.advisor,
+        executor=args.executor,
+        tracker=args.tracker,
+        title=args.title,
+        target_chat_url=args.target_chat_url,
+        goal=args.goal or "",
+        seed_job=not args.no_job,
+        actor=args.actor,
+        reason=args.reason,
+    )
+    print_record(record)
+    return EXIT_OK
+
+
+def _build_loop_parser(subparsers: Any) -> None:
+    loop = subparsers.add_parser(
+        "loop",
+        help="Create or list a project loop (wizard: roles + first job — not a graph composer)",
+    )
+    add_root_argument(loop)
+    actions = loop.add_subparsers(dest="loop_action", required=True)
+    create = actions.add_parser("create", help="Create a project and the first queue job")
+    add_root_argument(create)
+    create.add_argument("--project-id", required=True)
+    create.add_argument("--advisor", choices=sorted(KNOWN_ADVISORS))
+    create.add_argument("--executor", choices=sorted(KNOWN_EXECUTORS))
+    create.add_argument("--tracker", choices=sorted(KNOWN_TRACKERS))
+    create.add_argument("--title", help="Advisor conversation title")
+    create.add_argument("--target-chat-url", default="manual")
+    create.add_argument("--goal", help="One-line project goal written into state.md")
+    create.add_argument("--no-job", action="store_true", help="Skip the first queue job")
+    create.add_argument("--actor")
+    create.add_argument("--reason")
+    create.set_defaults(func=cmd_loop)
+    listing = actions.add_parser("list", help="Show projects and current roles")
+    add_root_argument(listing)
+    listing.set_defaults(func=cmd_loop)
+
+
+def cmd_follow(args: argparse.Namespace) -> int:
+    from arthur_loop.follow import follow_loop
+
+    root = resolve_root(args)
+    require_instance(root)
+    record = follow_loop(
+        root,
+        once=args.once,
+        max_steps=args.max_steps,
+        project_id=args.project_id,
+        holder=args.holder,
+        chain=not args.no_chain,
+        dry_run=args.dry_run,
+    )
+    print_record(record)
+    stopped = record.get("stopped")
+    if stopped in {"needs_human", "gate_no_go"}:
+        return EXIT_NEEDS_HUMAN
+    if stopped in {"invoke_failed"}:
+        return EXIT_ERROR
+    return EXIT_OK
+
+
+def _build_follow_parser(subparsers: Any) -> None:
+    follow = subparsers.add_parser(
+        "follow",
+        help="Drive the loop: claim → invoke → submit → capture → gate (auto-follow)",
+        description=(
+            "Agents follow a created loop without a human typing every hop. "
+            "CLI adapters (grok --always-approve -p, claude -p, codex exec) are invoked. "
+            "Manual and ChatGPT-browser hops write an inbox and stop. "
+            "Open human decisions and implementation-gate NO-GO stay human-gated."
+        ),
+    )
+    add_root_argument(follow)
+    follow.add_argument("--once", action="store_true", help="One step, then exit")
+    follow.add_argument("--max-steps", type=int, default=12)
+    follow.add_argument("--project-id", help="Limit to one Arthur project")
+    follow.add_argument("--holder", default="arthur-follow")
+    follow.add_argument("--no-chain", action="store_true", help="Do not enqueue the next hop from the control block")
+    follow.add_argument("--dry-run", action="store_true")
+    follow.set_defaults(func=cmd_follow)
+
+
+# ---------------------------------------------------------------------------
 # entry point
 
 
@@ -1017,6 +1358,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     add_init_parser(subparsers, add_root_argument)
     _build_agents_parser(subparsers)
+    _build_integrations_parser(subparsers)
+    _build_mcp_parser(subparsers)
+    _build_loop_parser(subparsers)
+    _build_follow_parser(subparsers)
     _build_queue_parser(subparsers)
     _build_tick_parser(subparsers)
     _build_status_parser(subparsers)
@@ -1035,7 +1380,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (BrowserLockError, KeyError, ValueError, OSError) as exc:
+    except (BrowserLockError, KeyError, ValueError, OSError, RuntimeError) as exc:
         message = exc.args[0] if isinstance(exc, KeyError) and exc.args else str(exc)
         sys.stderr.write(f"error: {message}\n")
         return EXIT_ERROR

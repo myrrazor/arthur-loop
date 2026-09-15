@@ -38,7 +38,7 @@ Durable local state:
 
 Also under `runtime/` (ignored by git): `watch-state.json` (last `arthur watch` observation) and the `.*.lock` files that serialize concurrent CLI runs.
 
-Trackers are mirrors, not sources of truth: the `atlas-tasker` and `command` adapters are three argv templates (`open_decision`, `close_decision`, `sprint_gate`) run from the instance root — see `docs/adapters.md`. Gate decisions come from the artifact store, never from the tracker. A private repository can back up tracker and Arthur Loop state on a schedule.
+Trackers are mirrors, not sources of truth. For Atlas Tasker the primary path is `arthur tracker board` / `arthur tracker open-jobs` (they run `tracker board --json` and open queue jobs from ready/assigned tickets). The three argv templates (`open_decision`, `close_decision`, `sprint_gate`) remain as the fallback for decision and sprint hooks — rendered to argv, never a shell, run from the instance root. See `docs/adapters.md`. Gate decisions come from the artifact store, never from the tracker. A private repository can back up tracker and Arthur Loop state on a schedule.
 
 ## Queue Lifecycle
 
