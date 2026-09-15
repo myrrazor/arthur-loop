@@ -18,15 +18,14 @@ document.querySelectorAll("[data-copy]").forEach((button) => {
     const text = target.textContent.trim();
     let copied = false;
     try {
-      if (navigator.clipboard && window.isSecureContext) {
+      if (navigator.clipboard) {
         await navigator.clipboard.writeText(text);
         copied = true;
-      } else {
-        copied = fallbackCopy(text);
       }
     } catch {
       copied = false;
     }
+    if (!copied) copied = fallbackCopy(text);
 
     const original = button.textContent;
     button.textContent = copied ? "Copied" : "Select";
