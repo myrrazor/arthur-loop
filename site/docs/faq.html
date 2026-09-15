@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>FAQ — Arthur Loop</title>
-  <meta name="description" content="Honest FAQ: version stamp, public main vs this branch, Windows, Vercel." />
+  <meta name="description" content="Arthur Loop FAQ: install, /arthur-loop, data location, platforms, version, and GitHub support." />
   <link rel="canonical" href="https://arthurloop.com/docs/faq.html" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../site.css" />
@@ -14,36 +14,64 @@
     <div class="wrap">
       <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a href="./">Docs</a>
-        <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="../index.html#install">Install</a>
       </div>
     </div>
   </nav>
   <main class="doc">
-    <div class="wrap">
-      <p class="eyebrow">FAQ</p>
-      <h1>Before you wire it in.</h1>
-      <h2>What do I get from the three homepage commands?</h2>
-      <p>Public main / last tag v0.1.0: a Python CLI for durable queues, artifacts, approval gates, human decisions, status, and a local web console. Not MCP. Not <code>arthur follow</code>. Not Atlas walk.</p>
-      <h2>Is there a v0.2.0 release?</h2>
-      <p>No. Some live pages said “latest release v0.2.0.” There is no such tag. <code>arthur --version</code> prints <code>arthur 0.1.0</code>. Unreleased work lives on <code>cursor/atlas-product-gap-ab6b</code>.</p>
-      <h2>Is it free?</h2>
-      <p>Yes. MIT licensed, no paid tier.</p>
-      <h2>Where is my data? Does it phone home?</h2>
-      <p>Markdown and JSONL in the instance directory you choose. The core does not phone home or require an API key.</p>
-      <h2>Which platforms work?</h2>
-      <p>The Python CLI is exercised on macOS and Linux. Windows is experimental; public main has no <code>install.ps1</code> (that URL 404s). This branch ships an experimental <code>install.ps1</code> in the repo only. ArthurBar is macOS 14+.</p>
-      <h2>Why did arthur-loop.vercel.app 404?</h2>
-      <p>That hostname is not the production site. Canonical URLs in this repo now point at <a href="https://arthurloop.com/">https://arthurloop.com/</a>.</p>
-      <h2>How do I update or uninstall?</h2>
-      <p>Repeat pipx/uv/curl (add <code>--force</code> for pipx/uv). Uninstall with <code>pipx uninstall arthur-loop</code> or delete <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p>
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html" aria-current="page">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">FAQ</p>
+        <h1>Before you wire it in.</h1>
+
+        <h2>What do I get after one install?</h2>
+        <p>An isolated <code>arthur</code> command. <code>arthur init</code> detects your coding agents, writes <code>/arthur-loop</code> and MCP, and leaves a kickoff file. You also get the queue, artifact store, gates, decisions, status dashboard, and localhost console.</p>
+
+        <h2>How do I specify how the loop is set up?</h2>
+        <p>Run <code>/arthur-loop</code> in the agent init configured, or <code>arthur loop create</code>, or <strong>+ Loop</strong> in <code>arthur web</code>. Those three paths share one interview: project, advisor, executor, tracker.</p>
+
+        <h2>Is there a v0.2.0 release?</h2>
+        <p>No tagged v0.2.0. <code>arthur --version</code> prints <code>arthur 0.1.0</code> until the next tag. Current <code>main</code> is what the install commands track.</p>
+
+        <h2>Is it free?</h2>
+        <p>Yes. MIT licensed, no paid tier, no donation button on this site.</p>
+
+        <h2>Where is my data? Does it phone home?</h2>
+        <p>Markdown and JSONL in the instance directory you choose. The core does not phone home or require an API key.</p>
+
+        <h2>Which platforms work?</h2>
+        <p>The Python CLI is exercised on macOS and Linux. Windows is experimental. ArthurBar is macOS 14+.</p>
+
+        <h2>How do I get support?</h2>
+        <p>Open a <a href="https://github.com/myrrazor/arthur-loop/issues">GitHub issue</a>. This site does not collect email and does not list a personal inbox.</p>
+
+        <h2>How do I update or uninstall?</h2>
+        <p>Repeat pipx, uv, or curl (add <code>--force</code> for pipx/uv). Uninstall with <code>pipx uninstall arthur-loop</code> or delete <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p>
+
+        <h2>How do I delete my data?</h2>
+        <p>Stop Arthur Loop, then delete the instance directory you chose and any backups. Adapters may leave data in tools you configured; remove that there separately.</p>
+      </div>
     </div>
   </main>
   <footer>
     <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
       <a href="./">Docs</a><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>
 </body>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Install — Arthur Loop</title>
-  <meta name="description" content="Exact Arthur Loop install commands for public main / v0.1.0 and the product-gap branch." />
+  <meta name="description" content="Install Arthur Loop with pipx, uv, or the shell installer, then run arthur init." />
   <link rel="canonical" href="https://arthurloop.com/docs/install.html" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../site.css" />
@@ -14,51 +14,64 @@
     <div class="wrap">
       <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a href="./">Docs</a>
-        <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="../index.html#install">Install</a>
       </div>
     </div>
   </nav>
   <main class="doc">
-    <div class="wrap">
-      <p class="eyebrow">Install</p>
-      <h1>Pick the tree you actually want.</h1>
-      <p>Python 3.9+ is the only core requirement. Confirm with <code>arthur --version</code> — it prints <strong>arthur 0.1.0</strong> until the next tag. That is the last release number, not proof you installed follow/MCP.</p>
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html" aria-current="page">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Install</p>
+        <h1>One isolated <code>arthur</code> command.</h1>
+        <p>Python 3.9 or newer is the only core requirement. Confirm with <code>arthur --version</code> — it prints <strong>arthur 0.1.0</strong> until the next tag. That number is the last release stamp, not a claim that follow or MCP are missing. Current <code>main</code> includes them.</p>
 
-      <h2>Public main / last tag v0.1.0 — file cockpit</h2>
-      <p>These three commands track default git HEAD (usually <code>main</code>). They install queue, capture, gate, status, and <code>arthur web</code>. They do <strong>not</strong> install <code>arthur follow</code>, MCP, or Atlas walk.</p>
-      <pre>pipx install git+https://github.com/myrrazor/arthur-loop.git
+        <h2>Pick a path</h2>
+        <pre>pipx install git+https://github.com/myrrazor/arthur-loop.git
 
 uv tool install git+https://github.com/myrrazor/arthur-loop.git
 
 curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh</pre>
-      <p>Then: <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. That is a durable cockpit, not a working auto-follow in minutes.</p>
+        <p>From a checkout, <code>./install.sh</code> installs that tree. All three public commands track default git HEAD (usually <code>main</code>).</p>
 
-      <h2>This unreleased branch — follow, MCP, Atlas walk</h2>
-      <pre>pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
+        <h2>Then initialize an instance</h2>
+        <pre>mkdir ~/my-loop &amp;&amp; cd ~/my-loop
+arthur init</pre>
+        <p>The wizard detects agent CLIs on PATH, asks for a main agent and a loop preset, writes adapter packs, and — unless you pass <code>--no-integrations</code> — writes skills, slash commands, and MCP config where those clients actually load them.</p>
+        <div class="callout">A written MCP entry is <strong>written, not connected</strong>. Restart Claude Code, Codex, Cursor, or Grok Build before <code>/arthur-loop</code> and the tools appear.</div>
 
-# or
-uv tool install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
+        <h2>Non-interactive</h2>
+        <p>Without a terminal, <code>arthur init</code> fails fast and asks for <code>--yes</code>. Every interview question is also a flag:</p>
+        <pre>arthur init --yes --main-agent grok --preset solo
+arthur init --yes --demo</pre>
+        <p><code>--demo</code> seeds sample projects, a job, sessions, a decision, and a quota bar so <code>arthur status</code> and <code>arthur web</code> have something to show.</p>
 
-# or from a checkout of this branch
-./install.sh</pre>
-      <p>Optional curl of <em>this</em> installer, still cloning the named ref:</p>
-      <pre>curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/cursor/atlas-product-gap-ab6b/install.sh \
-  | ARTHUR_LOOP_REF=cursor/atlas-product-gap-ab6b sh</pre>
-      <p><code>arthur --version</code> still prints <code>arthur 0.1.0</code> (setuptools metadata). The extra commands are how you tell the trees apart: <code>arthur follow --help</code>, <code>arthur mcp --help</code>, <code>arthur tracker walk --help</code>.</p>
+        <h2>Update and uninstall</h2>
+        <p>Repeat the install command to update. pipx and uv need <code>--force</code>. Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs live under <code>~/.arthur-loop</code> with a shim at <code>~/.local/bin/arthur</code>.</p>
 
-      <h2>Windows</h2>
-      <p><code>https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.ps1</code> is a <strong>404</strong> on public main. Do not copy that URL from old live copy. This branch ships an experimental <code>install.ps1</code> next to <code>install.sh</code>. From a checkout of this branch: <code>./install.ps1</code>. WSL remains the well-tested path.</p>
-
-      <h2>Canonical site</h2>
-      <p>Production is <a href="https://arthurloop.com/">https://arthurloop.com/</a>. <code>arthur-loop.vercel.app</code> is not a working host (404). This repo’s site files now use arthurloop.com as canonical.</p>
+        <h2>Windows</h2>
+        <p>The well-tested path is WSL. An experimental <code>install.ps1</code> ships in the repository; run it from a checkout. File locks, desktop notifications, and the browser advisor are not a supported Windows product yet.</p>
+      </div>
     </div>
   </main>
   <footer>
     <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
       <a href="./">Docs</a><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>
 </body>

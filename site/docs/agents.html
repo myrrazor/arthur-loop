@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agents and adapters — Arthur Loop</title>
+  <meta name="description" content="Which coding agents Arthur Loop detects, which adapter packs ship, and how /arthur-loop picks roles." />
+  <link rel="canonical" href="https://arthurloop.com/docs/agents.html" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../site.css" />
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <div class="nav-links">
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+      </div>
+    </div>
+  </nav>
+  <main class="doc">
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html" aria-current="page">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Agents</p>
+        <h1>Bring the agents you already run.</h1>
+        <p><code>arthur init</code> and <code>arthur integrations install</code> detect CLIs on PATH — not a home-directory folder alone — then write skills and MCP where those clients load them.</p>
+
+        <h2>Integrations</h2>
+        <table>
+          <thead><tr><th>Client</th><th>Skill / command</th><th>MCP</th></tr></thead>
+          <tbody>
+            <tr><td>Claude Code</td><td><code>.claude/skills/arthur-loop</code>, <code>/arthur-loop</code></td><td><code>.mcp.json</code></td></tr>
+            <tr><td>Codex</td><td><code>.codex/skills/arthur-loop</code></td><td><code>.codex/config.toml</code></td></tr>
+            <tr><td>Cursor</td><td><code>.cursor/skills/arthur-loop</code> and command</td><td><code>.cursor/mcp.json</code></td></tr>
+            <tr><td>Grok Build</td><td><code>.grok/skills/arthur-loop</code></td><td><code>grok mcp add</code> when <code>grok</code> is on PATH</td></tr>
+          </tbody>
+        </table>
+        <p>Cursor is an integration target (skills + MCP). It is not a shipped advisor or executor pack. <code>solo</code> and <code>pair</code> refuse agents without packs instead of silently wiring <code>manual</code>.</p>
+
+        <h2>Shipped adapter packs</h2>
+        <table>
+          <thead><tr><th>Role</th><th>Options</th></tr></thead>
+          <tbody>
+            <tr><td>Advisor</td><td><code>chatgpt-browser</code> · <code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td>Executor</td><td><code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td>Tracker</td><td><code>atlas-tasker</code> · <code>command</code> · <code>none</code></td></tr>
+          </tbody>
+        </table>
+        <p>Gemini and Goose are detected so init can talk about them. They have no shipped advisor/executor pack; <code>guided</code> starts those roles as <code>manual</code> until you author an adapter.</p>
+
+        <h2>Atlas Tasker</h2>
+        <p>When <code>tracker</code> is on PATH, <code>arthur tracker next</code>, <code>walk</code>, <code>board</code>, and <code>open-jobs</code> read ready and in-progress tickets. <code>in_review</code> is not ready work. Arthur <code>project_id</code> maps to an Atlas <code>--project</code> key via <code>tracker.project_map</code>. <code>arthur loop create</code> writes a default such as <code>MY_APP → MY</code>. Do not walk an empty map.</p>
+
+        <h2>Grok notes</h2>
+        <p>Transport order is load-bearing: <code>grok --always-approve -p PROMPT</code>. Folder trust is a second gate — an untrusted workspace does not spawn project MCP. Init runs <code>grok --trust</code> unless you pass <code>--no-trust-folder</code>.</p>
+      </div>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
+      <a href="./">Docs</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+    </div>
+  </footer>
+</body>
+</html>

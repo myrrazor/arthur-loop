@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Docs — Arthur Loop</title>
-  <meta name="description" content="What public main / v0.1.0 installs versus the unreleased product-gap branch." />
+  <meta name="description" content="Arthur Loop documentation: one install, arthur init, then /arthur-loop in your coding agent." />
   <link rel="canonical" href="https://arthurloop.com/docs/" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../site.css" />
@@ -14,36 +14,50 @@
     <div class="wrap">
       <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a href="./">Docs</a>
-        <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="nav-keep" href="./" aria-current="page">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="../index.html#install">Install</a>
       </div>
     </div>
   </nav>
   <main class="doc">
-    <div class="wrap">
-      <p class="eyebrow">Documentation</p>
-      <h1>Two install stories. Do not mix them.</h1>
-      <p>The last public tag is <strong>v0.1.0</strong>. There is no v0.2.0 release. <code>arthur --version</code> prints that package version. Live marketing that says otherwise is wrong.</p>
-      <div class="callout"><strong>Public main</strong> (the three homepage install commands) is a file cockpit: init, queue, capture, gate, status, <code>arthur web</code>. It does <strong>not</strong> ship <code>arthur follow</code>, a stdio MCP server, or Atlas walk.</div>
-      <div class="callout"><strong>This branch</strong> (<code>cursor/atlas-product-gap-ab6b</code>) adds skills, MCP, <code>arthur follow</code>, and Atlas next/walk. Install it on purpose. Do not tell someone the curl-main path produced those commands.</div>
-      <ul class="doc-nav">
-        <li><a href="install.html">Install</a><small>Exact commands for main / v0.1.0 vs this branch. No install.ps1 on public main.</small></li>
-        <li><a href="concepts.html">Concepts</a><small>Queue, artifact, gate, decision, tick — the cockpit model.</small></li>
-        <li><a href="first-loop.html">Your first loop</a><small>Manual cockpit on main; auto-follow only after a branch install.</small></li>
-        <li><a href="cli.html">CLI and MCP</a><small>CLI on both trees. MCP and follow only on this branch.</small></li>
-        <li><a href="faq.html">FAQ</a><small>Version stamp, Windows, Vercel 404, what the live homepage used to overclaim.</small></li>
-        <li><a href="../changelog.html">Changelog</a><small>v0.1.0 shipped. Unreleased work is not a tagged 0.2.0.</small></li>
-        <li><a href="https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/how-it-works.md">How it works (repo)</a><small>Video, wizard shot, follow argv, project_map.</small></li>
-      </ul>
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./" aria-current="page">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Documentation</p>
+        <h1>One install. Then <code>/arthur-loop</code>.</h1>
+        <p>Arthur Loop keeps long-running AI coding work on a written contract: a durable queue, saved artifacts, approval gates, and project-scoped human decisions. State is markdown and JSONL in a directory you own.</p>
+        <div class="callout"><strong>The path.</strong> Install the CLI → <code>arthur init</code> writes skills and MCP into the agents on your machine → restart the client → run <code>/arthur-loop</code> and say how you want advisor, executor, and tracker wired.</div>
+        <ul class="doc-nav">
+          <li><a href="install.html">Install</a><small>pipx, uv, or curl. Then arthur init.</small></li>
+          <li><a href="first-loop.html">Your first loop</a><small>The agent interview, the demo console, and the manual cockpit.</small></li>
+          <li><a href="concepts.html">Concepts</a><small>Queue, artifact, gate, decision, tick.</small></li>
+          <li><a href="console.html">Web console</a><small>Status map, Needs you rail, create-loop wizard.</small></li>
+          <li><a href="agents.html">Agents and adapters</a><small>What ships, what is detected, Atlas Tasker.</small></li>
+          <li><a href="cli.html">CLI and MCP</a><small>Everyday commands, follow, and the tool list.</small></li>
+          <li><a href="faq.html">FAQ</a><small>Data, platforms, version stamp, support.</small></li>
+        </ul>
+        <p class="note">Last public tag is <strong>v0.1.0</strong>. <code>arthur --version</code> prints that until the next tag. Current <code>main</code> is the product this site describes.</p>
+      </div>
     </div>
   </main>
   <footer>
     <div class="wrap">
-      <span>Built by <a href="https://github.com/myrrazor"@myrrazor</a></span><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
       <a href="./">Docs</a><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop">GitHub</a><span>·</span>
-      <a href="https://arthurloop.com/">arthurloop.com</a>
+      <a href="../privacy.html">Privacy</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>
 </body>

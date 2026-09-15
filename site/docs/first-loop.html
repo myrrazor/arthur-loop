@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Your first loop — Arthur Loop</title>
-  <meta name="description" content="First loop on public main (manual cockpit) versus this branch (follow / MCP)." />
+  <meta name="description" content="Set up Arthur Loop with arthur init, then run /arthur-loop in your coding agent." />
   <link rel="canonical" href="https://arthurloop.com/docs/first-loop.html" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../site.css" />
@@ -14,42 +14,76 @@
     <div class="wrap">
       <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a href="./">Docs</a>
-        <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="../index.html#install">Install</a>
       </div>
     </div>
   </nav>
   <main class="doc">
-    <div class="wrap">
-      <p class="eyebrow">First loop</p>
-      <h1>A cockpit first. Auto-follow only on this branch.</h1>
-      <p>Old live copy said “four commands to a running loop” and implied MCP after a curl-main install. That is not true of public main.</p>
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html" aria-current="page">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">First loop</p>
+        <h1>Tell the agent how the loop should run.</h1>
+        <p>After install, you almost never type claim, capture, and gate yourself. Init seeds the agent. <code>/arthur-loop</code> is the interview.</p>
 
-      <h2>On public main / v0.1.0</h2>
-      <pre>mkdir ~/my-loop &amp;&amp; cd ~/my-loop
-arthur init --yes --main-agent none --advisor manual --executor manual --tracker none --no-governor
-arthur queue create --job-id BQ-MY_APP-001 --project-id MY_APP \
-  --target-chat-title "MY_APP planning" --target-chat-url manual \
-  --expected-marker HELLO_LOOP --idempotency-key my-app-001
+        <h2>1. Create an instance</h2>
+        <pre>mkdir ~/my-loop &amp;&amp; cd ~/my-loop
+arthur init</pre>
+        <p>Init asks which detected CLI is the <strong>main agent</strong> and which <strong>preset</strong> you want:</p>
+        <table>
+          <thead><tr><th>Preset</th><th>Shape</th></tr></thead>
+          <tbody>
+            <tr><td><code>guided</code></td><td>Default. Manual adapters as a working base; your main agent finishes the setup.</td></tr>
+            <tr><td><code>solo</code></td><td>One shipped agent plans and implements (Codex, Claude Code, or Grok Build).</td></tr>
+            <tr><td><code>pair</code></td><td>Main agent implements; a second shipped agent reviews.</td></tr>
+            <tr><td><code>browser-advisor</code></td><td>A browser AI (for example ChatGPT Pro) plans and reviews; your main agent implements.</td></tr>
+            <tr><td><code>custom</code></td><td>Pick each adapter yourself.</td></tr>
+          </tbody>
+        </table>
+        <p>Init writes <code>agent-setup/KICKOFF.md</code> and the skill. Restart the coding agent so MCP is connected.</p>
+
+        <h2>2. Run <code>/arthur-loop</code></h2>
+        <p>In Claude Code, Codex, Cursor, or Grok Build, invoke the installed skill or slash command. It asks, one topic at a time:</p>
+        <ul>
+          <li>Project id (<code>SHOUTY_SNAKE</code>) and a one-line goal</li>
+          <li><strong>Advisor</strong> — plans and reviews: <code>chatgpt-browser</code>, <code>claude-code</code>, <code>codex</code>, <code>grok</code>, or <code>manual</code></li>
+          <li><strong>Executor</strong> — implements: <code>claude-code</code>, <code>codex</code>, <code>grok</code>, or <code>manual</code></li>
+          <li><strong>Tracker</strong> — <code>atlas-tasker</code>, <code>command</code>, or <code>none</code></li>
+        </ul>
+        <p>Then it creates the loop with MCP <code>arthur.loop.create</code> (or the CLI equivalent) and can drive hops with <code>arthur.follow.run</code> / <code>arthur follow --once</code>.</p>
+        <pre>arthur loop create --project-id MY_APP --advisor grok --executor claude-code --tracker none
+arthur follow --once</pre>
+        <p>The same wizard lives in the console: <code>arthur web</code> → <strong>+ Loop</strong>.</p>
+
+        <h2>3. What stays human</h2>
+        <p>Follow will not skip an open human decision, invent an <code>APPROVE_PLAN</code> when the implementation gate is NO-GO, or headlessly drive ChatGPT-browser / manual inboxes. Those pause the project and surface on <code>arthur status</code> and the Needs you rail.</p>
+
+        <h2>Look first, if you want</h2>
+        <pre>arthur init --yes --demo
 arthur status
 arthur web</pre>
-      <p>You still claim, submit, capture, and poll yourself. <code>arthur init --demo</code> seeds a busy dashboard. That is a demo, not a working agent loop in minutes.</p>
-
-      <h2>On this branch</h2>
-      <pre>pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
-mkdir ~/my-loop &amp;&amp; cd ~/my-loop
-arthur init --yes --main-agent grok --preset solo
-arthur loop create --project-id MY_APP --advisor grok --executor grok
-arthur follow --once</pre>
-      <p>Grok transport is <code>grok --always-approve -p PROMPT</code>. Folder trust: <code>grok --trust</code> (install runs it unless <code>--no-trust-folder</code>). If the tracker is Atlas, <code>arthur loop create</code> writes <code>tracker.project_map</code> (<code>MY_APP</code> → <code>MY</code>). Do not walk an empty map.</p>
-      <p>Human gates remain: open decisions, ChatGPT-browser / manual inboxes, implementation-gate NO-GO.</p>
+        <p>The demo is a busy dashboard, not a working agent loop. Use it to learn the map, then run the interview on a real instance.</p>
+      </div>
     </div>
   </main>
   <footer>
     <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
       <a href="./">Docs</a><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>
 </body>
