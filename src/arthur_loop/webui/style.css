@@ -398,13 +398,13 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 
 .modal-scrim { position: fixed; inset: 0; background: rgba(6, 8, 10, 0.66); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: var(--z-modal); }
 .modal-scrim[hidden] { display: none; }
-.modal { width: min(520px, 92vw); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+.modal { width: min(560px, 92vw); max-height: min(88vh, 760px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
 .wizard-copy { margin: 0 0 14px; color: var(--text-muted); font-size: 12px; line-height: 1.55; }
 .field label.check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 12px; }
 .field label.check input { accent-color: var(--flow); }
 .modal-head { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line-soft); }
 .modal-head h2 { font-size: 14px; flex: 1; }
-.modal-body { padding: 16px; }
+.modal-body { padding: 16px; overflow: auto; min-height: 0; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 .field label { font-size: 11px; color: var(--text-muted); }
 .field input, .field select {

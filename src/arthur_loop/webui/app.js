@@ -798,8 +798,23 @@ function openLoopWizard() {
   const roleOrder = wizard.roleNames || ["planner", "implementer", "reviewer", "qa"];
   for (const role of roleOrder) {
     const assigned = currentRoles[role] || {};
-    addSelect(role, role.charAt(0).toUpperCase() + role.slice(1) + " agent", roleAgents[role] || ["manual"], assigned.agent || (role === "qa" ? "none" : "manual"));
-    addInput(role + "_model", role.charAt(0).toUpperCase() + role.slice(1) + " model (optional)", "opus, grok-4, …", assigned.model || "");
+    const label = role.charAt(0).toUpperCase() + role.slice(1);
+    const row = el("div", "role-row");
+    const f1 = el("div", "field");
+    const lab = el("label", null, label + " agent"); lab.htmlFor = `f-${role}`; f1.append(lab);
+    const sel = el("select"); sel.id = `f-${role}`;
+    const options = roleAgents[role] || ["manual"];
+    const selected = assigned.agent || (role === "qa" ? "none" : "manual");
+    for (const opt of options) {
+      const o = el("option", null, opt); o.value = opt; if (opt === selected) o.selected = true; sel.append(o);
+    }
+    fields[role] = sel; f1.append(sel);
+    const f2 = el("div", "field");
+    const lab2 = el("label", null, "model"); lab2.htmlFor = `f-${role}-model`; f2.append(lab2);
+    const input = el("input"); input.id = `f-${role}-model`; input.value = assigned.model || ""; input.placeholder = "opus, grok-4, …";
+    fields[role + "_model"] = input; f2.append(input);
+    row.append(f1, f2);
+    body.append(row);
   }
   addSelect("tracker", "Tracker", wizard.trackers || ["none"], current.tracker || "none");
   addInput("title", "First job title", proj + " planning", proj + " planning");
