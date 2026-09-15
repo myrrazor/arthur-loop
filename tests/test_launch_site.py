@@ -89,6 +89,8 @@ class LaunchSiteTests(unittest.TestCase):
     def test_launch_copy_and_install_commands_stay_in_sync(self) -> None:
         self.assertIn(ONE_LINER, self.readme)
         self.assertIn(ONE_LINER, self.index)
+        self.assertIn('Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>', self.index)
+        self.assertNotRegex(self.index, r'href="[^"]+"@')
         for command in INSTALL_COMMANDS:
             self.assertIn(command, self.readme)
             self.assertIn(command, self.index)
