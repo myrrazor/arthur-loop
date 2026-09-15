@@ -109,7 +109,7 @@ KNOWN_AGENTS: tuple[AgentCLI, ...] = (
         advisor_adapter="grok",
         instructions_file="AGENTS.md",
         skills_dir=".grok/skills",
-        launch_hint='grok -p --always-approve "$(cat agent-setup/KICKOFF.md)"',
+        launch_hint='grok --always-approve -p "$(cat agent-setup/KICKOFF.md)"',
         version_args=("version",),
         integration_target="grok",
     ),

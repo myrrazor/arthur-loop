@@ -9,6 +9,6 @@ A [Grok Build](https://docs.x.ai/build) coding session implements one approved p
 
 Headless shape (when your `grok` build supports it):
 
-    grok -p "$(cat <rendered-prompt>.md)" > /tmp/executor-reply.md
+    grok --always-approve -p "$(cat <rendered-prompt>.md)" > /tmp/executor-reply.md
     arthur capture --project-id <ID> --job-id <JOB> --kind plan|implementation-handoff \
       --source-chat-title grok --source-file /tmp/executor-reply.md

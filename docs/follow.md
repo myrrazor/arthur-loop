@@ -14,7 +14,7 @@ arthur mcp call arthur.follow.run --arguments '{"once":true}'
 Each step, when the hop's adapter has a CLI:
 
 1. Claim the next queued job (refused if the project is paused).
-2. Invoke the adapter (`grok -p --always-approve`, `claude -p`, `codex exec`).
+2. Invoke the adapter (`grok --always-approve -p`, `claude -p`, `codex exec`). Grok Build 1.0.30 flag order is load-bearing.
 3. Submit that the prompt was sent (also refused if the project is paused).
 4. Capture the reply and complete the job.
 5. Run the implementation gate.

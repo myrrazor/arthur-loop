@@ -1186,7 +1186,13 @@ def cmd_integrations(args: argparse.Namespace) -> int:
     if not targets:
         print("error: no coding-agent clients detected; pass --targets claude,codex,cursor,grok", file=sys.stderr)
         return EXIT_ERROR
-    results = install_targets(root, targets, force=args.force, include_mcp=not args.no_mcp)
+    results = install_targets(
+        root,
+        targets,
+        force=args.force,
+        include_mcp=not args.no_mcp,
+        trust_folder=not getattr(args, "no_trust_folder", False),
+    )
     print_record([item.to_record() for item in results])
     return EXIT_OK
 
@@ -1204,7 +1210,10 @@ def _build_integrations_parser(subparsers: Any) -> None:
     detect.set_defaults(func=cmd_integrations)
     install = actions.add_parser(
         "install",
-        help="Write skills, slash commands, and MCP config; Grok also runs grok mcp add when grok is on PATH",
+        help=(
+            "Write skills, slash commands, and MCP config; Grok also runs grok mcp add "
+            "and grok --trust when grok is on PATH (untrusted folder = MCP disconnected)"
+        ),
     )
     add_root_argument(install)
     install.add_argument("--targets", help="comma list: claude,codex,cursor,grok,generic")
@@ -1214,15 +1223,27 @@ def _build_integrations_parser(subparsers: Any) -> None:
         help="refresh managed instruction blocks (never wipes AGENTS.md house rules)",
     )
     install.add_argument("--no-mcp", action="store_true", help="write skills only")
+    install.add_argument(
+        "--no-trust-folder",
+        action="store_true",
+        help="do not run grok --trust (untrusted folder = project MCP disconnected)",
+    )
     install.set_defaults(func=cmd_integrations)
     status = actions.add_parser("status", help="Which integration files exist in this instance")
     add_root_argument(status)
     status.add_argument("--json", action="store_true")
     status.set_defaults(func=cmd_integrations)
-    probe = actions.add_parser("probe", help="Prove a client can see Arthur (Grok: mcp list / inspect / optional -p)")
+    probe = actions.add_parser(
+        "probe",
+        help="Prove a client can see Arthur (Grok: mcp list / inspect / optional --always-approve -p)",
+    )
     add_root_argument(probe)
     probe.add_argument("--target", default="grok", help="currently: grok")
-    probe.add_argument("--live", action="store_true", help="also run grok -p --always-approve (needs login)")
+    probe.add_argument(
+        "--live",
+        action="store_true",
+        help="also run grok --always-approve -p (Grok Build 1.0.30 flag order; needs login)",
+    )
     probe.set_defaults(func=cmd_integrations)
 
 
@@ -1304,7 +1325,7 @@ def _build_follow_parser(subparsers: Any) -> None:
         help="Drive the loop: claim → invoke → submit → capture → gate (auto-follow)",
         description=(
             "Agents follow a created loop without a human typing every hop. "
-            "CLI adapters (grok -p, claude -p, codex exec) are invoked. "
+            "CLI adapters (grok --always-approve -p, claude -p, codex exec) are invoked. "
             "Manual and ChatGPT-browser hops write an inbox and stop. "
             "Open human decisions and implementation-gate NO-GO stay human-gated."
         ),

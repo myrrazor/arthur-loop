@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.cli import main
 from arthur_loop.mcp import dispatch_tool, tool_catalog
@@ -22,7 +23,9 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 class InstallPathTests(unittest.TestCase):
     def test_init_integrate_mcp_and_create_loop(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, patch(
+            "arthur_loop.grok_client.grok_binary", return_value=None
+        ):
             code, _, err = _run(
                 [
                     "init", "--root", tmp, "--yes",

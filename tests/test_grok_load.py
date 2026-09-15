@@ -7,8 +7,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from unittest.mock import patch
+
 from arthur_loop.cli import main
-from arthur_loop.grok_client import mcp_add_argv, mcp_add_command, probe, register_mcp
+from arthur_loop.grok_client import (
+    grant_folder_trust,
+    mcp_add_argv,
+    mcp_add_command,
+    probe,
+    prompt_argv,
+    register_mcp,
+    trust_folder_command,
+)
 from arthur_loop.integrations import install_target
 
 
@@ -46,16 +56,30 @@ if argv[:1] == ["inspect"]:
         "mcpServers": [{"name": "arthur-loop", "tools": ["arthur_status", "arthur_loop_create", "arthur_follow_run"]}]
     }))
     raise SystemExit(0)
-if argv[:1] == ["-p"]:
+if argv[:1] == ["--trust"]:
+    print("trusted")
+    raise SystemExit(0)
+if argv[:2] == ["--always-approve", "-p"]:
     print("MCP tools: arthur_status arthur_loop_create arthur_follow_run")
     print("called arthur_status: ok")
     raise SystemExit(0)
+if argv[:1] == ["-p"]:
+    print("wrong flag order: Grok 1.0.30 wants --always-approve -p", file=sys.stderr)
+    raise SystemExit(2)
 print("unexpected", argv, file=sys.stderr)
 raise SystemExit(2)
 '''
 
 
 class GrokLoadTests(unittest.TestCase):
+    def test_prompt_argv_is_always_approve_then_dash_p(self) -> None:
+        self.assertEqual(prompt_argv("pong"), ["grok", "--always-approve", "-p", "pong"])
+        self.assertEqual(trust_folder_command(), ["grok", "--trust"])
+        with patch("arthur_loop.grok_client.grok_binary", return_value=None):
+            deferred = grant_folder_trust(Path("."))
+        self.assertEqual(deferred["status"], "deferred")
+        self.assertIn("untrusted", deferred["note"].lower())
+
     def test_mcp_add_argv_is_atlas_shaped_and_portable(self) -> None:
         argv = mcp_add_argv()
         self.assertEqual(argv[:4], ["mcp", "add", "--scope", "project"])
@@ -78,15 +102,17 @@ class GrokLoadTests(unittest.TestCase):
             old = os.environ.get("PATH")
             os.environ["PATH"] = env_path
             try:
-                result = install_target(root, "grok")
-                self.assertTrue((root / ".grok/skills/arthur-loop/SKILL.md").is_file())
-                self.assertEqual(result.status, "trusted")
-                self.assertTrue(any("trusted" in note.lower() for note in result.notes))
-                native = register_mcp(root)
-                self.assertTrue(native["trusted"])
-                report = probe(root, live=True)
+                with patch("arthur_loop.grok_client.grok_binary", return_value=str(grok)):
+                    result = install_target(root, "grok")
+                    self.assertTrue((root / ".grok/skills/arthur-loop/SKILL.md").is_file())
+                    self.assertEqual(result.status, "trusted")
+                    self.assertTrue(any("trusted" in note.lower() for note in result.notes))
+                    native = register_mcp(root)
+                    self.assertTrue(native["trusted"])
+                    report = probe(root, live=True)
                 self.assertTrue(report["skill_present"])
                 self.assertTrue(report["trusted"])
+                self.assertEqual(report["commands"]["prompt"][:3], ["grok", "--always-approve", "-p"])
                 self.assertTrue(report["probes"]["mcp_list"]["mentions_arthur"])
                 self.assertTrue(report["probes"]["inspect"]["mentions_arthur"])
                 self.assertTrue(report["probes"]["prompt"]["mentions_arthur_status"])
@@ -106,19 +132,20 @@ class GrokLoadTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(code, 0)
-            install_target(Path(tmp), "grok")
-            from io import StringIO
-            from contextlib import redirect_stdout
+            with patch("arthur_loop.grok_client.grok_binary", return_value=None):
+                install_target(Path(tmp), "grok")
+                from io import StringIO
+                from contextlib import redirect_stdout
 
-            out = StringIO()
-            with redirect_stdout(out):
-                code = main(["integrations", "--root", tmp, "probe", "--target", "grok"])
+                out = StringIO()
+                with redirect_stdout(out):
+                    code = main(["integrations", "--root", tmp, "probe", "--target", "grok"])
             self.assertEqual(code, 0)
             report = json.loads(out.getvalue())
             self.assertTrue(report["skill_present"])
             self.assertIn(".grok/skills/arthur-loop", report["skill_path"])
-            if not report.get("grok_binary"):
-                self.assertIn("not on PATH", report["note"])
+            self.assertFalse(report.get("grok_binary"))
+            self.assertIn("not on PATH", report["note"])
 
 
 if __name__ == "__main__":

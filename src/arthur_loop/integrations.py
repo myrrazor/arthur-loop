@@ -191,7 +191,9 @@ def _instruction_block(target: str) -> str:
         f"{mcp_hint} "
         + (
             "Install runs `grok mcp add --scope project arthur-loop -- arthur mcp serve --tool-name-style portable` "
-            "when `grok` is on PATH so the server is trusted. Prove with `grok mcp list` / `grok -p`.\n"
+            "when `grok` is on PATH so the server is trusted. Then `grok --trust` this folder "
+            "(untrusted folder = project MCP does not spawn). Prove with `grok mcp list` / "
+            "`grok --always-approve -p`.\n"
             if target == "grok"
             else "A written MCP entry still needs a client restart before tools appear.\n"
         )
@@ -296,6 +298,7 @@ def install_target(
     *,
     force: bool = False,
     include_mcp: bool = True,
+    trust_folder: bool = True,
 ) -> InstallResult:
     """Write skill, slash/command, instruction block, and MCP config for one client."""
 
@@ -337,17 +340,26 @@ def install_target(
             change = _merge_json_mcp(mcp_path, "arthur-loop", entry)
         _note_change(result, spec["mcp_path"], change)
         if spec.get("native_mcp"):
-            from arthur_loop.grok_client import register_mcp
+            from arthur_loop.grok_client import grant_folder_trust, register_mcp
 
             native = register_mcp(root)
             result.notes.append(native.get("note") or json.dumps(native))
             if native.get("trusted"):
                 result.status = "trusted"
-                result.notes.append("Grok MCP is trusted via grok mcp add (not just a written toml).")
+                result.notes.append("Grok MCP catalog is registered via grok mcp add (not just a written toml).")
             else:
                 result.notes.append(
                     "MCP toml written as fallback. Written ≠ trusted until `grok mcp add` succeeds."
                 )
+            result.notes.append(
+                "Folder trust is a second gate: an untrusted Grok workspace will not spawn "
+                "project MCP (`arthur_status` stays disconnected). Run `grok --trust` from this folder."
+            )
+            if trust_folder:
+                folder = grant_folder_trust(root)
+                result.notes.append(folder.get("note") or json.dumps(folder))
+                if folder.get("trusted_folder") and result.status == "trusted":
+                    result.status = "trusted"
         else:
             result.notes.append(
                 f"MCP entry written to {spec['mcp_path']} (command=arthur {' '.join(entry['args'])}). "
@@ -373,10 +385,16 @@ def install_targets(
     *,
     force: bool = False,
     include_mcp: bool = True,
+    trust_folder: bool = True,
 ) -> list[InstallResult]:
     if not targets:
         raise ValueError("no integration targets given")
-    return [install_target(root, target, force=force, include_mcp=include_mcp) for target in targets]
+    return [
+        install_target(
+            root, target, force=force, include_mcp=include_mcp, trust_folder=trust_folder
+        )
+        for target in targets
+    ]
 
 
 def default_install_targets(root: Path) -> list[str]:
@@ -409,7 +427,10 @@ def integration_status(root: Path) -> list[dict[str, Any]]:
             extra["config_matches"] = native_matches(root)
             if trusted:
                 state = "trusted"
-                note = "grok mcp add succeeded; prove with grok mcp list / grok -p"
+                note = (
+                    "grok mcp add succeeded; prove with grok --trust && grok mcp list / "
+                    "grok --always-approve -p"
+                )
             elif skill.is_file():
                 note = (
                     "skill is at .grok/skills/arthur-loop (the path Grok scans). "
@@ -433,7 +454,10 @@ def integration_status(root: Path) -> list[dict[str, Any]]:
 
 def probe_target(root: Path, target: str, *, live: bool = False) -> dict[str, Any]:
     if target != "grok":
-        raise ValueError("probe currently covers grok (live grok -p / mcp list). Other clients: restart and check MCP UI.")
+        raise ValueError(
+            "probe currently covers grok (live grok --always-approve -p / mcp list). "
+            "Other clients: restart and check MCP UI."
+        )
     from arthur_loop.grok_client import probe
 
     return probe(root, live=live)

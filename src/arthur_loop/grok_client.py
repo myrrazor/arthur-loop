@@ -9,6 +9,12 @@ with `--tool-name-style portable` so the live tools are `arthur_status`,
 `grok mcp add --scope project <name> -- <command…>` writes `.grok/config.toml`
 and marks the server trusted. A hand-written toml is a fallback when `grok` is
 not on PATH — that is written, not connected.
+
+Headless prompt (Grok Build 1.0.30, proved with “pong”): `grok --always-approve -p PROMPT`.
+`-p --always-approve` is the wrong order and does not run the prompt.
+
+Folder trust is a separate gate (`grok --trust`, store `~/.grok/trusted_folders.toml`).
+An untrusted workspace does not spawn project MCP — written/add ≠ connected.
 """
 
 from __future__ import annotations
@@ -43,6 +49,16 @@ def mcp_add_argv() -> list[str]:
 
 def mcp_add_command() -> list[str]:
     return ["grok", *mcp_add_argv()]
+
+
+def prompt_argv(prompt: str) -> list[str]:
+    """Non-interactive Grok Build 1.0.30 argv. Flag order is load-bearing."""
+
+    return ["grok", "--always-approve", "-p", prompt]
+
+
+def trust_folder_command() -> list[str]:
+    return ["grok", "--trust"]
 
 
 def skill_path(root: Path) -> Path:
@@ -99,10 +115,21 @@ def _run(
     timeout: float = 30.0,
 ) -> subprocess.CompletedProcess:
     run = runner or subprocess.run
+    kwargs = {
+        "text": True,
+        "capture_output": True,
+        "check": False,
+        "cwd": str(cwd),
+        "stdin": subprocess.DEVNULL,
+    }
     try:
-        return run(argv, text=True, capture_output=True, check=False, cwd=str(cwd), timeout=timeout)
+        return run(argv, timeout=timeout, **kwargs)
     except TypeError:
-        return run(argv, text=True, capture_output=True, check=False, cwd=str(cwd))
+        try:
+            return run(argv, **kwargs)
+        except TypeError:
+            kwargs.pop("stdin", None)
+            return run(argv, **kwargs)
 
 
 def _write_stamp(root: Path, payload: dict[str, Any]) -> None:
@@ -143,8 +170,8 @@ def register_mcp(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
             "(the path Grok Build actually scans). MCP is written to .grok/config.toml "
             "as a fallback. After installing grok, run: "
             + " ".join(mcp_add_command())
-            + "   then: grok mcp list && grok -p --always-approve "
-            "'List arthur_* MCP tools and call arthur_status'"
+            + "   then: grok --trust && grok mcp list && "
+            + " ".join(prompt_argv("List arthur_* MCP tools and call arthur_status"))
         )
         return result
 
@@ -179,8 +206,8 @@ def register_mcp(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
         result["connected"] = True
         result["note"] = (
             "grok mcp add registered arthur-loop in this project. "
-            "Prove with: grok mcp list && grok inspect --json && "
-            "grok -p --always-approve 'List arthur_* tools and call arthur_status'"
+            "Prove with: grok --trust && grok mcp list && grok inspect --json && "
+            + " ".join(prompt_argv("List arthur_* tools and call arthur_status"))
         )
     else:
         result["status"] = "error"
@@ -189,6 +216,50 @@ def register_mcp(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
             "Wrote .grok/config.toml as a fallback; that is not the same as a trusted add."
         )
     _write_stamp(root, {**result, "at": isoformat()})
+    return result
+
+
+def grant_folder_trust(root: Path, *, runner: Runner | None = None) -> dict[str, Any]:
+    """Grant Grok folder trust for this workspace (`grok --trust`).
+
+    Untrusted folders do not spawn project MCP servers. That is a second gate
+    after `grok mcp add`: add without trust is still disconnected.
+    """
+
+    binary = grok_binary()
+    argv = [binary or "grok", "--trust"]
+    result: dict[str, Any] = {
+        "method": "grok --trust",
+        "argv": argv if binary else trust_folder_command(),
+        "trusted_folder": False,
+        "cwd": str(root),
+    }
+    if not binary:
+        result["status"] = "deferred"
+        result["note"] = (
+            "Folder untrusted until you run `grok --trust` from this instance. "
+            "Grok will not spawn project MCP (arthur_status) in an untrusted folder."
+        )
+        return result
+    try:
+        proc = _run(argv, cwd=root, runner=runner, timeout=20.0)
+    except OSError as exc:
+        result.update({"status": "error", "note": str(exc)})
+        return result
+    result["returncode"] = proc.returncode
+    result["stdout"] = (proc.stdout or "").strip()
+    result["stderr"] = (proc.stderr or "").strip()
+    if proc.returncode == 0:
+        result["status"] = "trusted_folder"
+        result["trusted_folder"] = True
+        result["note"] = "grok --trust granted this folder; project MCP may spawn."
+    else:
+        result["status"] = "error"
+        result["note"] = (
+            f"grok --trust failed (exit {proc.returncode}): "
+            f"{result['stderr'] or result['stdout'] or 'no output'}. "
+            "Untrusted folder = project MCP disconnected. Run `grok --trust` yourself."
+        )
     return result
 
 
@@ -224,13 +295,11 @@ def probe(root: Path, *, live: bool = False, runner: Runner | None = None) -> di
             "mcp_list": ["grok", "mcp", "list"],
             "mcp_doctor": ["grok", "mcp", "doctor", "--json"],
             "inspect": ["grok", "inspect", "--json"],
-            "prompt": [
-                "grok",
-                "-p",
-                "--always-approve",
+            "prompt": prompt_argv(
                 "List MCP tools named arthur_* then call arthur_status. "
-                "If arthur_loop_create exists, say so.",
-            ],
+                "If arthur_loop_create exists, say so."
+            ),
+            "trust_folder": trust_folder_command(),
         },
         "probes": {},
     }
@@ -240,7 +309,7 @@ def probe(root: Path, *, live: bool = False, runner: Runner | None = None) -> di
     if not binary:
         report["note"] = (
             "skill is on the path Grok scans, but grok is not on PATH so this machine "
-            "cannot prove a live grok -p session. Install Grok Build, then run "
+            "cannot prove a live grok --always-approve -p session. Install Grok Build, then run "
             "arthur integrations probe --target grok --live"
         )
         return report
@@ -271,7 +340,7 @@ def probe(root: Path, *, live: bool = False, runner: Runner | None = None) -> di
 
     if live:
         prompt = report["commands"]["prompt"][-1]
-        live_argv = [binary, "-p", "--always-approve", prompt]
+        live_argv = [binary, *prompt_argv(prompt)[1:]]
         env_ok = bool(os.environ.get("GROK_API_KEY") or os.environ.get("XAI_API_KEY"))
         try:
             proc = _run(live_argv, cwd=root, runner=runner, timeout=90.0)
@@ -293,7 +362,10 @@ def probe(root: Path, *, live: bool = False, runner: Runner | None = None) -> di
     if report.get("connected"):
         report["note"] = "Grok can see Arthur (mcp list/inspect/prompt mentioned arthur_* tools)"
     elif report["trusted"]:
-        report["note"] = "grok mcp add succeeded earlier; run grok -p to prove tools in a session"
+        report["note"] = (
+            "grok mcp add succeeded earlier; prove with grok --trust && grok mcp list && "
+            "grok --always-approve -p PROMPT (flag order is load-bearing on 1.0.30)"
+        )
     else:
         report["note"] = "files are in place; live grok session did not confirm arthur_* tools"
     return report

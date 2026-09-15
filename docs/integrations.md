@@ -10,7 +10,7 @@ arthur integrations status
 arthur integrations probe --target grok
 ```
 
-This is the Atlas Tasker-shaped path: detect CLIs on PATH, write skills where those tools actually load them, and register MCP. For Grok, registration is `grok mcp add` (trusted), not only a hand-written toml.
+This is the Atlas Tasker-shaped path: detect CLIs on PATH, write skills where those tools actually load them, and register MCP. For Grok, registration is `grok mcp add` (trusted), not only a hand-written toml. Folder trust is a second gate: `grok --trust` (install runs it unless `--no-trust-folder`). An untrusted folder does not spawn project MCP.
 
 ## What each target writes
 
@@ -34,8 +34,9 @@ MCP: Grok skips dotted tool names. Install uses `--tool-name-style portable`. **
 
 ```bash
 arthur integrations probe --target grok --live
+grok --trust
 grok mcp list
-grok -p --always-approve "List MCP tools named arthur_* then call arthur_status"
+grok --always-approve -p "List MCP tools named arthur_* then call arthur_status"
 ```
 
 ## Cursor honesty

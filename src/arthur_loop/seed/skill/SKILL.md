@@ -37,7 +37,8 @@ Cursor: `.cursor/skills/arthur-loop` and `.cursor/commands/arthur-loop.md`, Grok
 `.grok/skills/arthur-loop` — the path Grok Build actually scans — plus `AGENTS.md`).
 MCP is registered in that client's real config. Grok install runs
 `grok mcp add --scope project arthur-loop -- arthur mcp serve --tool-name-style portable`
-when `grok` is on PATH so the server is trusted (prove with `grok mcp list` / `grok -p`).
+when `grok` is on PATH so the server is trusted (prove with `grok --trust` / `grok mcp list` /
+`grok --always-approve -p`). Untrusted folder = project MCP does not spawn.
 Other clients need a restart before tools appear.
 
 Prefer MCP tools over inventing shell. Dotted names (`arthur.status`, `arthur.loop.create`,

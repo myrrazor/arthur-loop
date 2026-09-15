@@ -25,6 +25,12 @@ BASE_ARGS = [
 
 
 class InitTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Host `grok` on PATH must not run mcp add / --trust during init.
+        self._grok = patch("arthur_loop.grok_client.grok_binary", return_value=None)
+        self._grok.start()
+        self.addCleanup(self._grok.stop)
+
     def test_non_interactive_init_builds_an_instance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code = main(["init", "--root", tmp, *BASE_ARGS])
@@ -33,6 +39,7 @@ class InitTests(unittest.TestCase):
             root = Path(tmp)
             config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
             self.assertEqual(config["advisor"]["adapter"], "manual")
+            self.assertEqual(config["tracker"]["project_map"], {})
             self.assertFalse(config["components"]["resource_governor"])
 
             for expected in [

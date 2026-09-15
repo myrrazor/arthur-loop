@@ -10,6 +10,8 @@ Product-gap pass after the hardening review: Arthur Loop now installs into codin
 
 Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, auto-follow, Atlas next/walk, install honesty, and the how-it-works video.
 
+Hostile re-test of tip `a83b29b` was ALMOST. This revision fixes Grok Build 1.0.30 prompt argv (`grok --always-approve -p`, not `-p --always-approve`), public-install marketing (main / v0.1.0 has no follow/MCP/walk), grok-on-PATH test isolation, empty `tracker.project_map` after init, and documents / optionally writes `grok --trust`.
+
 ### Added
 
 - Stdio MCP server (`arthur mcp serve`) with read tools (status, tick, queue, gate, decision, loop, board) and gated writes (queue, capture, decision, loop create, board open-jobs). Dotted names plus Grok-safe portable names (`arthur_status`). `/arthur-loop` prompt.
@@ -35,6 +37,11 @@ Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, aut
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).
 - Duplicate `expected_marker` across different job ids is refused; a blank marker is treated as omitted.
 - `queue claim` and `queue submit` (CLI and MCP) refuse a project paused by an open human decision.
+- Grok follow/probe argv is `grok --always-approve -p PROMPT` (1.0.30). `-p --always-approve` does not run the prompt.
+- Public README/site/FAQ no longer claim that the three main / v0.1.0 install commands produce MCP, `arthur follow`, or Atlas walk.
+- Tests that write Grok integrations isolate `grok_binary` so a host `grok` on PATH cannot change assertions.
+- `arthur init` always writes `tracker.project_map: {}`.
+- `arthur integrations install` documents Grok folder trust and runs `grok --trust` unless `--no-trust-folder` (untrusted folder = project MCP disconnected).
 - `arthur integrations install --force` no longer replaces the whole `AGENTS.md` (managed blocks only).
 - Integration detect no longer treats `~/.cursor` / `~/.grok` as "found" without the binary.
 - `arthur tracker` RuntimeError from a failed `tracker --json` is `error:` exit 2, not a traceback.

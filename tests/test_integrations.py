@@ -15,6 +15,12 @@ from arthur_loop.integrations import (
 )
 
 
+def _no_live_grok():
+    """Host `grok` on PATH must not change install/probe assertions."""
+
+    return patch("arthur_loop.grok_client.grok_binary", return_value=None)
+
+
 class ParseTargetTests(unittest.TestCase):
     def test_parses_and_rejects_unknown(self) -> None:
         self.assertEqual(parse_targets("claude, grok"), ["claude", "grok"])
@@ -38,7 +44,7 @@ class DetectTests(unittest.TestCase):
 
 class InstallTests(unittest.TestCase):
     def test_writes_skills_slash_commands_and_mcp_for_each_target(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, _no_live_grok():
             root = Path(tmp)
             results = {item.target: item for item in install_targets(root, ["claude", "codex", "cursor", "grok", "generic"])}
 
@@ -67,6 +73,7 @@ class InstallTests(unittest.TestCase):
             portable = json.loads((root / ".arthur/integrations/arthur-mcp.json").read_text(encoding="utf-8"))
             self.assertIn("arthur-loop", portable["mcpServers"])
             self.assertEqual(results["grok"].status, "written")
+            self.assertTrue(any("untrusted" in note.lower() for note in results["grok"].notes))
 
     def test_reinstall_updates_managed_block_and_preserves_house_rules(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -79,7 +86,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(text.count("arthur-loop:codex:begin"), 1)
 
     def test_force_does_not_wipe_agents_md_house_rules(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, _no_live_grok():
             root = Path(tmp)
             (root / "AGENTS.md").write_text("# House rules\n\nDo not delete me.\n", encoding="utf-8")
             install_target(root, "codex")
@@ -116,7 +123,7 @@ class InstallTests(unittest.TestCase):
             self.assertIn("arthur-loop", data["mcpServers"])
 
     def test_grok_init_writes_the_skill_at_the_atlas_shaped_path(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, _no_live_grok():
             code = main(
                 [
                     "init", "--root", tmp, "--yes",
@@ -133,7 +140,7 @@ class InstallTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / ".grok/config.toml").is_file())
 
     def test_init_installs_claude_integration_when_requested(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, _no_live_grok():
             code = main(
                 [
                     "init", "--root", tmp, "--yes",

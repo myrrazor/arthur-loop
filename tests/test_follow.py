@@ -8,7 +8,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from arthur_loop.cli import main
-from arthur_loop.follow import follow_loop
+from arthur_loop.follow import follow_loop, transport_argv
 from arthur_loop.mcp import dispatch_tool
 from arthur_loop.queue_ledger import QueueLedger
 
@@ -52,6 +52,12 @@ def _fake_invoke(root: Path, request: dict) -> dict:
 
 
 class FollowTests(unittest.TestCase):
+    def test_grok_transport_argv_is_always_approve_then_dash_p(self) -> None:
+        self.assertEqual(
+            transport_argv("grok", "pong"),
+            ["grok", "--always-approve", "-p", "pong"],
+        )
+
     def test_follow_claims_invokes_captures_and_enqueues_next_hop(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _init(tmp)

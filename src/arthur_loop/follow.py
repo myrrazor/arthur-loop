@@ -1,7 +1,8 @@
 """Drive a created loop: claim → invoke → submit → capture → poll → gate.
 
-`arthur follow` is the auto-follow path. Coding-agent CLIs (grok -p, claude -p,
-codex exec) run the hop. Manual and ChatGPT-browser hops still need a human to
+`arthur follow` is the auto-follow path. Coding-agent CLIs
+(`grok --always-approve -p`, `claude -p`, `codex exec`) run the hop. Manual
+and ChatGPT-browser hops still need a human to
 produce the reply — follow claims, writes the inbox, and stops honestly.
 
 Human gates that remain (minimized, documented):
@@ -111,7 +112,9 @@ def transport_argv(adapter: str, prompt: str) -> list[str] | None:
     """Non-interactive CLI for one adapter. None means a human must produce the reply."""
 
     if adapter == "grok":
-        return ["grok", "-p", "--always-approve", prompt]
+        from arthur_loop.grok_client import prompt_argv
+
+        return prompt_argv(prompt)
     if adapter == "claude-code":
         return ["claude", "-p", prompt]
     if adapter == "codex":
@@ -157,6 +160,7 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
             check=False,
             cwd=str(root),
             timeout=float(request.get("timeout") or 120),
+            stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return {"status": "error", "adapter": adapter, "error": str(exc), "argv": argv}

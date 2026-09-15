@@ -8,7 +8,7 @@ Consumes: a rendered prompt (markdown) for a queue job.
 Produces: a saved artifact (`arthur capture --kind next-plan-request|plan-review|sprint-review`) whose text ends in a control block (see `src/arthur_loop/seed/skill/references/control-blocks.md`).
 Must: respect the lock, respect the polling cadence, save the raw response before acting on it, and stop the project when `capture` exits `3` (the artifact was quarantined or asked for a human; a decision is already open).
 
-Shipped: `chatgpt-browser` (the original transport — a user-controlled browser session, fragile by nature because UIs change), `codex`, `claude-code`, and `grok` (headless when the CLI supports it: `codex exec` / `claude -p` / `grok -p`), `manual` (a human and two folders — also the quickest way to feel the loop). All five ship the same three prompts; only the runbook differs.
+Shipped: `chatgpt-browser` (the original transport — a user-controlled browser session, fragile by nature because UIs change), `codex`, `claude-code`, and `grok` (headless when the CLI supports it: `codex exec` / `claude -p` / `grok --always-approve -p`), `manual` (a human and two folders — also the quickest way to feel the loop). All five ship the same three prompts; only the runbook differs.
 
 ## Executor adapter
 

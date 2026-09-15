@@ -42,17 +42,19 @@ curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.s
 
 From a checkout, `./install.sh` installs that checkout. Run `arthur --version` to confirm the installed release.
 
-The three commands above track default git HEAD (usually `main`). The last tag is **v0.1.0** — `arthur --version` prints that package version until the next tag. To install **this** unreleased branch:
+The three commands above track default git HEAD (usually `main`). The last tag is **v0.1.0** — `arthur --version` prints that package version until the next tag. That public tree is a **file cockpit**: `init`, queue, capture, gate, `status`, `arthur web`. It does **not** ship `arthur follow`, the MCP server, or Atlas walk.
+
+To install **this** unreleased branch (integrations, MCP, `arthur follow`, Atlas next/walk):
 
 ```bash
 pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
 ```
 
-See [docs/install.md](docs/install.md). How it works (video + wizard shot): [docs/how-it-works.md](docs/how-it-works.md). Auto-follow: `arthur follow --once`.
+See [docs/install.md](docs/install.md). How it works (video + wizard shot): [docs/how-it-works.md](docs/how-it-works.md). On this branch only: `arthur follow --once` (Grok transport is `grok --always-approve -p PROMPT`).
 
 One AI plans and reviews (the **advisor**), another implements (the **executor**), and Arthur Loop keeps the whole thing honest: a queue with a real state machine, saved artifacts, approval gates computed from those artifacts, human-decision escalation, and a scheduler tick that always knows what should happen next.
 
-No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI **and** a stdio MCP server — so Grok Build, Claude Code, Codex, and Cursor can claim, capture, and gate without a human typing every hop. See [docs/how-it-works.md](docs/how-it-works.md).
+No daemon. No database. No API keys required by the core. Everything is markdown and JSONL in a directory you own, driven by a small `arthur` CLI. On this branch, a stdio MCP server is also present so Grok Build, Claude Code, Codex, and Cursor can claim, capture, and gate without a human typing every hop. See [docs/how-it-works.md](docs/how-it-works.md).
 
 > **Status: alpha.** The file formats are plain and the CLI is tested on Linux and macOS, but command names and adapter contracts may still tighten before 1.0. Known limitations are listed in the [FAQ](#faq).
 
@@ -225,7 +227,7 @@ Notifiers: macOS uses `osascript`; Linux needs `notify-send` (libnotify — `apt
 
 **Trackers.** For [Atlas Tasker](https://github.com/myrrazor/atlas-tasker) the primary path is the board: `arthur tracker board --json` / MCP `arthur.board` reads `tracker board --json`, and `arthur tracker open-jobs` opens queue jobs from ready/assigned tickets (`atlas:<ticket_id>` idempotency keys). The three argv templates (`open_decision`, `close_decision`, `sprint_gate`) remain as a fallback — rendered to argv, never a shell, run from the instance root. Gate logic still lives in the artifact store, not the tracker. `arthur decision open` still calls `open_decision`. Any other CLI tracker works with your own templates. Or pick `none` and decisions live in `human-decisions/open.md` alone.
 
-**Advisors.** Each adapter is a runbook plus a prompt pack, not code — the shipped packs share the same prompts, only the transport differs. `chatgpt-browser` drives a logged-in ChatGPT Pro conversation through the browser UI via your own agent; it is the original transport and fragile by nature (UIs change; check the terms of any service you automate). `codex`, `claude-code`, and `grok` run the advisor headlessly when the CLI supports it (`codex exec` / `claude -p` / `grok -p`). `manual` is a human and two folders. The core never depends on browser automation.
+**Advisors.** Each adapter is a runbook plus a prompt pack, not code — the shipped packs share the same prompts, only the transport differs. `chatgpt-browser` drives a logged-in ChatGPT Pro conversation through the browser UI via your own agent; it is the original transport and fragile by nature (UIs change; check the terms of any service you automate). `codex`, `claude-code`, and `grok` run the advisor headlessly when the CLI supports it (`codex exec` / `claude -p` / `grok --always-approve -p`). `manual` is a human and two folders. The core never depends on browser automation.
 
 **Quota.** `auto` uses CodexBar when it is installed and otherwise stays out of the way. `command` accepts any executable that prints CodexBar-shaped JSON; `file` reads the same schema from disk (relative paths resolve against the instance root); `none` disables collection. The core never requires CodexBar.
 

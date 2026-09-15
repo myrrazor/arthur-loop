@@ -16,7 +16,8 @@ if command -v grok >/dev/null; then
   grok mcp list || true
   grok inspect --json || true
   echo "Live session (needs login):"
-  echo "  grok -p --always-approve 'List MCP tools named arthur_* then call arthur_status'"
+  echo "  grok --always-approve -p 'List MCP tools named arthur_* then call arthur_status'"
+  echo "  grok --trust   # untrusted folder = project MCP disconnected"
 else
   echo "grok not on PATH — files are on the scan path; run grok mcp add after install."
 fi

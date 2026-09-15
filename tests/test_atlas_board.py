@@ -207,6 +207,8 @@ class NextWalkTests(unittest.TestCase):
                     "--no-governor", "--no-integrations",
                 ]
             )
+            config = json.loads((root / "config/arthur-loop.json").read_text(encoding="utf-8"))
+            self.assertEqual(config["tracker"]["project_map"], {})
             nxt = read_next(root, actor="agent:builder-1", runner=_next_runner(NEXT))
             self.assertEqual(nxt["walkable_count"], 1)
             self.assertEqual(nxt["next"]["id"], "APP-1")
