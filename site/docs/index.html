@@ -27,6 +27,7 @@
           <li><a href="./" aria-current="page">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html">Concepts</a></li>
           <li><a href="console.html">Web console</a></li>
           <li><a href="agents.html">Agents</a></li>
@@ -38,14 +39,15 @@
         <p class="eyebrow">Documentation</p>
         <h1>One install. Then <code>/arthur-loop</code>.</h1>
         <p>Arthur Loop keeps long-running AI coding work on a written contract: a durable queue, saved artifacts, approval gates, and project-scoped human decisions. State is markdown and JSONL in a directory you own.</p>
-        <div class="callout"><strong>The path.</strong> Install the CLI → <code>arthur init</code> writes skills and MCP into the agents on your machine → restart the client → run <code>/arthur-loop</code> and say how you want advisor, executor, and tracker wired.</div>
+        <div class="callout"><strong>The path.</strong> Install the CLI → <code>arthur init</code> writes skills and MCP → restart the client → assign planner, implementer, reviewer, and QA → <code>arthur</code> or <strong>Run next</strong> invokes the next role.</div>
         <ul class="doc-nav">
           <li><a href="install.html">Install</a><small>pipx, uv, or curl. Then arthur init.</small></li>
           <li><a href="first-loop.html">Your first loop</a><small>The agent interview, the demo console, and the manual cockpit.</small></li>
+          <li><a href="roles.html">Roles and run</a><small>Assign agents. Terminal and UI setup.</small></li>
           <li><a href="concepts.html">Concepts</a><small>Queue, artifact, gate, decision, tick.</small></li>
-          <li><a href="console.html">Web console</a><small>Status map, Needs you rail, create-loop wizard.</small></li>
+          <li><a href="console.html">Web console</a><small>Roles, Run next, status map, wizard.</small></li>
           <li><a href="agents.html">Agents and adapters</a><small>What ships, what is detected, Atlas Tasker.</small></li>
-          <li><a href="cli.html">CLI and MCP</a><small>Everyday commands, follow, and the tool list.</small></li>
+          <li><a href="cli.html">CLI and MCP</a><small>arthur, arthur run, roles, follow.</small></li>
           <li><a href="faq.html">FAQ</a><small>Data, platforms, version stamp, support.</small></li>
         </ul>
         <p class="note">Last public tag is <strong>v0.1.0</strong>. <code>arthur --version</code> prints that until the next tag. Current <code>main</code> is the product this site describes.</p>

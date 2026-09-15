@@ -16,6 +16,15 @@ from arthur_loop.config import (
     load_config,
     require_instance,
 )
+from arthur_loop.roles import (
+    LOOP_ROLES,
+    ROLE_AGENTS,
+    formulate_default_loop,
+    merge_roles,
+    resolve_roles,
+    roles_payload,
+    validate_roles,
+)
 from arthur_loop.decisions import PROJECT_ID_RE
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.tick import open_human_decision_projects
@@ -199,8 +208,9 @@ def apply_role_updates(
     advisor: str | None = None,
     executor: str | None = None,
     tracker: str | None = None,
+    roles: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Update advisor/executor/tracker and copy shipped packs when a role changes."""
+    """Update roles (and legacy advisor/executor/tracker) and copy shipped packs."""
 
     if advisor and advisor not in KNOWN_ADVISORS:
         raise ValueError(f"unknown advisor {advisor!r} — expected one of {sorted(KNOWN_ADVISORS)}")
@@ -210,13 +220,38 @@ def apply_role_updates(
         raise ValueError(f"unknown tracker {tracker!r} — expected one of {sorted(KNOWN_TRACKERS)}")
 
     data = _read_user_config(root)
-    adapters_pkg = resources.files("arthur_loop") / "adapters"
+    current = resolve_roles(load_config(root) if (root / "config/arthur-loop.json").exists() or data else {})
+    overlay: dict[str, Any] = {}
     if advisor:
-        data.setdefault("advisor", {})["adapter"] = advisor
-        _copy_tree(adapters_pkg / "advisors" / advisor, root / "adapters/advisor")
+        overlay["planner"] = {"agent": advisor, "model": current["planner"].get("model") or ""}
+        overlay["reviewer"] = {"agent": advisor, "model": current["reviewer"].get("model") or ""}
     if executor:
-        data.setdefault("executor", {})["adapter"] = executor
-        _copy_tree(adapters_pkg / "executors" / executor, root / "adapters/executor")
+        overlay["implementer"] = {"agent": executor, "model": current["implementer"].get("model") or ""}
+    if roles:
+        for role, value in roles.items():
+            if role not in LOOP_ROLES:
+                raise ValueError(f"unknown role {role!r} — expected one of {list(LOOP_ROLES)}")
+            if not isinstance(value, dict):
+                raise ValueError(f"role {role} must be an object with agent and optional model")
+            overlay[role] = {
+                "agent": str(value.get("agent") or current[role]["agent"]),
+                "model": str(value.get("model") if value.get("model") is not None else current[role].get("model") or ""),
+            }
+    merged_roles = merge_roles(current, overlay) if overlay else current
+    validate_roles(merged_roles)
+    data["roles"] = merged_roles
+    planner = merged_roles["planner"]["agent"]
+    implementer = merged_roles["implementer"]["agent"]
+    data.setdefault("advisor", {})["adapter"] = planner
+    data.setdefault("executor", {})["adapter"] = implementer
+
+    adapters_pkg = resources.files("arthur_loop") / "adapters"
+    if overlay.get("planner") or advisor or "planner" in (roles or {}):
+        if planner in KNOWN_ADVISORS:
+            _copy_tree(adapters_pkg / "advisors" / planner, root / "adapters/advisor")
+    if overlay.get("implementer") or executor or "implementer" in (roles or {}):
+        if implementer in KNOWN_EXECUTORS:
+            _copy_tree(adapters_pkg / "executors" / implementer, root / "adapters/executor")
     if tracker:
         data.setdefault("tracker", {})["adapter"] = tracker
         if tracker == "atlas-tasker":
@@ -342,18 +377,20 @@ def create_loop(
     advisor: str | None = None,
     executor: str | None = None,
     tracker: str | None = None,
+    roles: dict[str, Any] | None = None,
     title: str | None = None,
     target_chat_url: str = "manual",
     goal: str = "",
     seed_job: bool = True,
     actor: str | None = None,
     reason: str | None = None,
+    ticket: str | None = None,
 ) -> dict[str, Any]:
-    """Create a project loop: optional role change, project state, first queue job.
+    """Create a project loop: assign roles, formulate the default hop sequence, seed the first job.
 
     This is a wizard, not a graph composer. It writes the same files `arthur init`
-    and `arthur queue create` would. Agents then drive claim/tick/capture/gate
-    through the CLI or MCP.
+    and `arthur queue create` would. `arthur` / `arthur run` then hands each hop
+    to the assigned agent.
     """
 
     require_instance(root)
@@ -361,8 +398,22 @@ def create_loop(
     if not PROJECT_ID_PATTERN.match(project_id):
         raise ValueError(f"project id {project_id!r} must be a single word like MY_APP")
 
-    config = apply_role_updates(root, advisor=advisor, executor=executor, tracker=tracker)
+    ticket = (ticket or "").strip() or None
+    if ticket and not goal.strip():
+        goal = f"Ticket {ticket}"
+
+    config = apply_role_updates(
+        root,
+        advisor=advisor,
+        executor=executor,
+        tracker=tracker,
+        roles=roles,
+    )
     project = ensure_project(root, project_id, goal=goal)
+    sequence = formulate_default_loop(config, project_id=project_id, ticket=ticket, goal=goal)
+    plan_path = root / "projects" / project_id / "loop-plan.json"
+    plan_path.parent.mkdir(parents=True, exist_ok=True)
+    plan_path.write_text(json.dumps(sequence, indent=2) + "\n", encoding="utf-8")
 
     title = (title or f"{project_id} planning").strip()
     url = (target_chat_url or "manual").strip() or "manual"
@@ -388,27 +439,46 @@ def create_loop(
             expected_marker=marker,
             idempotency_key=key,
         )
-        QueueLedger(root).create_job(job)
+        ledger = QueueLedger(root)
+        ledger.create_job(job)
+        first = sequence["hops"][0] if sequence["hops"] else {"kind": "next-plan-request", "role": "planner"}
+        ledger.append_event(
+            job_id,
+            "follow_hop",
+            {
+                "kind": first["kind"],
+                "role": first["role"],
+                "actor": actor or "arthur-loop",
+                "ticket": ticket,
+            },
+        )
         if actor or reason:
-            QueueLedger(root).append_event(
+            ledger.append_event(
                 job_id,
                 "loop_created",
-                {"actor": actor, "reason": reason, "project_id": project_id},
+                {"actor": actor, "reason": reason, "project_id": project_id, "ticket": ticket},
             )
         job_record = job.to_record()
 
+    roles_out = resolve_roles(config)
     return {
         "project": project,
         "advisor": config["advisor"]["adapter"],
         "executor": config["executor"]["adapter"],
         "tracker": config["tracker"]["adapter"],
+        "roles": roles_out,
+        "sequence": sequence,
+        "ticket": ticket,
         "job": job_record,
         "honest_copy": (
             "Created a project and the first queue job. This is not a drag-drop "
-            "graph composer. Agents follow the loop with `arthur follow` "
-            "(claim → invoke → submit → capture → gate)."
+            "graph composer. Assigned agents run in order: "
+            + " → ".join(f"{hop['role']}({hop['agent']})" for hop in sequence["hops"])
+            + ". Run `arthur` or `arthur run` to invoke the next role."
         ),
         "next": [
+            "arthur",
+            "arthur run",
             "arthur follow --once",
             f"arthur queue claim --job-id {job_record['job_id']}" if job_record else "arthur status",
             "arthur tick --dry-run",
@@ -450,6 +520,7 @@ def list_loops(root: Path) -> dict[str, Any]:
         "advisor": config["advisor"]["adapter"],
         "executor": config["executor"]["adapter"],
         "tracker": config["tracker"]["adapter"],
+        **roles_payload(config),
         "projects": projects,
         "advisors": sorted(KNOWN_ADVISORS),
         "executors": sorted(KNOWN_EXECUTORS),
@@ -460,22 +531,29 @@ def list_loops(root: Path) -> dict[str, Any]:
 def wizard_options(root: Path | None = None) -> dict[str, Any]:
     """Copy and choices for the web create-loop wizard."""
 
-    current = {}
+    current: dict[str, Any] = {}
+    config = None
     if root is not None and config_path(root).exists():
         config = load_config(root)
         current = {
             "advisor": config["advisor"]["adapter"],
             "executor": config["executor"]["adapter"],
             "tracker": config["tracker"]["adapter"],
+            "roles": resolve_roles(config),
         }
-    return {
+    payload = {
         "advisors": sorted(KNOWN_ADVISORS),
         "executors": sorted(KNOWN_EXECUTORS),
         "trackers": sorted(KNOWN_TRACKERS),
+        "roleAgents": {role: sorted(ROLE_AGENTS[role]) for role in LOOP_ROLES},
+        "roleNames": list(LOOP_ROLES),
         "current": current,
         "copy": (
-            "This wizard creates a project and the first queue job. It is not a "
-            "drag-and-drop graph composer. Agents then drive claim, capture, and "
-            "the implementation gate through MCP or the arthur CLI."
+            "Assign an agent (and optional model) to each role. Arthur formulates "
+            "the default hop sequence from the project or ticket and hands off to "
+            "the next role. This is not a drag-and-drop graph composer."
         ),
     }
+    if config is not None:
+        payload["sequence"] = formulate_default_loop(config)["hops"]
+    return payload

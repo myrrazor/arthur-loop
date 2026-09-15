@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Arthur Loop — Install once. Your agent runs the loop.</title>
-  <meta name="description" content="File-first control plane for AI dev loops. One install writes /arthur-loop into your coding agents. Pick an advisor, executor, and tracker — then the loop holds the contract." />
+  <meta name="description" content="File-first control plane for AI dev loops — bring your own advisor, executor, and tracker. Assign roles, then run the next hop." />
   <meta name="color-scheme" content="light dark" />
   <meta name="theme-color" content="#070a08" media="(prefers-color-scheme: dark)" />
   <meta name="theme-color" content="#f4f7f2" media="(prefers-color-scheme: light)" />
@@ -67,7 +67,7 @@
       {
         "@type": "Question",
         "name": "What do I get after one install?",
-        "acceptedAnswer": { "@type": "Answer", "text": "An isolated arthur command. arthur init detects Claude Code, Codex, Cursor, and Grok Build, writes the arthur-loop skill and slash command where those clients load them, and registers a local MCP server. In the agent you run /arthur-loop to pick advisor, executor, and tracker. You also get a durable queue, artifact store, approval gates, human decisions, arthur status, and a localhost web console." }
+        "acceptedAnswer": { "@type": "Answer", "text": "An isolated arthur command. arthur init detects Claude Code, Codex, Cursor, and Grok Build, writes the arthur-loop skill and slash command where those clients load them, and registers a local MCP server. In the agent you run /arthur-loop to assign planner, implementer, reviewer, and QA. You also get a durable queue, artifact store, approval gates, human decisions, arthur status, and a localhost web console." }
       },
       {
         "@type": "Question",
@@ -82,7 +82,7 @@
       {
         "@type": "Question",
         "name": "How do I set up the loop in my agent?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Install Arthur Loop, run arthur init in an empty directory, restart the coding agent so MCP connects, then run /arthur-loop. The skill interviews you for project, advisor, executor, and tracker, creates the loop, and can follow claim, capture, and gate." }
+        "acceptedAnswer": { "@type": "Answer", "text": "Install Arthur Loop, run arthur init in an empty directory, restart the coding agent so MCP connects, then run /arthur-loop. The skill interviews you for project, roles, and tracker, creates the loop, and arthur run invokes the next assigned agent." }
       },
       {
         "@type": "Question",
@@ -97,7 +97,7 @@
       {
         "@type": "Question",
         "name": "How do I get support?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Open a GitHub issue on https://github.com/myrrazor/arthur-loop for bugs and questions." }
+        "acceptedAnswer": { "@type": "Answer", "text": "Open a GitHub issue for bugs and questions. There is no email support inbox on this site." }
       }
     ]
   }
@@ -123,7 +123,7 @@
         <div>
           <p class="eyebrow">Open source · MIT · v0.1.0</p>
           <h1>Install once.<span>Your agent runs the loop.</span></h1>
-          <p class="one-liner">Arthur Loop is a file-first control plane for AI dev work. One install detects the agents on your machine, writes <code>/arthur-loop</code> into them, and lets you specify advisor, executor, and tracker from inside the agent.</p>
+          <p class="one-liner">File-first control plane for AI dev loops — bring your own advisor, executor, and tracker. Assign planner, implementer, reviewer, and QA. <code>arthur</code> runs the next hop.</p>
           <ul class="pills" aria-label="Agent integrations">
             <li>Claude Code</li>
             <li>Codex</li>
@@ -146,10 +146,10 @@
           <div class="contract" aria-label="Arthur Loop control contract">
             <div class="contract-head"><span>CONTROL CONTRACT</span><span class="live-state">● POLL DUE</span></div>
             <ol>
-              <li><span>Advisor plans</span><small>saved first</small></li>
-              <li><span>Queue records</span><small>idempotent</small></li>
-              <li><span>Executor works</span><small>one packet</small></li>
-              <li><span>Review gate</span><strong class="gate">required</strong></li>
+              <li><span>Planner scopes</span><small>saved first</small></li>
+              <li><span>Implementer builds</span><small>one packet</small></li>
+              <li><span>Reviewer gates</span><strong class="gate">required</strong></li>
+              <li><span>QA checks</span><small>optional</small></li>
               <li><span>Human decides</span><small>project-scoped</small></li>
             </ol>
           </div>
@@ -200,7 +200,7 @@
           <li>
             <span class="n">03 — /ARTHUR-LOOP</span>
             <h3>Specify the loop in the agent</h3>
-            <p>Run <code>/arthur-loop</code> (or the installed skill). It interviews for project, advisor, executor, and tracker, calls <code>arthur loop create</code>, then can follow claim → capture → gate. Same wizard exists in <code>arthur web</code>. Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets walk into the queue with <code>arthur tracker walk</code>.</p>
+            <p>Run <code>/arthur-loop</code>. Assign planner, implementer, reviewer, and QA. Arthur formulates the default sequence. Then <code>arthur</code> or console <strong>Run next</strong> calls the next agent. Same wizard: <code>arthur web</code>. Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets walk in with <code>arthur tracker walk</code>.</p>
           </li>
         </ol>
           <div class="shot-stack" style="margin-top: 22px">
@@ -256,7 +256,7 @@
         <div>
           <p class="section-index">03 / CONSOLE</p>
           <h2>A status map, not a graph composer.</h2>
-          <p class="section-intro"><code>arthur web</code> is the browser twin of <code>arthur status</code>. Humans answer decisions, recover stale jobs, and create a loop. Agents own claim, capture, and the implementation gate.</p>
+          <p class="section-intro"><code>arthur web</code> is the browser twin of <code>arthur status</code>. Assign roles, run the next hop, answer decisions, recover stale jobs, create a loop. Agents own the hop itself.</p>
         </div>
         <div class="shot-stack">
           <figure class="shot">
@@ -333,10 +333,10 @@
           <h2>Before you wire it in.</h2>
         </div>
         <div class="faq-list">
-          <details><summary>What do I get after one install?</summary><p>An isolated <code>arthur</code> command. <code>arthur init</code> detects Claude Code, Codex, Cursor, and Grok Build, writes the arthur-loop skill and slash command where those clients load them, and registers a local MCP server. In the agent you run <code>/arthur-loop</code> to pick advisor, executor, and tracker. You also get a durable queue, artifact store, approval gates, human decisions, <code>arthur status</code>, and a localhost web console.</p></details>
+          <details><summary>What do I get after one install?</summary><p>An isolated <code>arthur</code> command. <code>arthur init</code> detects Claude Code, Codex, Cursor, and Grok Build, writes the arthur-loop skill and slash command where those clients load them, and registers a local MCP server. In the agent you run <code>/arthur-loop</code> to assign planner, implementer, reviewer, and QA. You also get a durable queue, artifact store, approval gates, human decisions, <code>arthur status</code>, and a localhost web console.</p></details>
           <details><summary>Is Arthur Loop free?</summary><p>Yes. Arthur Loop is MIT licensed and has no paid tier.</p></details>
           <details><summary>Where is my data stored? Does it phone home?</summary><p>Queues, artifacts, decisions, sessions, and quota snapshots stay as markdown and JSONL inside the instance directory you choose. The core does not phone home or require an API key. Adapters only invoke tools you configure.</p></details>
-          <details><summary>How do I set up the loop in my agent?</summary><p>Install Arthur Loop, run <code>arthur init</code> in an empty directory, restart the coding agent so MCP connects, then run <code>/arthur-loop</code>. The skill interviews you for project, advisor, executor, and tracker, creates the loop, and can follow claim, capture, and gate.</p></details>
+          <details><summary>How do I set up the loop in my agent?</summary><p>Install Arthur Loop, run <code>arthur init</code> in an empty directory, restart the coding agent so MCP connects, then run <code>/arthur-loop</code>. The skill interviews you for project, roles, and tracker, creates the loop, and <code>arthur run</code> invokes the next assigned agent.</p></details>
           <details><summary>Which platforms are supported?</summary><p>The Python CLI is exercised on macOS and Linux with Python 3.9 or newer. Windows is experimental. ArthurBar requires macOS 14 or newer.</p></details>
           <details><summary>How do I update or uninstall it?</summary><p>Repeat the pipx, uv, or curl install command to update (add <code>--force</code> for pipx or uv). Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs can be removed by deleting <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p></details>
           <details><summary>How do I get support?</summary><p>Open a <a href="https://github.com/myrrazor/arthur-loop/issues">GitHub issue</a> for bugs and questions. There is no email support inbox on this site.</p></details>
@@ -353,6 +353,11 @@
       <a href="privacy.html">Privacy</a><span>·</span>
       <a href="terms.html">Terms</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+      <span>·</span>
+      Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>
+    </div>
+    <div class="wrap">
+      <p class="note">The v0.1.0 tag is a file cockpit; tagged installers they do not install current main. Install from git HEAD for roles and <code>arthur run</code>.</p>
     </div>
   </footer>
   <script src="site.js"></script>

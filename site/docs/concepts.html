@@ -27,6 +27,7 @@
           <li><a href="./">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html" aria-current="page">Concepts</a></li>
           <li><a href="console.html">Web console</a></li>
           <li><a href="agents.html">Agents</a></li>
@@ -54,14 +55,18 @@
         <h2>Tick</h2>
         <p><code>arthur tick</code> reads durable state and answers WAIT, POLL_DUE, BLOCKED_BY_BROWSER_LOCK, BLOCKED_BY_QUOTA, or HUMAN_INPUT_REQUIRED. It costs no tokens. Run it from cron if you want a heartbeat.</p>
 
+        <h2>Roles</h2>
+        <p>Planner, implementer, reviewer, and optional QA. Each hop is invoked as the assigned agent. Setup: <a href="roles.html">Roles and run</a>.</p>
+
         <h2>The hop sequence</h2>
         <ol>
-          <li>Advisor next-plan request</li>
-          <li>Executor plan (plan only)</li>
-          <li>Advisor plan review</li>
+          <li>Planner next-plan request</li>
+          <li>Implementer plan (plan only)</li>
+          <li>Reviewer plan review</li>
           <li>Implementation gate GO</li>
-          <li>Executor implementation handoff</li>
-          <li>Advisor sprint review, until release-ready</li>
+          <li>Implementer implementation handoff</li>
+          <li>QA review, if that role is assigned</li>
+          <li>Reviewer sprint review, until release-ready</li>
         </ol>
         <p>Full operating manual: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md">workflow-runbook.md</a> in the repository.</p>
       </div>

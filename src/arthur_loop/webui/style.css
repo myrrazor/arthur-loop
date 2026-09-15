@@ -413,6 +413,29 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 }
 .field input:focus, .field select:focus { outline: 2px solid var(--flow); outline-offset: 1px; border-color: var(--flow); }
 .field .hint { font-size: 10.5px; color: var(--text-faint); }
+.role-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.role-strip {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 2;
+}
+.role-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+}
+.role-chip.is-next { color: var(--text); border-color: var(--flow); }
+.role-arrow { color: var(--text-faint); font-size: 11px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
 
 /* ---- responsive: fold the rails under 1080px -------------------------- */

@@ -27,6 +27,7 @@
           <li><a href="./">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html">Concepts</a></li>
           <li><a href="console.html">Web console</a></li>
           <li><a href="agents.html">Agents</a></li>
@@ -42,29 +43,30 @@
         <h2>Everyday commands</h2>
         <pre>arthur --version
 arthur init
-arthur status
-arthur tick --dry-run
-arthur web
-arthur watch
-arthur loop create --project-id MY_APP --advisor grok --executor claude-code
+arthur roles set reviewer=claude-code:opus qa=grok
+arthur loop create --project-id MY_APP --from-ticket AUTH-2 --role planner=grok
+arthur
+arthur run
 arthur follow --once
-arthur integrations install --targets claude,codex,cursor,grok
+arthur web
+arthur status
 arthur gate implementation --project-id MY_APP
 arthur decision list</pre>
+        <p>Inside an instance, bare <code>arthur</code> invokes the next assigned role. Full setup: <a href="roles.html">Roles and run</a>.</p>
         <p>An open human decision pauses that project: claim, submit, poll-result, complete, and fail exit 2. Cancel and recover still work.</p>
 
         <h2>MCP tools</h2>
         <p>Dotted names are canonical. Grok registrations use portable names (<code>arthur_status</code>, <code>arthur_loop_create</code>, <code>arthur_follow_run</code>).</p>
-        <p><strong>Read:</strong> <code>arthur.status</code>, <code>arthur.tick</code>, <code>arthur.queue.show</code>, <code>arthur.queue.due</code>, <code>arthur.gate.implementation</code>, <code>arthur.decision.list</code>, <code>arthur.loop.list</code>, <code>arthur.board</code>, <code>arthur.tracker.next</code>, <code>arthur.tracker.queue</code>.</p>
-        <p><strong>Gated write:</strong> <code>arthur.queue.create</code>, <code>arthur.queue.claim</code>, <code>arthur.queue.submit</code>, <code>arthur.queue.poll_result</code>, <code>arthur.queue.recover</code>, <code>arthur.capture</code>, <code>arthur.decision.open</code>, <code>arthur.decision.answer</code>, <code>arthur.loop.create</code>, <code>arthur.board.open_jobs</code>, <code>arthur.tracker.walk</code>, <code>arthur.follow.run</code>.</p>
-        <p>The <code>/arthur-loop</code> prompt interviews for roles, calls <code>arthur.loop.create</code>, then <code>arthur.follow.run</code>.</p>
+        <p><strong>Read:</strong> <code>arthur.status</code>, <code>arthur.tick</code>, <code>arthur.queue.show</code>, <code>arthur.queue.due</code>, <code>arthur.gate.implementation</code>, <code>arthur.decision.list</code>, <code>arthur.loop.list</code>, <code>arthur.roles.list</code>, <code>arthur.board</code>, <code>arthur.tracker.next</code>, <code>arthur.tracker.queue</code>.</p>
+        <p><strong>Gated write:</strong> <code>arthur.queue.create</code>, <code>arthur.queue.claim</code>, <code>arthur.queue.submit</code>, <code>arthur.queue.poll_result</code>, <code>arthur.queue.recover</code>, <code>arthur.capture</code>, <code>arthur.decision.open</code>, <code>arthur.decision.answer</code>, <code>arthur.loop.create</code>, <code>arthur.roles.set</code>, <code>arthur.run</code>, <code>arthur.board.open_jobs</code>, <code>arthur.tracker.walk</code>, <code>arthur.follow.run</code>.</p>
+        <p>The <code>/arthur-loop</code> prompt interviews for roles, calls <code>arthur.loop.create</code>, then <code>arthur.run</code>.</p>
         <pre>arthur mcp serve
 arthur mcp serve --tool-name-style portable
 arthur mcp tools --json
 arthur mcp call arthur.status</pre>
 
-        <h2>Follow</h2>
-        <p><code>arthur follow</code> claims, invokes the CLI adapter, captures, gates, and enqueues the next hop when the adapter has a headless transport. It will not skip a human decision or invent plan approval. ChatGPT-browser and manual adapters write an inbox file and stop.</p>
+        <h2>Follow / run</h2>
+        <p><code>arthur</code>, <code>arthur run</code>, and <code>arthur follow</code> claim, invoke the assigned role’s CLI, capture, gate, and enqueue the next hop. They will not skip a human decision or invent plan approval. ChatGPT-browser and manual adapters write an inbox file and stop.</p>
         <p>Repo detail: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/mcp.md">docs/mcp.md</a>, <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/follow.md">docs/follow.md</a>.</p>
       </div>
     </div>

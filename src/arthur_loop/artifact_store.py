@@ -26,11 +26,13 @@ CONTROL_ENUMS = {
     },
     "plan_status": {"READY_FOR_CHATGPT_REVIEW", "HUMAN_INPUT_REQUIRED"},
     "implementation_status": {"COMPLETE", "BLOCKED", "HUMAN_INPUT_REQUIRED"},
+    "qa_status": {"QA_PASS", "QA_FAIL", "HUMAN_INPUT_REQUIRED"},
     "review_type": {
         "NEXT_PLAN_REQUEST",
         "CODEX_PLAN",
         "PLAN_APPROVAL",
         "CODEX_IMPLEMENTATION_HANDOFF",
+        "QA_REVIEW",
         "SPRINT_REVIEW",
         "HUMAN_DECISION_ESCALATION",
     },
@@ -52,6 +54,7 @@ ARTIFACT_KINDS: dict[str, dict[str, str]] = {
         "review_type": "CODEX_IMPLEMENTATION_HANDOFF",
         "decision_field": "implementation_status",
     },
+    "qa-review": {"review_type": "QA_REVIEW", "decision_field": "qa_status"},
     "sprint-review": {"review_type": "SPRINT_REVIEW", "decision_field": "approval_decision"},
     "human-decision": {"review_type": "HUMAN_DECISION_ESCALATION", "decision_field": ""},
 }
@@ -218,6 +221,7 @@ class ChatGptArtifact:
     control_block_source: str = ""
     control_block_reasons: list[str] | None = None
     implementation_status: str | None = None
+    qa_status: str | None = None
     # title of the human decision this artifact opened, if it stopped its project
     escalated_decision: str | None = None
 
@@ -230,7 +234,7 @@ class ChatGptArtifact:
     def decision(self) -> str | None:
         """The automation-driving value of this hop, whatever field carries it."""
 
-        return self.approval_decision or self.plan_status or self.implementation_status
+        return self.approval_decision or self.plan_status or self.implementation_status or self.qa_status
 
     @property
     def needs_human(self) -> bool:
@@ -254,6 +258,7 @@ def frontmatter_for(artifact: ChatGptArtifact) -> str:
         "has_p0_p1": artifact.has_p0_p1,
         "plan_status": artifact.plan_status,
         "implementation_status": artifact.implementation_status,
+        "qa_status": artifact.qa_status,
         "control_block_valid": str(artifact.control_block_valid).lower(),
         "control_block_source": artifact.control_block_source,
     }
@@ -331,6 +336,7 @@ def save_chatgpt_artifact(
         has_p0_p1=fields.get("has_p0_p1") or fields.get("plan_has_p0_p1"),
         plan_status=fields.get("plan_status"),
         implementation_status=fields.get("implementation_status"),
+        qa_status=fields.get("qa_status"),
         control_block_valid=valid,
         control_block_source=control.source,
         control_block_reasons=reasons,

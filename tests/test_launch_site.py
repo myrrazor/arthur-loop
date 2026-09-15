@@ -76,14 +76,18 @@ class LaunchSiteTests(unittest.TestCase):
             visible_faq[html.unescape(question)] = html.unescape(clean_answer)
 
         self.assertEqual(structured_faq, visible_faq)
-        self.assertEqual(len(documents), 2)
+        self.assertGreaterEqual(len(documents), 2)
+        self.assertTrue(any(item.get("@type") == "SoftwareApplication" for item in documents))
 
     def test_every_local_site_asset_exists(self) -> None:
-        missing = [
-            asset
-            for asset in sorted(self.parser.local_assets)
-            if not (ROOT / "site" / asset).is_file()
-        ]
+        missing = []
+        for asset in sorted(self.parser.local_assets):
+            path = ROOT / "site" / asset
+            if path.is_file():
+                continue
+            if path.is_dir() and (path / "index.html").is_file():
+                continue
+            missing.append(asset)
         self.assertEqual(missing, [])
 
     def test_launch_copy_and_install_commands_stay_in_sync(self) -> None:

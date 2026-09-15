@@ -19,7 +19,8 @@ from arthur_loop.atlas_board import (
 from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision, list_decisions, open_decision
 from arthur_loop.follow import follow_loop
-from arthur_loop.loop_ops import claim_job, create_loop, list_loops, submit_job, wizard_options
+from arthur_loop.loop_ops import apply_role_updates, claim_job, create_loop, list_loops, submit_job, wizard_options
+from arthur_loop.roles import LOOP_ROLES, parse_role_spec, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.recovery import recover_job
 from arthur_loop.status import collect_status, status_to_dict
@@ -42,6 +43,8 @@ WRITE_TOOLS = {
     "arthur.loop.create",
     "arthur.board.open_jobs",
     "arthur.follow.run",
+    "arthur.run",
+    "arthur.roles.set",
     "arthur.tracker.walk",
 }
 
@@ -148,7 +151,13 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "name": "arthur.loop.list",
-        "description": "List projects and current advisor/executor/tracker roles.",
+        "description": "List projects and current role assignments.",
+        "inputSchema": _schema({}),
+        "write": False,
+    },
+    {
+        "name": "arthur.roles.list",
+        "description": "Show planner, implementer, reviewer, and QA agent assignments.",
         "inputSchema": _schema({}),
         "write": False,
     },
@@ -267,12 +276,17 @@ TOOL_DEFS: list[dict[str, Any]] = [
         "inputSchema": _schema(
             {
                 "project_id": _str("SHOUTY_SNAKE project id"),
-                "advisor": _str("Advisor adapter"),
-                "executor": _str("Executor adapter"),
+                "advisor": _str("Legacy: planner + reviewer agent"),
+                "executor": _str("Legacy: implementer agent"),
+                "planner": _str("Planner agent or agent:model"),
+                "implementer": _str("Implementer agent or agent:model"),
+                "reviewer": _str("Reviewer agent or agent:model"),
+                "qa": _str("QA agent, agent:model, or none"),
                 "tracker": _str("Tracker adapter"),
-                "title": _str("Advisor conversation title"),
-                "target_chat_url": _str("Advisor URL or `manual`"),
+                "title": _str("Planner conversation title"),
+                "target_chat_url": _str("Planner URL or `manual`"),
                 "goal": _str("One-line project goal"),
+                "ticket": _str("Ticket id to formulate the default loop from"),
                 "seed_job": _bool("Create the first queue job (default true)"),
                 "actor": _str("Who is creating the loop"),
                 "reason": _str("Why"),
@@ -311,7 +325,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "name": "arthur.follow.run",
-        "description": "Auto-follow: claim → invoke CLI adapter → submit → capture → gate. Stops on human gates.",
+        "description": "Auto-follow: claim → invoke the assigned role's CLI → submit → capture → gate. Stops on human gates.",
         "inputSchema": _schema(
             {
                 "once": _bool("One step only"),
@@ -319,6 +333,32 @@ TOOL_DEFS: list[dict[str, Any]] = [
                 "project_id": _str("Limit to one Arthur project"),
                 "chain": _bool("Enqueue the next hop from a trusted control block (default true)"),
                 "dry_run": _bool("Classify only"),
+            }
+        ),
+        "write": True,
+    },
+    {
+        "name": "arthur.run",
+        "description": "Call the next assigned agent (one hop). Same as bare `arthur` or `arthur run`.",
+        "inputSchema": _schema(
+            {
+                "once": _bool("One hop (default true)"),
+                "max_steps": _int("Cap when not once"),
+                "project_id": _str("Limit to one Arthur project"),
+                "dry_run": _bool("Classify only"),
+            }
+        ),
+        "write": True,
+    },
+    {
+        "name": "arthur.roles.set",
+        "description": "Assign agents to roles. Values are agent or agent:model (example: claude-code:opus).",
+        "inputSchema": _schema(
+            {
+                "planner": _str("Planner agent or agent:model"),
+                "implementer": _str("Implementer agent or agent:model"),
+                "reviewer": _str("Reviewer agent or agent:model"),
+                "qa": _str("QA agent, agent:model, or none"),
             }
         ),
         "write": True,
@@ -566,6 +606,15 @@ def _handle_decision_answer(ctx: McpContext, arguments: dict[str, Any]) -> dict[
     return _ok(answer_decision(ctx.root, _s(arguments, "title") or "", _s(arguments, "answer") or ""))
 
 
+def _roles_from_args(arguments: dict[str, Any]) -> dict[str, Any] | None:
+    updates: dict[str, Any] = {}
+    for role in LOOP_ROLES:
+        raw = _s(arguments, role)
+        if raw:
+            updates[role] = parse_role_spec(raw)
+    return updates or None
+
+
 def _handle_loop_create(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
     seed = arguments.get("seed_job")
     if seed is None:
@@ -577,14 +626,35 @@ def _handle_loop_create(ctx: McpContext, arguments: dict[str, Any]) -> dict[str,
             advisor=_s(arguments, "advisor"),
             executor=_s(arguments, "executor"),
             tracker=_s(arguments, "tracker"),
+            roles=_roles_from_args(arguments),
             title=_s(arguments, "title"),
             target_chat_url=_s(arguments, "target_chat_url") or "manual",
             goal=_s(arguments, "goal") or "",
             seed_job=bool(seed),
             actor=_s(arguments, "actor"),
             reason=_s(arguments, "reason"),
+            ticket=_s(arguments, "ticket"),
         )
     )
+
+
+def _handle_roles_list(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _ok(roles_payload(ctx.config))
+
+
+def _handle_roles_set(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    updates = _roles_from_args(arguments)
+    if not updates:
+        raise ValueError("set at least one role: planner, implementer, reviewer, qa")
+    config = apply_role_updates(ctx.root, roles=updates)
+    ctx.config = config
+    return _ok(roles_payload(config))
+
+
+def _handle_run(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    if "once" not in arguments:
+        arguments = {**arguments, "once": True}
+    return _handle_follow_run(ctx, arguments)
 
 
 def _handle_board_open(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -629,6 +699,9 @@ TOOL_HANDLERS.update(
         "arthur.tracker.queue": _handle_tracker_queue,
         "arthur.tracker.walk": _handle_tracker_walk,
         "arthur.follow.run": _handle_follow_run,
+        "arthur.run": _handle_run,
+        "arthur.roles.list": _handle_roles_list,
+        "arthur.roles.set": _handle_roles_set,
     }
 )
 
@@ -636,16 +709,17 @@ TOOL_HANDLERS.update(
 CREATE_LOOP_PROMPT = """You are operating an Arthur Loop instance. There is no drag-drop graph composer.
 
 Interview the human, one topic at a time:
-1. Project id (SHOUTY_SNAKE) and one-line goal
-2. Advisor (plans/reviews): chatgpt-browser, claude-code, codex, grok, or manual
-3. Executor (implements): claude-code, codex, grok, or manual
-4. Tracker: atlas-tasker, command, or none
-5. Whether to seed the first next-plan-request job
+1. Project id (SHOUTY_SNAKE), one-line goal, and optional ticket id
+2. Planner / Advisor agent (and optional model): chatgpt-browser, claude-code, codex, grok, or manual
+3. Implementer agent (and optional model): claude-code, codex, grok, or manual
+4. Reviewer agent (and optional model): chatgpt-browser, claude-code, codex, grok, or manual
+5. QA agent (optional): same list, or none to skip QA
+6. Tracker: atlas-tasker, command, or none
 
 Then call arthur.loop.create (portable: arthur_loop_create) with those answers.
-After that, call arthur.follow.run (portable: arthur_follow_run) so claim/capture/gate
-are not hand-typed. Remaining human gates: open decisions, ChatGPT-browser/manual
-adapters, and implementation-gate NO-GO.
+Arthur formulates the default hop sequence and hands each hop to the assigned role.
+After that, call arthur.run or arthur.follow.run so the next agent is invoked.
+Remaining human gates: open decisions, ChatGPT-browser/manual adapters, and implementation-gate NO-GO.
 Never hand-edit queue JSONL. Never claim, submit, poll, complete, or fail a job on a project paused by an open human decision.
 """
 

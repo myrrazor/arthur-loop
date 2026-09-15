@@ -27,6 +27,7 @@
           <li><a href="./">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html">Concepts</a></li>
           <li><a href="console.html">Web console</a></li>
           <li><a href="agents.html" aria-current="page">Agents</a></li>
@@ -55,11 +56,13 @@
         <table>
           <thead><tr><th>Role</th><th>Options</th></tr></thead>
           <tbody>
-            <tr><td>Advisor</td><td><code>chatgpt-browser</code> · <code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
-            <tr><td>Executor</td><td><code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td>Planner / reviewer</td><td><code>chatgpt-browser</code> · <code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td>Implementer</td><td><code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td>QA</td><td>same as planner, or <code>none</code></td></tr>
             <tr><td>Tracker</td><td><code>atlas-tasker</code> · <code>command</code> · <code>none</code></td></tr>
           </tbody>
         </table>
+        <p>Assign them with <code>arthur roles set reviewer=claude-code:opus</code> or the console <strong>Roles</strong> button. <a href="roles.html">Roles and run</a>.</p>
         <p>Gemini and Goose are detected so init can talk about them. They have no shipped advisor/executor pack; <code>guided</code> starts those roles as <code>manual</code> until you author an adapter.</p>
 
         <h2>Atlas Tasker</h2>

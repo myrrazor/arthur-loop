@@ -17,7 +17,9 @@ from arthur_loop.browser_lock import BrowserLockError, break_lock, read_lock
 from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision as _answer_decision
 from arthur_loop.decisions import list_decisions
-from arthur_loop.loop_ops import create_loop, wizard_options
+from arthur_loop.follow import follow_loop, preview_next_step
+from arthur_loop.loop_ops import apply_role_updates, create_loop, wizard_options
+from arthur_loop.roles import formulate_default_loop, resolve_roles, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
 from arthur_loop.recovery import recover_job
 from arthur_loop.status import clear_session, collect_status, status_to_dict
@@ -96,7 +98,11 @@ class WebApp:
             "advisor": self.config["advisor"]["adapter"],
             "executor": self.config["executor"]["adapter"],
             "tracker": self.config["tracker"]["adapter"],
+            "roles": resolve_roles(self.config),
         }
+        payload["roles"] = roles_payload(self.config)
+        payload["loopSequence"] = formulate_default_loop(self.config).get("hops") or []
+        payload["nextRun"] = preview_next_step(self.root)
         payload["loopWizard"] = wizard_options(self.root)
         return payload
 
@@ -211,6 +217,7 @@ class WebApp:
         seed = body.get("seed_job")
         if seed is None:
             seed = True
+        roles = body.get("roles") if isinstance(body.get("roles"), dict) else None
         with self._write_lock:
             record = create_loop(
                 self.root,
@@ -218,14 +225,40 @@ class WebApp:
                 advisor=str(body["advisor"]).strip() if body.get("advisor") else None,
                 executor=str(body["executor"]).strip() if body.get("executor") else None,
                 tracker=str(body["tracker"]).strip() if body.get("tracker") else None,
+                roles=roles,
                 title=str(body.get("title") or "").strip() or None,
                 target_chat_url=str(body.get("target_chat_url") or "manual").strip() or "manual",
                 goal=str(body.get("goal") or ""),
                 seed_job=bool(seed),
                 actor="web-console",
                 reason="create-loop wizard",
+                ticket=str(body.get("ticket") or "").strip() or None,
             )
             self.config = load_config(self.root)
+        return record
+
+    def set_roles(self, body: dict[str, Any]) -> dict[str, Any]:
+        roles = body.get("roles")
+        if not isinstance(roles, dict) or not roles:
+            raise ValueError("roles object is required")
+        with self._write_lock:
+            apply_role_updates(self.root, roles=roles)
+            self.config = load_config(self.root)
+        return roles_payload(self.config)
+
+    def run_next(self, body: dict[str, Any]) -> dict[str, Any]:
+        once = body.get("once")
+        if once is None:
+            once = True
+        with self._write_lock:
+            record = follow_loop(
+                self.root,
+                once=bool(once),
+                max_steps=int(body.get("max_steps") or 12),
+                project_id=str(body["project_id"]).strip() if body.get("project_id") else None,
+                chain=body.get("chain", True),
+                dry_run=bool(body.get("dry_run")),
+            )
         return record
 
     def clear_session_action(self, session_id: str) -> dict[str, Any]:
@@ -373,6 +406,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json(self.app.create_job(body))
             if self.path == "/api/actions/create-loop":
                 return self._send_json(self.app.create_loop(body))
+            if self.path == "/api/actions/set-roles":
+                return self._send_json(self.app.set_roles(body))
+            if self.path == "/api/actions/run-next":
+                return self._send_json(self.app.run_next(body))
             if self.path == "/api/actions/clear-session":
                 return self._send_json(self.app.clear_session_action(str(body.get("session_id", ""))))
             if self.path == "/api/actions/break-lock":
@@ -421,7 +458,7 @@ def cmd_web(args: Any) -> int:
     print(f"arthur web console: {url}")
     print(f"instance: {root}")
     print("localhost only; the token in the URL is this session's key — other local users cannot read or write without it.")
-    print("read-only for agents; humans get six actions (including the create-loop wizard). Ctrl+C stops it.")
+    print("Assign roles, run the next hop, create a loop, and answer decisions. Ctrl+C stops it.")
     if not args.no_open:
         webbrowser.open(url)
     try:

@@ -2,6 +2,12 @@
   "version": 2,
   "advisor": { "adapter": "chatgpt-browser" },
   "executor": { "adapter": "codex" },
+  "roles": {
+    "planner": { "agent": "chatgpt-browser", "model": "" },
+    "implementer": { "agent": "codex", "model": "" },
+    "reviewer": { "agent": "chatgpt-browser", "model": "" },
+    "qa": { "agent": "none", "model": "" }
+  },
   "tracker": { "adapter": "none" },
   "components": { "resource_governor": true, "heartbeat": true },
   "quota": {

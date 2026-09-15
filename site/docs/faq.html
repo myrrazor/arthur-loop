@@ -27,6 +27,7 @@
           <li><a href="./">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html">Concepts</a></li>
           <li><a href="console.html">Web console</a></li>
           <li><a href="agents.html">Agents</a></li>
@@ -42,7 +43,7 @@
         <p>An isolated <code>arthur</code> command. <code>arthur init</code> detects your coding agents, writes <code>/arthur-loop</code> and MCP, and leaves a kickoff file. You also get the queue, artifact store, gates, decisions, status dashboard, and localhost console.</p>
 
         <h2>How do I specify how the loop is set up?</h2>
-        <p>Run <code>/arthur-loop</code> in the agent init configured, or <code>arthur loop create</code>, or <strong>+ Loop</strong> in <code>arthur web</code>. Those three paths share one interview: project, advisor, executor, tracker.</p>
+        <p>Run <code>/arthur-loop</code> in the agent init configured, or <code>arthur loop create</code>, or <strong>Roles</strong> / <strong>+ Loop</strong> / <strong>Run next</strong> in <code>arthur web</code>. Interview: project, planner, implementer, reviewer, QA, tracker. Then <code>arthur</code> invokes the next role. <a href="roles.html">Roles and run</a>.</p>
 
         <h2>Is there a v0.2.0 release?</h2>
         <p>No tagged v0.2.0. <code>arthur --version</code> prints <code>arthur 0.1.0</code> until the next tag. Current <code>main</code> is what the install commands track.</p>

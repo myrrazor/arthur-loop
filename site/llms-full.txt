@@ -15,11 +15,12 @@ does not require an API key in the core, and does not replace your coding agents
 2. `mkdir ~/my-loop && cd ~/my-loop && arthur init`.
    Init detects Claude Code, Codex, Cursor, and Grok Build; writes skills / slash
    commands; registers `arthur mcp serve`. Restart the client.
-3. In the agent, run `/arthur-loop`. Interview for project, advisor, executor, tracker.
-   Creates the loop via `arthur.loop.create`. Can follow with `arthur.follow.run`.
+3. In the agent, run `/arthur-loop`. Interview for project, planner, implementer,
+   reviewer, QA, tracker. Creates the loop via `arthur.loop.create`.
+   Run the next hop with `arthur`, `arthur run`, or `arthur.follow.run`.
 4. Humans still answer decisions. ChatGPT-browser and manual adapters are not headless.
 
-Equivalent create paths: `arthur loop create` and `arthur web` → + Loop.
+Equivalent create paths: `arthur loop create` and `arthur web` → Roles / + Loop / Run next.
 
 ## Core objects
 
@@ -31,9 +32,9 @@ Equivalent create paths: `arthur loop create` and `arthur web` → + Loop.
 
 ## Roles
 
-Advisor plans and reviews. Executor implements one approved packet. Tracker is optional
-(`atlas-tasker`, `command`, or `none`). Shipped packs: Codex, Claude Code, Grok Build,
-chatgpt-browser, manual. Cursor gets skills + MCP only.
+Planner scopes. Implementer plans and builds. Reviewer approves. QA is optional (`none` skips).
+Tracker is optional (`atlas-tasker`, `command`, or `none`). Shipped packs: Codex, Claude Code,
+Grok Build, chatgpt-browser, manual. Cursor gets skills + MCP only.
 
 ## Surfaces
 

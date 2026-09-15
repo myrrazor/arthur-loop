@@ -27,6 +27,7 @@
           <li><a href="./">Overview</a></li>
           <li><a href="install.html">Install</a></li>
           <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html">Roles and run</a></li>
           <li><a href="concepts.html">Concepts</a></li>
           <li><a href="console.html" aria-current="page">Web console</a></li>
           <li><a href="agents.html">Agents</a></li>
@@ -40,6 +41,7 @@
         <pre>arthur web
 arthur web --root ~/my-loop --port 8080 --no-open</pre>
         <p>Vanilla JS over Python's stdlib server. No build step, no npm. It binds <code>127.0.0.1</code> only and prints a URL with a per-process session token. Every read and write requires that token.</p>
+        <p><strong>Roles</strong> assigns planner, implementer, reviewer, and QA. <strong>Run next</strong> invokes the next assigned agent. <strong>+ Loop</strong> formulates the default sequence. Same as <code>arthur roles</code> and <code>arthur</code> in a terminal. Detail: <a href="roles.html">Roles and run</a>.</p>
 
         <figure class="shot">
           <div class="shot-frame">
@@ -64,7 +66,7 @@ arthur web --root ~/my-loop --port 8080 --no-open</pre>
         </ul>
 
         <h2>What a human can do here</h2>
-        <p>Six write actions, each the same code path as the CLI: answer a decision, recover a job, create a loop, create a job, clear a session, break a stale browser lock. There are no claim, submit, poll, or “approve plan” buttons. Agents own those hops through MCP or the CLI.</p>
+        <p>Human actions, each the same code path as the CLI: assign roles, run the next hop, answer a decision, recover a job, create a loop, create a job, clear a session, break a stale browser lock. There are no claim, submit, poll, or “approve plan” bypasses.</p>
 
         <figure class="shot">
           <div class="shot-frame">
@@ -75,7 +77,7 @@ arthur web --root ~/my-loop --port 8080 --no-open</pre>
               </picture>
             </a>
           </div>
-          <figcaption>+ Loop is the same interview as <code>/arthur-loop</code>: project, advisor, executor, tracker, optional first job.</figcaption>
+          <figcaption>+ Loop is the same interview as <code>/arthur-loop</code>: project, roles, tracker, optional first job.</figcaption>
         </figure>
       </div>
     </div>

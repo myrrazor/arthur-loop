@@ -32,20 +32,22 @@ A written MCP config is written, not connected — restart the client.
 
 In the coding agent, run `/arthur-loop` (or the installed skill). It interviews for:
 
-- project id (`SHOUTY_SNAKE`) and a one-line goal
-- advisor: `chatgpt-browser`, `claude-code`, `codex`, `grok`, or `manual`
-- executor: `claude-code`, `codex`, `grok`, or `manual`
+- project id (`SHOUTY_SNAKE`), goal, optional ticket
+- planner / implementer / reviewer / QA (agent and optional model)
 - tracker: `atlas-tasker`, `command`, or `none`
 
-Then it calls MCP `arthur.loop.create` (or `arthur loop create`) and can follow hops with
-`arthur.follow.run` / `arthur follow --once`. The same wizard is `arthur web` → + Loop.
-It is not a graph composer.
+Then it calls MCP `arthur.loop.create`. Arthur formulates the default hop sequence.
+Run the next hop with `arthur`, `arthur run`, or console **Run next**.
+Same wizard: `arthur web` → Roles / + Loop / Run next. It is not a graph composer.
+
+The v0.1.0 tag is a file cockpit.
 
 ## Site
 - [Home](https://arthurloop.com/): product story and install
 - [Docs](https://arthurloop.com/docs/): map of the documentation
 - [Install](https://arthurloop.com/docs/install.html): pipx / uv / curl, then init
 - [First loop](https://arthurloop.com/docs/first-loop.html): `/arthur-loop` interview
+- [Roles and run](https://arthurloop.com/docs/roles.html): assign agents; terminal and UI
 - [Concepts](https://arthurloop.com/docs/concepts.html): queue, artifact, gate, decision, tick
 - [Web console](https://arthurloop.com/docs/console.html): localhost status map
 - [Agents](https://arthurloop.com/docs/agents.html): integrations and adapter packs

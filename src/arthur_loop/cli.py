@@ -18,7 +18,15 @@ from arthur_loop.browser_lock import (
     read_lock,
     release_lock,
 )
-from arthur_loop.config import KNOWN_ADVISORS, KNOWN_EXECUTORS, KNOWN_TRACKERS, load_config, require_instance
+from arthur_loop.config import (
+    KNOWN_ADVISORS,
+    KNOWN_EXECUTORS,
+    KNOWN_TRACKERS,
+    is_instance,
+    load_config,
+    require_instance,
+)
+from arthur_loop.roles import LOOP_ROLES, parse_role_updates, roles_payload
 from arthur_loop.decisions import answer_decision, clear_decision, list_decisions, open_decision
 from arthur_loop.init_cli import add_init_parser
 from arthur_loop.notify import (
@@ -1246,18 +1254,23 @@ def cmd_loop(args: argparse.Namespace) -> int:
     if args.loop_action == "list":
         print_record(list_loops(root))
         return EXIT_OK
+    roles = None
+    if getattr(args, "role", None):
+        roles = parse_role_updates(args.role)
     record = create_loop(
         root,
         project_id=args.project_id,
         advisor=args.advisor,
         executor=args.executor,
         tracker=args.tracker,
+        roles=roles,
         title=args.title,
         target_chat_url=args.target_chat_url,
         goal=args.goal or "",
         seed_job=not args.no_job,
         actor=args.actor,
         reason=args.reason,
+        ticket=getattr(args, "from_ticket", None),
     )
     print_record(record)
     return EXIT_OK
@@ -1279,6 +1292,14 @@ def _build_loop_parser(subparsers: Any) -> None:
     create.add_argument("--title", help="Advisor conversation title")
     create.add_argument("--target-chat-url", default="manual")
     create.add_argument("--goal", help="One-line project goal written into state.md")
+    create.add_argument("--from-ticket", help="Ticket id to formulate the default loop from")
+    create.add_argument(
+        "--role",
+        action="append",
+        default=[],
+        metavar="ROLE=AGENT[:MODEL]",
+        help="Assign a role, e.g. reviewer=claude-code:opus (repeatable)",
+    )
     create.add_argument("--no-job", action="store_true", help="Skip the first queue job")
     create.add_argument("--actor")
     create.add_argument("--reason")
@@ -1332,6 +1353,73 @@ def _build_follow_parser(subparsers: Any) -> None:
     follow.set_defaults(func=cmd_follow)
 
 
+def cmd_roles(args: argparse.Namespace) -> int:
+    from arthur_loop.loop_ops import apply_role_updates
+
+    root = resolve_root(args)
+    require_instance(root)
+    if args.roles_action == "set":
+        updates = parse_role_updates(args.assignment)
+        apply_role_updates(root, roles=updates)
+    print_record(roles_payload(load_config(root)))
+    return EXIT_OK
+
+
+def _build_roles_parser(subparsers: Any) -> None:
+    roles = subparsers.add_parser(
+        "roles",
+        help="Show or assign loop roles (planner, implementer, reviewer, qa)",
+    )
+    add_root_argument(roles)
+    actions = roles.add_subparsers(dest="roles_action")
+    listing = actions.add_parser("list", help="Show current role assignments (default)")
+    add_root_argument(listing)
+    listing.set_defaults(func=cmd_roles, roles_action="list")
+    setter = actions.add_parser("set", help="Assign agents: reviewer=claude-code:opus")
+    add_root_argument(setter)
+    setter.add_argument(
+        "assignment",
+        nargs="+",
+        metavar="ROLE=AGENT[:MODEL]",
+        help=f"One of {', '.join(LOOP_ROLES)}",
+    )
+    setter.set_defaults(func=cmd_roles, roles_action="set")
+    roles.set_defaults(func=cmd_roles, roles_action="list")
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Invoke the next assigned agent. Same as `arthur follow --once` unless --all."""
+
+    args.once = not getattr(args, "all", False)
+    if getattr(args, "all", False):
+        args.once = False
+    args.max_steps = getattr(args, "max_steps", 12)
+    args.project_id = getattr(args, "project_id", None)
+    args.holder = getattr(args, "holder", None) or "arthur-follow"
+    args.no_chain = getattr(args, "no_chain", False)
+    args.dry_run = getattr(args, "dry_run", False)
+    return cmd_follow(args)
+
+
+def _build_run_parser(subparsers: Any) -> None:
+    run = subparsers.add_parser(
+        "run",
+        help="Call the next assigned agent (one hop). Same as bare `arthur` inside an instance.",
+        description=(
+            "Run the next hop and hand off to the next role. "
+            "Inside an instance, bare `arthur` does the same thing."
+        ),
+    )
+    add_root_argument(run)
+    run.add_argument("--all", action="store_true", help="Keep going until idle, gated, or --max-steps")
+    run.add_argument("--max-steps", type=int, default=12)
+    run.add_argument("--project-id", help="Limit to one Arthur project")
+    run.add_argument("--holder", default="arthur-follow")
+    run.add_argument("--no-chain", action="store_true")
+    run.add_argument("--dry-run", action="store_true")
+    run.set_defaults(func=cmd_run, once=True)
+
+
 # ---------------------------------------------------------------------------
 # entry point
 
@@ -1339,7 +1427,10 @@ def _build_follow_parser(subparsers: Any) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="arthur",
-        description="Arthur Loop — file-first control plane for AI dev loops.",
+        description=(
+            "Arthur Loop — assign agents to roles, then run the next hop. "
+            "Inside an instance, `arthur` with no subcommand invokes the next role."
+        ),
         epilog=(
             "--root may be given before or after any subcommand; the most specific one wins. "
             "Exit codes: 0 ok · 2 refused/error · 3 the loop must stop for a human (capture, gate)."
@@ -1347,12 +1438,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {version('arthur-loop')}")
     parser.add_argument("--root", default=None, help=ROOT_HELP)
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command", required=False)
     add_init_parser(subparsers, add_root_argument)
     _build_agents_parser(subparsers)
     _build_integrations_parser(subparsers)
     _build_mcp_parser(subparsers)
     _build_loop_parser(subparsers)
+    _build_roles_parser(subparsers)
+    _build_run_parser(subparsers)
     _build_follow_parser(subparsers)
     _build_queue_parser(subparsers)
     _build_tick_parser(subparsers)
@@ -1369,7 +1462,25 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if getattr(args, "func", None) is None:
+        root = resolve_root(args)
+        if is_instance(root):
+            args.once = True
+            args.max_steps = 12
+            args.project_id = None
+            args.holder = "arthur-follow"
+            args.no_chain = False
+            args.dry_run = False
+            try:
+                return cmd_follow(args)
+            except (BrowserLockError, KeyError, ValueError, OSError, RuntimeError) as exc:
+                message = exc.args[0] if isinstance(exc, KeyError) and exc.args else str(exc)
+                sys.stderr.write(f"error: {message}\n")
+                return EXIT_ERROR
+        parser.print_help()
+        return EXIT_OK
     try:
         return args.func(args)
     except (BrowserLockError, KeyError, ValueError, OSError, RuntimeError) as exc:

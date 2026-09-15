@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Roles and run — Arthur Loop</title>
+  <meta name="description" content="Assign planner, implementer, reviewer, and QA agents. Arthur formulates the default loop and runs the next hop in the terminal or web console." />
+  <link rel="canonical" href="https://arthurloop.com/docs/roles.html" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../site.css" />
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <div class="nav-links">
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+      </div>
+    </div>
+  </nav>
+  <main class="doc">
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="roles.html" aria-current="page">Roles and run</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Roles</p>
+        <h1>Assign agents. Run the next hop.</h1>
+        <p>Four roles. Each hop is handed to the agent (and optional model) you assigned. Arthur formulates a default sequence from the project or ticket. This is not a graph composer.</p>
+
+        <h2>The roles</h2>
+        <table>
+          <thead><tr><th>Role</th><th>Hops</th><th>Agents</th></tr></thead>
+          <tbody>
+            <tr><td><code>planner</code></td><td>next-plan-request</td><td><code>chatgpt-browser</code> · <code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td><code>implementer</code></td><td>plan, implementation-handoff</td><td><code>claude-code</code> · <code>codex</code> · <code>grok</code> · <code>manual</code></td></tr>
+            <tr><td><code>reviewer</code></td><td>plan-review, sprint-review</td><td>same as planner</td></tr>
+            <tr><td><code>qa</code></td><td>qa-review (after implementation)</td><td>same as planner, or <code>none</code> to skip</td></tr>
+          </tbody>
+        </table>
+        <p>Example: reviewer = Claude Code on Opus. QA = Grok. Planner and implementer stay on Grok.</p>
+        <p>If <code>roles</code> is missing, advisor fills planner + reviewer and executor fills implementer. QA defaults to <code>none</code>.</p>
+
+        <h2>Default sequence</h2>
+        <ol>
+          <li>Planner scopes the packet</li>
+          <li>Implementer writes the plan</li>
+          <li>Reviewer approves or sends it back</li>
+          <li>Implementer builds (implementation gate must be GO)</li>
+          <li>QA checks, if assigned</li>
+          <li>Reviewer closes the sprint</li>
+        </ol>
+        <p><code>arthur loop create --from-ticket AUTH-2</code> writes that sequence into <code>projects/&lt;ID&gt;/loop-plan.json</code> and seeds the first hop.</p>
+
+        <h2>Terminal</h2>
+        <pre>arthur roles
+arthur roles set reviewer=claude-code:opus qa=grok
+arthur loop create --project-id MY_APP --from-ticket AUTH-2 \
+  --role planner=grok --role implementer=claude-code --role reviewer=claude-code:opus
+arthur
+arthur run
+arthur run --all</pre>
+        <p>Inside an instance, bare <code>arthur</code> is <code>arthur run</code>: claim → invoke that role’s CLI → capture → enqueue the next hop. <code>arthur follow --once</code> is the same engine.</p>
+        <p>Grok stays <code>grok --always-approve -p</code>. Add <code>--model</code> when you set one. Claude is <code>claude --model … -p</code>. Codex is <code>codex exec --model …</code>.</p>
+
+        <h2>Web console</h2>
+        <pre>arthur web</pre>
+        <ol>
+          <li><strong>Roles</strong> — pick an agent and optional model for each role. Save.</li>
+          <li><strong>+ Loop</strong> — project, optional ticket, the four roles, tracker. Creates the first hop.</li>
+          <li><strong>Run next</strong> — invokes the next assigned agent. The canvas strip shows the sequence; the current hop is highlighted.</li>
+        </ol>
+        <p>Same files as the CLI. Localhost only. Token in the URL is the session key.</p>
+
+        <h2>From an agent</h2>
+        <p><code>/arthur-loop</code> asks for the four roles, then calls <code>arthur.loop.create</code> and <code>arthur.run</code> (portable: <code>arthur_loop_create</code>, <code>arthur_run</code>). You can also call <code>arthur.roles.set</code> with <code>reviewer=claude-code:opus</code>.</p>
+      </div>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
+      <a href="./">Docs</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+    </div>
+  </footer>
+</body>
+</html>
