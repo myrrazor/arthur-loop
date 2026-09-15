@@ -6,17 +6,17 @@
   <title>Docs — Arthur Loop</title>
   <meta name="description" content="Arthur Loop documentation: one install, arthur init, then /arthur-loop in your coding agent." />
   <link rel="canonical" href="https://arthurloop.com/docs/" />
-  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="../site.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/site.css" />
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
     <div class="wrap">
-      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <a class="brand" href="/" aria-label="Arthur Loop home"><img src="/logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a class="nav-keep" href="./" aria-current="page">Docs</a>
+        <a class="nav-keep" href="/docs/" aria-current="page">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
-        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+        <a class="button button-primary nav-install" href="/#install">Install</a>
       </div>
     </div>
   </nav>
@@ -24,29 +24,31 @@
     <div class="wrap doc-layout">
       <aside class="doc-side" aria-label="Documentation">
         <ul class="doc-nav">
-          <li><a href="./" aria-current="page">Overview</a></li>
-          <li><a href="install.html">Install</a></li>
-          <li><a href="first-loop.html">First loop</a></li>
-          <li><a href="concepts.html">Concepts</a></li>
-          <li><a href="console.html">Web console</a></li>
-          <li><a href="agents.html">Agents</a></li>
-          <li><a href="cli.html">CLI and MCP</a></li>
-          <li><a href="faq.html">FAQ</a></li>
+          <li><a href="/docs/" aria-current="page">Overview</a></li>
+          <li><a href="/docs/install.html">Install</a></li>
+          <li><a href="/docs/first-loop.html">First loop</a></li>
+          <li><a href="/docs/roles.html">Roles and run</a></li>
+          <li><a href="/docs/concepts.html">Concepts</a></li>
+          <li><a href="/docs/console.html">Web console</a></li>
+          <li><a href="/docs/agents.html">Agents</a></li>
+          <li><a href="/docs/cli.html">CLI and MCP</a></li>
+          <li><a href="/docs/faq.html">FAQ</a></li>
         </ul>
       </aside>
       <div>
         <p class="eyebrow">Documentation</p>
         <h1>One install. Then <code>/arthur-loop</code>.</h1>
         <p>Arthur Loop keeps long-running AI coding work on a written contract: a durable queue, saved artifacts, approval gates, and project-scoped human decisions. State is markdown and JSONL in a directory you own.</p>
-        <div class="callout"><strong>The path.</strong> Install the CLI → <code>arthur init</code> writes skills and MCP into the agents on your machine → restart the client → run <code>/arthur-loop</code> and say how you want advisor, executor, and tracker wired.</div>
+        <div class="callout"><strong>The path.</strong> Install the CLI → <code>arthur init</code> writes skills and MCP → restart the client → assign planner, implementer, reviewer, and QA → <code>arthur</code> or <strong>Run next</strong> invokes the next role.</div>
         <ul class="doc-nav">
-          <li><a href="install.html">Install</a><small>pipx, uv, or curl. Then arthur init.</small></li>
-          <li><a href="first-loop.html">Your first loop</a><small>The agent interview, the demo console, and the manual cockpit.</small></li>
-          <li><a href="concepts.html">Concepts</a><small>Queue, artifact, gate, decision, tick.</small></li>
-          <li><a href="console.html">Web console</a><small>Status map, Needs you rail, create-loop wizard.</small></li>
-          <li><a href="agents.html">Agents and adapters</a><small>What ships, what is detected, Atlas Tasker.</small></li>
-          <li><a href="cli.html">CLI and MCP</a><small>Everyday commands, follow, and the tool list.</small></li>
-          <li><a href="faq.html">FAQ</a><small>Data, platforms, version stamp, support.</small></li>
+          <li><a href="/docs/install.html">Install</a><small>pipx, uv, or curl. Then arthur init.</small></li>
+          <li><a href="/docs/first-loop.html">Your first loop</a><small>The agent interview, the demo console, and the manual cockpit.</small></li>
+          <li><a href="/docs/roles.html">Roles and run</a><small>Assign agents. Terminal and UI setup.</small></li>
+          <li><a href="/docs/concepts.html">Concepts</a><small>Queue, artifact, gate, decision, tick.</small></li>
+          <li><a href="/docs/console.html">Web console</a><small>Roles, Run next, status map, wizard.</small></li>
+          <li><a href="/docs/agents.html">Agents and adapters</a><small>What ships, what is detected, Atlas Tasker.</small></li>
+          <li><a href="/docs/cli.html">CLI and MCP</a><small>arthur, arthur run, roles, follow.</small></li>
+          <li><a href="/docs/faq.html">FAQ</a><small>Data, platforms, version stamp, support.</small></li>
         </ul>
         <p class="note">Last public tag is <strong>v0.1.0</strong>. <code>arthur --version</code> prints that until the next tag. Current <code>main</code> is the product this site describes.</p>
       </div>
@@ -55,8 +57,8 @@
   <footer>
     <div class="wrap">
       <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="./">Docs</a><span>·</span>
-      <a href="../privacy.html">Privacy</a><span>·</span>
+      <a href="/docs/">Docs</a><span>·</span>
+      <a href="/privacy.html">Privacy</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>

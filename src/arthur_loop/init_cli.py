@@ -491,6 +491,12 @@ def _run_init(args: argparse.Namespace) -> int:
         "version": 2,
         "advisor": {"adapter": advisor},
         "executor": {"adapter": executor},
+        "roles": {
+            "planner": {"agent": advisor, "model": ""},
+            "implementer": {"agent": executor, "model": ""},
+            "reviewer": {"agent": advisor, "model": ""},
+            "qa": {"agent": "none", "model": ""},
+        },
         "tracker": tracker_block,
         "components": {"resource_governor": governor, "heartbeat": heartbeat},
         "quota": quota_config,

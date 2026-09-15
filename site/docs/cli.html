@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CLI and MCP — Arthur Loop</title>
   <meta name="description" content="Arthur Loop CLI, arthur follow, and the local MCP tool list your coding agent uses after init." />
-  <link rel="canonical" href="https://arthurloop.com/docs/cli.html" />
-  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="../site.css" />
+  <link rel="canonical" href="https://arthurloop.com/docs/cli" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/site.css" />
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
     <div class="wrap">
-      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <a class="brand" href="/" aria-label="Arthur Loop home"><img src="/logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="/docs/">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
-        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+        <a class="button button-primary nav-install" href="/#install">Install</a>
       </div>
     </div>
   </nav>
@@ -24,14 +24,15 @@
     <div class="wrap doc-layout">
       <aside class="doc-side" aria-label="Documentation">
         <ul class="doc-nav">
-          <li><a href="./">Overview</a></li>
-          <li><a href="install.html">Install</a></li>
-          <li><a href="first-loop.html">First loop</a></li>
-          <li><a href="concepts.html">Concepts</a></li>
-          <li><a href="console.html">Web console</a></li>
-          <li><a href="agents.html">Agents</a></li>
-          <li><a href="cli.html" aria-current="page">CLI and MCP</a></li>
-          <li><a href="faq.html">FAQ</a></li>
+          <li><a href="/docs/">Overview</a></li>
+          <li><a href="/docs/install.html">Install</a></li>
+          <li><a href="/docs/first-loop.html">First loop</a></li>
+          <li><a href="/docs/roles.html">Roles and run</a></li>
+          <li><a href="/docs/concepts.html">Concepts</a></li>
+          <li><a href="/docs/console.html">Web console</a></li>
+          <li><a href="/docs/agents.html">Agents</a></li>
+          <li><a href="/docs/cli.html" aria-current="page">CLI and MCP</a></li>
+          <li><a href="/docs/faq.html">FAQ</a></li>
         </ul>
       </aside>
       <div>
@@ -42,29 +43,30 @@
         <h2>Everyday commands</h2>
         <pre>arthur --version
 arthur init
-arthur status
-arthur tick --dry-run
-arthur web
-arthur watch
-arthur loop create --project-id MY_APP --advisor grok --executor claude-code
+arthur roles set reviewer=claude-code:opus qa=grok
+arthur loop create --project-id MY_APP --from-ticket AUTH-2 --role planner=grok
+arthur
+arthur run
 arthur follow --once
-arthur integrations install --targets claude,codex,cursor,grok
+arthur web
+arthur status
 arthur gate implementation --project-id MY_APP
 arthur decision list</pre>
+        <p>Inside an instance, bare <code>arthur</code> invokes the next assigned role. Full setup: <a href="/docs/roles.html">Roles and run</a>.</p>
         <p>An open human decision pauses that project: claim, submit, poll-result, complete, and fail exit 2. Cancel and recover still work.</p>
 
         <h2>MCP tools</h2>
         <p>Dotted names are canonical. Grok registrations use portable names (<code>arthur_status</code>, <code>arthur_loop_create</code>, <code>arthur_follow_run</code>).</p>
-        <p><strong>Read:</strong> <code>arthur.status</code>, <code>arthur.tick</code>, <code>arthur.queue.show</code>, <code>arthur.queue.due</code>, <code>arthur.gate.implementation</code>, <code>arthur.decision.list</code>, <code>arthur.loop.list</code>, <code>arthur.board</code>, <code>arthur.tracker.next</code>, <code>arthur.tracker.queue</code>.</p>
-        <p><strong>Gated write:</strong> <code>arthur.queue.create</code>, <code>arthur.queue.claim</code>, <code>arthur.queue.submit</code>, <code>arthur.queue.poll_result</code>, <code>arthur.queue.recover</code>, <code>arthur.capture</code>, <code>arthur.decision.open</code>, <code>arthur.decision.answer</code>, <code>arthur.loop.create</code>, <code>arthur.board.open_jobs</code>, <code>arthur.tracker.walk</code>, <code>arthur.follow.run</code>.</p>
-        <p>The <code>/arthur-loop</code> prompt interviews for roles, calls <code>arthur.loop.create</code>, then <code>arthur.follow.run</code>.</p>
+        <p><strong>Read:</strong> <code>arthur.status</code>, <code>arthur.tick</code>, <code>arthur.queue.show</code>, <code>arthur.queue.due</code>, <code>arthur.gate.implementation</code>, <code>arthur.decision.list</code>, <code>arthur.loop.list</code>, <code>arthur.roles.list</code>, <code>arthur.board</code>, <code>arthur.tracker.next</code>, <code>arthur.tracker.queue</code>.</p>
+        <p><strong>Gated write:</strong> <code>arthur.queue.create</code>, <code>arthur.queue.claim</code>, <code>arthur.queue.submit</code>, <code>arthur.queue.poll_result</code>, <code>arthur.queue.recover</code>, <code>arthur.capture</code>, <code>arthur.decision.open</code>, <code>arthur.decision.answer</code>, <code>arthur.loop.create</code>, <code>arthur.roles.set</code>, <code>arthur.run</code>, <code>arthur.board.open_jobs</code>, <code>arthur.tracker.walk</code>, <code>arthur.follow.run</code>.</p>
+        <p>The <code>/arthur-loop</code> prompt interviews for roles, calls <code>arthur.loop.create</code>, then <code>arthur.run</code>.</p>
         <pre>arthur mcp serve
 arthur mcp serve --tool-name-style portable
 arthur mcp tools --json
 arthur mcp call arthur.status</pre>
 
-        <h2>Follow</h2>
-        <p><code>arthur follow</code> claims, invokes the CLI adapter, captures, gates, and enqueues the next hop when the adapter has a headless transport. It will not skip a human decision or invent plan approval. ChatGPT-browser and manual adapters write an inbox file and stop.</p>
+        <h2>Follow / run</h2>
+        <p><code>arthur</code>, <code>arthur run</code>, and <code>arthur follow</code> claim, invoke the assigned role’s CLI, capture, gate, and enqueue the next hop. They will not skip a human decision or invent plan approval. ChatGPT-browser and manual adapters write an inbox file and stop.</p>
         <p>Repo detail: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/mcp.md">docs/mcp.md</a>, <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/follow.md">docs/follow.md</a>.</p>
       </div>
     </div>
@@ -72,7 +74,7 @@ arthur mcp call arthur.status</pre>
   <footer>
     <div class="wrap">
       <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="./">Docs</a><span>·</span>
+      <a href="/docs/">Docs</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>

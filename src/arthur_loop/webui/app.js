@@ -1,8 +1,8 @@
 "use strict";
 /* Arthur Loop web console — vanilla, no build step.
    Read-mostly control surface: polls arthur status, renders five views, and
-   offers a human six write actions (answer decision, recover job, create loop,
-   create job, clear session, break stale lock). Agents own claim/capture/gate. */
+   offers human actions (assign roles, run next hop, answer decision, recover
+   job, create loop, create job, clear session, break stale lock). */
 
 const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
 const POLL_MS = 3000;
@@ -132,7 +132,22 @@ function render() {
   bind("skeleton").hidden = true;
 
   bind("instance").textContent = s.server.instance;
-  bind("adapters").textContent = `advisor: ${s.server.advisor}\nexecutor: ${s.server.executor}${s.server.tracker ? `\ntracker: ${s.server.tracker}` : ""}`;
+  const roles = (s.roles && s.roles.roles) || (s.server && s.server.roles) || {};
+  const roleLine = ["planner", "implementer", "reviewer", "qa"].map((role) => {
+    const item = roles[role] || {};
+    const agent = item.agent || "—";
+    const model = item.model ? `:${item.model}` : "";
+    return `${role}: ${agent}${model}`;
+  }).join("\n");
+  bind("adapters").textContent = roleLine + (s.server.tracker ? `\ntracker: ${s.server.tracker}` : "");
+  const runBtn = document.querySelector('[data-action="run-next"]');
+  if (runBtn) {
+    const next = s.nextRun;
+    runBtn.disabled = !next;
+    runBtn.title = next
+      ? `Run ${next.role} (${next.agent}${next.model ? ":" + next.model : ""}) on ${next.kind}`
+      : "No queued hop to run";
+  }
 
   const chip = bind("state-chip");
   chip.dataset.state = s.state;
@@ -422,6 +437,7 @@ function buildCanvasShell(panel) {
     const span = el("span"); const i = el("i"); i.style.background = c; span.append(i, document.createTextNode(t)); legend.append(span);
   });
   wrap.append(legend);
+  wrap.append(el("div", "role-strip"));
   wrap.append((() => { const h = el("div", "canvas-hint", "status map — drag to pan · scroll to zoom · not a graph composer"); return h; })());
   const reset = el("button", "btn ghost sm canvas-reset", "Fit");
   reset.onclick = () => { fitCanvas(svg); };
@@ -509,6 +525,19 @@ function patchCanvas(s) {
   if (counts.inflight.n > 0) { active.add("queue-inflight"); active.add("inflight-executor"); }
   if (counts.executor.n > 0) active.add("executor-gate");
   document.querySelectorAll("[data-flow]").forEach((f) => { f.style.display = active.has(f.dataset.flow) ? "" : "none"; });
+  const strip = document.querySelector(".role-strip");
+  if (strip) {
+    const hops = s.loopSequence || [];
+    const next = s.nextRun;
+    strip.replaceChildren();
+    hops.forEach((hop, i) => {
+      if (i) strip.append(el("span", "role-arrow", "→"));
+      const chip = el("span", "role-chip" + (next && next.kind === hop.kind ? " is-next" : ""));
+      const model = hop.model ? `:${hop.model}` : "";
+      chip.textContent = `${hop.role} · ${hop.agent}${model}`;
+      strip.append(chip);
+    });
+  }
 }
 
 function deriveCanvas(s) {
@@ -519,7 +548,7 @@ function deriveCanvas(s) {
   const queued = by((j) => j.status === "queued");
   const inflight = by((j) => INFLIGHT.has(j.status));
   return {
-    advisor: { big: s.server.advisor.split("-")[0], sub: "plans · reviews", mood: inflight ? "active" : "idle", pip: inflight ? "var(--flow)" : "var(--wait)" },
+    advisor: { big: ((s.server.roles && s.server.roles.planner && s.server.roles.planner.agent) || s.server.advisor).split("-")[0], sub: "planner · reviewer", mood: inflight ? "active" : "idle", pip: inflight ? "var(--flow)" : "var(--wait)" },
     queue: { big: String(queued), sub: queued === 1 ? "job queued" : "jobs queued", n: queued, mood: queued ? "active" : "idle", pip: queued ? "var(--flow)" : "var(--wait)" },
     inflight: { big: String(inflight), sub: "awaiting advisor", n: inflight, mood: inflight ? "warn" : "idle", pip: inflight ? "var(--lock)" : "var(--wait)" },
     executor: { big: String(execSess.length), sub: execSess[0] ? execSess[0].projectId || "working" : "idle", n: execSess.length, mood: execSess.length ? "active" : "idle", pip: execSess.length ? "var(--go)" : "var(--wait)" },
@@ -733,7 +762,7 @@ function openLoopWizard() {
   const body = bind("modal-body");
   body.replaceChildren();
   bind("modal-title").textContent = "Create a loop";
-  const intro = el("p", "wizard-copy", wizard.copy || "Creates a project and the first queue job. Not a drag-drop graph composer.");
+  const intro = el("p", "wizard-copy", wizard.copy || "Assign roles, then Arthur formulates the default hop sequence. Not a graph composer.");
   body.append(intro);
 
   const fields = {};
@@ -755,14 +784,41 @@ function openLoopWizard() {
   };
 
   const current = wizard.current || {};
+  const currentRoles = current.roles || {};
   const proj = (s && s.projects[0] && s.projects[0].projectId) || "MY_APP";
+  const roleAgents = wizard.roleAgents || {
+    planner: wizard.advisors || ["manual"],
+    implementer: wizard.executors || ["manual"],
+    reviewer: wizard.advisors || ["manual"],
+    qa: (wizard.advisors || ["manual"]).concat(["none"]),
+  };
   addInput("project_id", "Project id", "SHOUTY_SNAKE", proj);
   addInput("goal", "Goal (optional)", "One-line constitution for this project");
-  addSelect("advisor", "Advisor — plans and reviews", wizard.advisors || ["manual"], current.advisor || "manual");
-  addSelect("executor", "Executor — implements", wizard.executors || ["manual"], current.executor || "manual");
+  addInput("ticket", "Ticket (optional)", "AUTH-2 — formulates the default loop");
+  const roleOrder = wizard.roleNames || ["planner", "implementer", "reviewer", "qa"];
+  for (const role of roleOrder) {
+    const assigned = currentRoles[role] || {};
+    const label = role.charAt(0).toUpperCase() + role.slice(1);
+    const row = el("div", "role-row");
+    const f1 = el("div", "field");
+    const lab = el("label", null, label + " agent"); lab.htmlFor = `f-${role}`; f1.append(lab);
+    const sel = el("select"); sel.id = `f-${role}`;
+    const options = roleAgents[role] || ["manual"];
+    const selected = assigned.agent || (role === "qa" ? "none" : "manual");
+    for (const opt of options) {
+      const o = el("option", null, opt); o.value = opt; if (opt === selected) o.selected = true; sel.append(o);
+    }
+    fields[role] = sel; f1.append(sel);
+    const f2 = el("div", "field");
+    const lab2 = el("label", null, "model"); lab2.htmlFor = `f-${role}-model`; f2.append(lab2);
+    const input = el("input"); input.id = `f-${role}-model`; input.value = assigned.model || ""; input.placeholder = "opus, grok-4, …";
+    fields[role + "_model"] = input; f2.append(input);
+    row.append(f1, f2);
+    body.append(row);
+  }
   addSelect("tracker", "Tracker", wizard.trackers || ["none"], current.tracker || "none");
   addInput("title", "First job title", proj + " planning", proj + " planning");
-  addInput("target_chat_url", "Advisor target", "manual", "manual");
+  addInput("target_chat_url", "Planner target", "manual", "manual");
 
   const checkField = el("div", "field");
   const checkLab = el("label", "check");
@@ -775,11 +831,24 @@ function openLoopWizard() {
   const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeModal;
   const create = el("button", "btn primary", "Create loop");
   create.onclick = async () => {
+    const roles = {};
+    for (const role of roleOrder) {
+      roles[role] = {
+        agent: fields[role].value,
+        model: fields[role + "_model"].value.trim(),
+      };
+    }
     const payload = {
       project_id: fields.project_id.value.trim(),
       goal: fields.goal.value.trim(),
-      advisor: fields.advisor.value,
-      executor: fields.executor.value,
+      ticket: fields.ticket.value.trim(),
+      roles,
+      planner: fields.planner.value,
+      implementer: fields.implementer.value,
+      reviewer: fields.reviewer.value,
+      qa: fields.qa.value,
+      advisor: fields.planner.value,
+      executor: fields.implementer.value,
       tracker: fields.tracker.value,
       title: fields.title.value.trim(),
       target_chat_url: fields.target_chat_url.value.trim() || "manual",
@@ -872,8 +941,80 @@ document.querySelectorAll(".railnav-item").forEach((b, i) => {
   b.onclick = () => setView(b.dataset.view);
   if (i < 5) b.title = `Shortcut: ${i + 1}`;
 });
+async function runNextHop() {
+  const btn = document.querySelector('[data-action="run-next"]');
+  if (btn) btn.disabled = true;
+  try {
+    const record = await action("/api/actions/run-next", { once: true });
+    const step = (record.steps && record.steps[0]) || {};
+    const label = step.role ? `${step.role} · ${step.adapter || ""}` : record.stopped;
+    toast(record.stopped === "invoke_failed" ? "err" : "ok", "Run next", label || record.stopped);
+    poll();
+  } catch (e) {
+    toast("err", "Could not run next hop", e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function openRolesModal() {
+  const s = store.status;
+  const payload = (s && s.roles) || {};
+  const roles = payload.roles || (s && s.server && s.server.roles) || {};
+  const agents = payload.agents || {};
+  const body = bind("modal-body");
+  body.replaceChildren();
+  bind("modal-title").textContent = "Assign roles";
+  body.append(el("p", "wizard-copy", "Each hop is handed to the agent assigned to that role. QA = none skips the QA hop."));
+  const fields = {};
+  const order = ["planner", "implementer", "reviewer", "qa"];
+  for (const role of order) {
+    const assigned = roles[role] || {};
+    const options = agents[role] || ["manual", "none"];
+    const row = el("div", "role-row");
+    const f1 = el("div", "field");
+    const lab = el("label", null, role); lab.htmlFor = `r-${role}`; f1.append(lab);
+    const sel = el("select"); sel.id = `r-${role}`;
+    for (const opt of options) {
+      const o = el("option", null, opt); o.value = opt; if (opt === assigned.agent) o.selected = true; sel.append(o);
+    }
+    fields[role] = sel; f1.append(sel);
+    const f2 = el("div", "field");
+    const lab2 = el("label", null, "model"); lab2.htmlFor = `r-${role}-model`; f2.append(lab2);
+    const input = el("input"); input.id = `r-${role}-model`; input.value = assigned.model || ""; input.placeholder = "optional";
+    fields[role + "_model"] = input; f2.append(input);
+    row.append(f1, f2);
+    body.append(row);
+  }
+  const hops = (s && s.loopSequence) || [];
+  if (hops.length) {
+    const seq = el("p", "wizard-copy", "Default sequence: " + hops.map((h) => h.role).join(" → "));
+    body.append(seq);
+  }
+  const actions = el("div", "modal-actions");
+  const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeModal;
+  const save = el("button", "btn primary", "Save roles");
+  save.onclick = async () => {
+    const next = {};
+    for (const role of order) {
+      next[role] = { agent: fields[role].value, model: fields[role + "_model"].value.trim() };
+    }
+    save.disabled = true;
+    try {
+      await action("/api/actions/set-roles", { roles: next });
+      toast("ok", "Roles saved", order.map((r) => `${r}=${next[r].agent}`).join(" · "));
+      closeModal();
+      poll();
+    } catch (e) { toast("err", "Could not save roles", e.message); save.disabled = false; }
+  };
+  actions.append(cancel, save); body.append(actions);
+  showModal(fields.planner);
+}
+
 document.querySelector('[data-action="new-loop"]').onclick = openLoopWizard;
 document.querySelector('[data-action="new-job"]').onclick = openJobModal;
+document.querySelector('[data-action="roles"]').onclick = openRolesModal;
+document.querySelector('[data-action="run-next"]').onclick = runNextHop;
 document.querySelector('[data-action="modal-close"]').onclick = closeModal;
 bind("modal").addEventListener("click", (e) => { if (e.target === bind("modal")) closeModal(); });
 bind("modal").addEventListener("keydown", (e) => {

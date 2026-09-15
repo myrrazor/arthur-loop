@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Web console — Arthur Loop</title>
   <meta name="description" content="arthur web is a localhost status map and human cockpit — not a hosted dashboard or graph composer." />
-  <link rel="canonical" href="https://arthurloop.com/docs/console.html" />
-  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="../site.css" />
+  <link rel="canonical" href="https://arthurloop.com/docs/console" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/site.css" />
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
     <div class="wrap">
-      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <a class="brand" href="/" aria-label="Arthur Loop home"><img src="/logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="/docs/">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
-        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+        <a class="button button-primary nav-install" href="/#install">Install</a>
       </div>
     </div>
   </nav>
@@ -24,14 +24,15 @@
     <div class="wrap doc-layout">
       <aside class="doc-side" aria-label="Documentation">
         <ul class="doc-nav">
-          <li><a href="./">Overview</a></li>
-          <li><a href="install.html">Install</a></li>
-          <li><a href="first-loop.html">First loop</a></li>
-          <li><a href="concepts.html">Concepts</a></li>
-          <li><a href="console.html" aria-current="page">Web console</a></li>
-          <li><a href="agents.html">Agents</a></li>
-          <li><a href="cli.html">CLI and MCP</a></li>
-          <li><a href="faq.html">FAQ</a></li>
+          <li><a href="/docs/">Overview</a></li>
+          <li><a href="/docs/install.html">Install</a></li>
+          <li><a href="/docs/first-loop.html">First loop</a></li>
+          <li><a href="/docs/roles.html">Roles and run</a></li>
+          <li><a href="/docs/concepts.html">Concepts</a></li>
+          <li><a href="/docs/console.html" aria-current="page">Web console</a></li>
+          <li><a href="/docs/agents.html">Agents</a></li>
+          <li><a href="/docs/cli.html">CLI and MCP</a></li>
+          <li><a href="/docs/faq.html">FAQ</a></li>
         </ul>
       </aside>
       <div>
@@ -40,12 +41,13 @@
         <pre>arthur web
 arthur web --root ~/my-loop --port 8080 --no-open</pre>
         <p>Vanilla JS over Python's stdlib server. No build step, no npm. It binds <code>127.0.0.1</code> only and prints a URL with a per-process session token. Every read and write requires that token.</p>
+        <p><strong>Roles</strong> assigns planner, implementer, reviewer, and QA. <strong>Run next</strong> invokes the next assigned agent. <strong>+ Loop</strong> formulates the default sequence. Same as <code>arthur roles</code> and <code>arthur</code> in a terminal. Detail: <a href="/docs/roles.html">Roles and run</a>.</p>
 
         <figure class="shot">
           <div class="shot-frame">
-            <a href="../media/web-console.png">
+            <a href="/media/web-console.png">
               <picture>
-                <source type="image/webp" srcset="../media/web-console-sm.webp 900w, ../media/web-console.webp 1600w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <source type="image/webp" srcset="../media/web-console-sm.webp 900w, ../media/web-console.webp 1600w" sizes="(max-width: 620px) calc(100vw - 24px), (max-width: 900px) calc(100vw - 40px), min(64rem, calc(100vw - 288px))" />
                 <img src="../media/web-console.png" alt="Arthur Loop web console status map with an open human decision" width="1600" height="1000" loading="lazy" decoding="async" />
               </picture>
             </a>
@@ -64,18 +66,18 @@ arthur web --root ~/my-loop --port 8080 --no-open</pre>
         </ul>
 
         <h2>What a human can do here</h2>
-        <p>Six write actions, each the same code path as the CLI: answer a decision, recover a job, create a loop, create a job, clear a session, break a stale browser lock. There are no claim, submit, poll, or “approve plan” buttons. Agents own those hops through MCP or the CLI.</p>
+        <p>Human actions, each the same code path as the CLI: assign roles, run the next hop, answer a decision, recover a job, create a loop, create a job, clear a session, break a stale browser lock. There are no claim, submit, poll, or “approve plan” bypasses.</p>
 
         <figure class="shot">
           <div class="shot-frame">
-            <a href="../media/create-loop-wizard.png">
+            <a href="/media/create-loop-wizard.png">
               <picture>
-                <source type="image/webp" srcset="../media/create-loop-wizard-sm.webp 900w, ../media/create-loop-wizard.webp 1600w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <source type="image/webp" srcset="../media/create-loop-wizard-sm.webp 900w, ../media/create-loop-wizard.webp 1600w" sizes="(max-width: 620px) calc(100vw - 24px), (max-width: 900px) calc(100vw - 40px), min(64rem, calc(100vw - 288px))" />
                 <img src="../media/create-loop-wizard.png" alt="Create-loop wizard form" width="1600" height="1000" loading="lazy" decoding="async" />
               </picture>
             </a>
           </div>
-          <figcaption>+ Loop is the same interview as <code>/arthur-loop</code>: project, advisor, executor, tracker, optional first job.</figcaption>
+          <figcaption>+ Loop is the same interview as <code>/arthur-loop</code>: project, roles, tracker, optional first job.</figcaption>
         </figure>
       </div>
     </div>
@@ -83,7 +85,7 @@ arthur web --root ~/my-loop --port 8080 --no-open</pre>
   <footer>
     <div class="wrap">
       <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="./">Docs</a><span>·</span>
+      <a href="/docs/">Docs</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>

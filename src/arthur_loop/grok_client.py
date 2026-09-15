@@ -53,10 +53,14 @@ def mcp_add_command() -> list[str]:
     return ["grok", *mcp_add_argv()]
 
 
-def prompt_argv(prompt: str) -> list[str]:
+def prompt_argv(prompt: str, model: str = "") -> list[str]:
     """Non-interactive Grok Build 1.0.30 argv. Flag order is load-bearing."""
 
-    return ["grok", "--always-approve", "-p", prompt]
+    argv = ["grok", "--always-approve"]
+    if model:
+        argv.extend(["--model", model])
+    argv.extend(["-p", prompt])
+    return argv
 
 
 def trust_folder_command() -> list[str]:

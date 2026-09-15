@@ -1,11 +1,11 @@
 ---
 name: arthur-loop
-description: Advisor/executor project orchestration with durable file state. Use when coordinating Arthur Loop workflows, including advisor review loops (e.g. ChatGPT Pro in the browser), executor coding-session handoffs (e.g. Codex, Claude Code), durable queue jobs, human-decision escalation, quota/usage snapshots, polling cadence, and adapter prompt packs for multi-project agent loops.
+description: Assign agents to planner, implementer, reviewer, and QA roles, then run the next hop. Use when coordinating Arthur Loop workflows with durable file state.
 ---
 
 # Arthur Loop
 
-Use Arthur Loop to coordinate one project sprint at a time between an advisor (plans, reviews, approves) and an executor (implements), with all durable state in files.
+Use Arthur Loop to assign agents to roles (planner, implementer, reviewer, QA) and run one hop at a time. Durable state stays in files.
 
 ## Workflow
 
@@ -46,9 +46,10 @@ Prefer MCP tools over inventing shell. Dotted names (`arthur.status`, `arthur.lo
 `arthur.board`, `arthur.tracker.next`) are canonical. Grok registrations use portable names
 (`arthur_status`, `arthur_loop_create`, `arthur_follow_run`).
 
-`/arthur-loop` (Claude project command, or this skill) interviews for advisor / executor /
-tracker and calls `arthur.loop.create`. Then call `arthur.follow.run` / `arthur follow`
-so claim → capture → gate is not hand-typed. It is not a drag-drop graph composer.
+`/arthur-loop` interviews for planner / implementer / reviewer / QA (optional model
+per role) and tracker, then calls `arthur.loop.create`. Arthur formulates the default
+hop sequence from the project or ticket. Then call `arthur.run` / `arthur` / `arthur.follow.run`
+so the next assigned agent is invoked. It is not a drag-drop graph composer.
 
 If the tracker is Atlas Tasker, walk ready work with `arthur.tracker.next` /
 `arthur tracker next --json` / `arthur tracker walk`. `open-jobs` only opens
@@ -62,7 +63,10 @@ From the instance root (or with `--root DIR` anywhere on the line):
 ```bash
 arthur status
 arthur tick --dry-run
-arthur loop create --project-id PROJECT --advisor grok --executor claude-code
+arthur roles set reviewer=claude-code:opus qa=grok
+arthur loop create --project-id PROJECT --role reviewer=claude-code:opus --from-ticket AUTH-2
+arthur
+arthur run
 arthur follow --once
 arthur integrations install --targets claude,codex,cursor,grok
 arthur integrations probe --target grok
@@ -85,4 +89,4 @@ arthur usage task --task-id task --project-id PROJECT --role "Master Orchestrato
 arthur usage dashboard
 ```
 
-Capture kinds: `next-plan-request`, `plan`, `plan-review`, `implementation-handoff`, `sprint-review`, `human-decision`.
+Capture kinds: `next-plan-request`, `plan`, `plan-review`, `implementation-handoff`, `qa-review`, `sprint-review`, `human-decision`.

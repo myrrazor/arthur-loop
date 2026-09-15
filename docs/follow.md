@@ -1,12 +1,15 @@
 # Auto-follow
 
-`arthur follow` drives a created loop so an agent does not type claim / capture / gate by hand.
+`arthur follow` (and `arthur` / `arthur run`) drives a created loop so the next assigned role is invoked without typing claim / capture / gate by hand.
 
 ```bash
-arthur loop create --project-id DEMO --advisor grok --executor grok
+arthur roles set reviewer=claude-code:opus
+arthur loop create --project-id DEMO --role planner=grok --role implementer=grok
+arthur
+arthur run
 arthur follow --once
 arthur follow --max-steps 12
-arthur mcp call arthur.follow.run --arguments '{"once":true}'
+arthur mcp call arthur.run --arguments '{"once":true}'
 ```
 
 ## What it does

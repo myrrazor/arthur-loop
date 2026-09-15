@@ -35,6 +35,8 @@
           <span data-bind="lock-text"></span>
           <button class="btn ghost sm" data-bind="lock-break" hidden title="Remove a stale browser lock so due work can move">Break</button>
         </div>
+        <button class="btn primary sm" data-action="run-next" title="Invoke the next assigned role">Run next</button>
+        <button class="btn ghost sm" data-action="roles" title="Assign agents to planner, implementer, reviewer, QA">Roles</button>
         <button class="btn ghost sm" data-action="new-loop" title="Create a project loop (wizard, not a graph composer)">+ Loop</button>
         <button class="btn ghost sm" data-action="new-job" title="Create a single queue job">+ Job</button>
         <span class="pulse-live" data-bind="freshness" title="Auto-refreshing">

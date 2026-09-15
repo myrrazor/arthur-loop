@@ -23,6 +23,7 @@ from typing import Any, Callable
 from arthur_loop.artifact_store import ARTIFACT_KINDS, implementation_gate, save_chatgpt_artifact
 from arthur_loop.browser_lock import release_lock
 from arthur_loop.config import load_config
+from arthur_loop.roles import assignment_for, next_hop_kind, role_for_kind
 from arthur_loop.loop_ops import (
     _next_job_id,
     _slug,
@@ -43,6 +44,7 @@ KIND_BY_REVIEW = {
     "CODEX_PLAN": "plan",
     "PLAN_APPROVAL": "plan-review",
     "CODEX_IMPLEMENTATION_HANDOFF": "implementation-handoff",
+    "QA_REVIEW": "qa-review",
     "SPRINT_REVIEW": "sprint-review",
 }
 
@@ -54,23 +56,14 @@ PROMPT_FOR_KIND = {
     "sprint-review": ("advisor", "prompts/sprint-review.md"),
 }
 
+# hop → loop role. Advisor/executor remain as pack folders, not the role names.
 ROLE_FOR_KIND = {
-    "next-plan-request": "advisor",
-    "plan": "executor",
-    "plan-review": "advisor",
-    "implementation-handoff": "executor",
-    "sprint-review": "advisor",
-}
-
-# after a trusted capture, enqueue the next hop when the control block says so
-NEXT_HOP: dict[tuple[str, str], str | None] = {
-    ("next-plan-request", "REQUEST_CODEX_PLAN"): "plan",
-    ("plan", "READY_FOR_CHATGPT_REVIEW"): "plan-review",
-    ("plan-review", "APPROVE_PLAN"): "implementation-handoff",
-    ("plan-review", "REVISE_PLAN"): "plan",
-    ("implementation-handoff", "COMPLETE"): "sprint-review",
-    ("sprint-review", "FIX_REQUIRED"): "implementation-handoff",
-    ("sprint-review", "APPROVE_SPRINT"): "next-plan-request",
+    "next-plan-request": "planner",
+    "plan": "implementer",
+    "plan-review": "reviewer",
+    "implementation-handoff": "implementer",
+    "qa-review": "qa",
+    "sprint-review": "reviewer",
 }
 
 Invoker = Callable[[Path, dict[str, Any]], dict[str, Any]]
@@ -104,21 +97,31 @@ def _events_for(root: Path, job_id: str) -> list[dict[str, Any]]:
 
 
 def adapter_for_role(config: dict[str, Any], role: str) -> str:
-    section = config.get(role) or {}
-    return str(section.get("adapter") or "manual")
+    """Agent assigned to a loop role. Accepts planner/implementer/reviewer/qa or legacy advisor/executor."""
+
+    return assignment_for(config, role)["agent"]
 
 
-def transport_argv(adapter: str, prompt: str) -> list[str] | None:
+def transport_argv(adapter: str, prompt: str, model: str = "") -> list[str] | None:
     """Non-interactive CLI for one adapter. None means a human must produce the reply."""
 
+    model = (model or "").strip()
     if adapter == "grok":
         from arthur_loop.grok_client import prompt_argv
 
-        return prompt_argv(prompt)
+        return prompt_argv(prompt, model)
     if adapter == "claude-code":
-        return ["claude", "-p", prompt]
+        argv = ["claude"]
+        if model:
+            argv.extend(["--model", model])
+        argv.extend(["-p", prompt])
+        return argv
     if adapter == "codex":
-        return ["codex", "exec", prompt]
+        argv = ["codex", "exec"]
+        if model:
+            argv.extend(["--model", model])
+        argv.append(prompt)
+        return argv
     return None
 
 
@@ -128,7 +131,7 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
     adapter = request["adapter"]
     prompt = request["prompt"]
     job_id = request["job_id"]
-    argv = transport_argv(adapter, prompt)
+    argv = transport_argv(adapter, prompt, str(request.get("model") or ""))
     dest = follow_dir(root) / f"{job_id}.out.md"
     inbox = follow_dir(root) / f"{job_id}.inbox.md"
     if argv is None:
@@ -213,11 +216,24 @@ def seed_hop_prompt(
                 idempotency_key=idempotency_key or f"follow:{project_id}:{kind}:{job_id}",
             )
             return (root / rel).read_text(encoding="utf-8")
-        text = (
-            f"# {job_id} — {kind}\n\n"
-            f"Arthur Loop {kind} hop for {project_id}.\n"
-            f"Return a valid control block for this hop.\n"
-        )
+        if kind == "qa-review":
+            text = (
+                f"# {job_id} — QA review\n\n"
+                f"Arthur Loop QA hop for {project_id}. Check the implementation against the approved plan.\n"
+                "End with a control block:\n\n"
+                "```text\n"
+                f"PROJECT_ID: {project_id}\n"
+                "REVIEW_TYPE: QA_REVIEW\n"
+                "QA_STATUS: QA_PASS\n"
+                "```\n\n"
+                "Use QA_FAIL if the implementation is not ready for sprint review.\n"
+            )
+        else:
+            text = (
+                f"# {job_id} — {kind}\n\n"
+                f"Arthur Loop {kind} hop for {project_id}.\n"
+                f"Return a valid control block for this hop.\n"
+            )
     replacements = {
         "{{PROJECT_ID}}": project_id,
         "{{CURRENT_STATE_SUMMARY}}": f"{project_id} — {kind} hop.",
@@ -237,6 +253,7 @@ def enqueue_hop(
     kind: str,
     title: str | None = None,
     actor: str | None = None,
+    role: str | None = None,
 ) -> QueueJob:
     job_id = _next_job_id(root, project_id)
     marker = f"{project_id}_{_slug(kind)}_{_slug(job_id)}"
@@ -268,7 +285,12 @@ def enqueue_hop(
     )
     ledger = QueueLedger(root)
     ledger.create_job(job)
-    ledger.append_event(job_id, "follow_hop", {"kind": kind, "actor": actor or HOLDER})
+    hop_role = role or role_for_kind(kind)
+    ledger.append_event(
+        job_id,
+        "follow_hop",
+        {"kind": kind, "role": hop_role, "actor": actor or HOLDER},
+    )
     return job
 
 
@@ -288,6 +310,35 @@ def _pick_job(root: Path, project_id: str | None) -> QueueJob | None:
     order = {"queued": 0, "claimed": 1, "submitted": 2, "waiting_for_chatgpt": 3}
     actionable.sort(key=lambda job: (order.get(job.status, 9), job.priority, job.created_at, job.job_id))
     return actionable[0]
+
+
+def _job_role(root: Path, job: QueueJob, kind: str) -> str:
+    for event in _events_for(root, job.job_id):
+        role = (event.get("data") or {}).get("role")
+        if role:
+            return str(role)
+    return role_for_kind(kind)
+
+
+def preview_next_step(root: Path, project_id: str | None = None) -> dict[str, Any] | None:
+    """Read-only: which hop and role would run next."""
+
+    job = _pick_job(root, project_id)
+    if job is None:
+        return None
+    config = load_config(root)
+    kind = job_kind(root, job)
+    role = _job_role(root, job, kind)
+    assigned = assignment_for(config, role)
+    return {
+        "job_id": job.job_id,
+        "project_id": job.project_id,
+        "status": job.status,
+        "kind": kind,
+        "role": role,
+        "agent": assigned["agent"],
+        "model": assigned.get("model") or "",
+    }
 
 
 def _human_gates(root: Path, project_id: str | None) -> list[str]:
@@ -345,8 +396,10 @@ def follow_step(
         }
 
     kind = job_kind(root, job)
-    role = ROLE_FOR_KIND.get(kind, "advisor")
-    adapter = adapter_for_role(config, role)
+    role = _job_role(root, job, kind)
+    assigned = assignment_for(config, role)
+    adapter = assigned["agent"]
+    model = assigned.get("model") or ""
     step: dict[str, Any] = {
         "job_id": job.job_id,
         "project_id": job.project_id,
@@ -354,6 +407,7 @@ def follow_step(
         "kind": kind,
         "role": role,
         "adapter": adapter,
+        "model": model,
     }
     if dry_run:
         step["action"] = "dry_run"
@@ -374,6 +428,7 @@ def follow_step(
                 "kind": kind,
                 "role": role,
                 "adapter": adapter,
+                "model": model,
                 "prompt": prompt,
             },
         )
@@ -434,7 +489,7 @@ def follow_step(
         gate = implementation_gate(root, job.project_id)
         step["gate"] = gate.to_record()
         decision = (artifact.decision or "").strip()
-        next_kind = NEXT_HOP.get((kind, decision)) if chain else None
+        next_kind = next_hop_kind(kind, decision, config) if chain else None
         if next_kind == "implementation-handoff" and not gate.go:
             step["action"] = "gate_no_go"
             step["note"] = (
@@ -443,7 +498,13 @@ def follow_step(
             )
             return step
         if next_kind:
-            nxt = enqueue_hop(root, project_id=job.project_id, kind=next_kind, actor=holder)
+            nxt = enqueue_hop(
+                root,
+                project_id=job.project_id,
+                kind=next_kind,
+                actor=holder,
+                role=role_for_kind(next_kind),
+            )
             step["enqueued"] = nxt.to_record()
             step["enqueued_kind"] = next_kind
         step["action"] = "advanced"

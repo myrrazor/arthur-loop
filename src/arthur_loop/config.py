@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from arthur_loop.roles import derive_roles, merge_roles, validate_roles
+
 
 # every id here has a shipped pack under src/arthur_loop/adapters/ (tests enforce it)
 KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "grok", "manual"}
@@ -61,10 +63,13 @@ def load_config(root: Path) -> dict[str, Any]:
     for key, value in DEFAULTS.items():
         merged[key] = dict(value) if isinstance(value, dict) else value
 
+    data: dict[str, Any] = {}
     path = config_path(root)
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
         for key, value in data.items():
+            if key == "roles":
+                continue
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
                 merged[key] = {**merged[key], **value}
             else:
@@ -73,6 +78,9 @@ def load_config(root: Path) -> dict[str, Any]:
     _check(merged["advisor"].get("adapter"), KNOWN_ADVISORS, "advisor")
     _check(merged["executor"].get("adapter"), KNOWN_EXECUTORS, "executor")
     _check(merged["tracker"].get("adapter"), KNOWN_TRACKERS, "tracker")
+    file_roles = data.get("roles") if isinstance(data.get("roles"), dict) else None
+    merged["roles"] = merge_roles(derive_roles(merged), file_roles)
+    validate_roles(merged["roles"])
     return merged
 
 
