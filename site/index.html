@@ -200,9 +200,35 @@
           <li>
             <span class="n">03 — /ARTHUR-LOOP</span>
             <h3>Specify the loop in the agent</h3>
-            <p>Run <code>/arthur-loop</code> (or the installed skill). It interviews for project, advisor, executor, and tracker, calls <code>arthur loop create</code>, then can follow claim → capture → gate. Same wizard exists in <code>arthur web</code>.</p>
+            <p>Run <code>/arthur-loop</code> (or the installed skill). It interviews for project, advisor, executor, and tracker, calls <code>arthur loop create</code>, then can follow claim → capture → gate. Same wizard exists in <code>arthur web</code>. Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets walk into the queue with <code>arthur tracker walk</code>.</p>
           </li>
         </ol>
+          <div class="shot-stack" style="margin-top: 22px">
+            <figure class="shot">
+              <div class="shot-frame">
+                <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>/arthur-loop · coding agent</span></div>
+                <a href="media/agent-creates-loop.png">
+                  <picture>
+                    <source type="image/webp" srcset="media/agent-creates-loop-sm.webp 900w, media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
+                    <img src="media/agent-creates-loop.png" alt="Coding agent running /arthur-loop for AUTH_SCOPE with grok, claude-code, and atlas-tasker, then MCP arthur.loop.create" width="1100" height="720" loading="lazy" decoding="async" />
+                  </picture>
+                </a>
+              </div>
+              <figcaption>The skill interview. Same create path as the terminal command and the web wizard.</figcaption>
+            </figure>
+            <figure class="shot">
+              <div class="shot-frame">
+                <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>atlas tickets → queue</span></div>
+                <a href="media/atlas-tickets-to-queue.png">
+                  <picture>
+                    <source type="image/webp" srcset="media/atlas-tickets-to-queue-sm.webp 900w, media/atlas-tickets-to-queue.webp 1100w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
+                    <img src="media/atlas-tickets-to-queue.png" alt="Atlas Tasker ready tickets AUTH-1 and AUTH-2 opened as Arthur Loop queue jobs" width="1100" height="500" loading="lazy" decoding="async" />
+                  </picture>
+                </a>
+              </div>
+              <figcaption>Install <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a>, mark tickets ready, and walk them into the loop.</figcaption>
+            </figure>
+          </div>
       </div>
     </section>
 

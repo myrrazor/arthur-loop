@@ -16,6 +16,18 @@ File-first control plane for AI dev loops — bring your own advisor, executor, 
 </p>
 
 <p align="center">
+  <img src="docs/assets/agent-creates-loop.png" alt="A coding agent running /arthur-loop: it confirms AUTH_SCOPE with grok as advisor, claude-code as executor, and atlas-tasker as tracker, then calls arthur.loop.create" width="880">
+  <br>
+  <sub>Your coding agent starts the loop. <code>/arthur-loop</code> interviews for roles and calls the same <code>arthur loop create</code> you can type in a terminal.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/atlas-tickets-to-queue.png" alt="Terminal showing Atlas Tasker ready tickets AUTH-1 and AUTH-2 walked into Arthur Loop queue jobs BQ-AUTH_SCOPE-002 and BQ-AUTH_SCOPE-003" width="880">
+  <br>
+  <sub>Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets become queue jobs with <code>arthur tracker walk</code>.</sub>
+</p>
+
+<p align="center">
   <a href="#install">Install</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#the-status-dashboard">The Dashboard</a> ·

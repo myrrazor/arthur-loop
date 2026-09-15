@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 1100px; height: 720px; background: #07090c; color: #e7ebef; font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif; }
+    .app { height: 100%; display: grid; grid-template-rows: 44px 1fr; border: 1px solid #262c34; }
+    .top { display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid #262c34; background: #10141a; font: 700 12px/1 ui-monospace, Menlo, monospace; letter-spacing: 0.06em; color: #9aa4af; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #3fb950; }
+    .pane { padding: 22px 28px 20px; display: grid; gap: 16px; align-content: start; }
+    .row { display: grid; gap: 8px; max-width: 820px; }
+    .who { font: 700 11px/1 ui-monospace, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #7d8792; }
+    .bubble { padding: 12px 14px; border: 1px solid #262c34; border-radius: 10px; background: #14181e; font-size: 15px; line-height: 1.5; }
+    .you .bubble { background: #19231c; border-color: #2a362e; }
+    .slash { display: inline-block; padding: 1px 8px; border-radius: 999px; background: #55e878; color: #06130a; font: 700 12px/1.6 ui-monospace, Menlo, monospace; }
+    .q { margin: 0; color: #c5cdd6; }
+    .q + .q { margin-top: 8px; }
+    .ans { color: #55e878; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+    .tool { border: 1px solid #2a362e; border-radius: 10px; background: #0c100e; overflow: hidden; }
+    .tool-head { padding: 8px 12px; border-bottom: 1px solid #2a362e; color: #55e878; font: 700 11px/1.4 ui-monospace, Menlo, monospace; letter-spacing: 0.06em; }
+    .tool pre { margin: 0; padding: 12px 14px; white-space: pre-wrap; color: #d7e0d9; font: 13px/1.55 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+    .ok { color: #55e878; }
+    .dim { color: #7d8792; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top"><i class="dot"></i> CODING AGENT · ~/my-loop</div>
+    <div class="pane">
+      <div class="row you">
+        <div class="who">You</div>
+        <div class="bubble"><span class="slash">/arthur-loop</span> &nbsp;Set up AUTH_SCOPE from the Atlas tickets. Grok plans, Claude Code implements.</div>
+      </div>
+      <div class="row">
+        <div class="who">Agent</div>
+        <div class="bubble">
+          <p class="q">I’ll create the loop from this instance. Confirming the pieces:</p>
+          <p class="q">Project <span class="ans">AUTH_SCOPE</span> · Advisor <span class="ans">grok</span> · Executor <span class="ans">claude-code</span> · Tracker <span class="ans">atlas-tasker</span></p>
+        </div>
+      </div>
+      <div class="tool">
+        <div class="tool-head">MCP  arthur.loop.create</div>
+        <pre>arthur loop create --project-id AUTH_SCOPE \
+  --advisor grok --executor claude-code --tracker atlas-tasker \
+  --goal "Decide auth session lifetime and ship scoped tokens"
+
+<span class="ok">created</span>  AUTH_SCOPE
+  advisor    grok
+  executor   claude-code
+  tracker    atlas-tasker   <span class="dim">AUTH_SCOPE → AUTH</span>
+  job        BQ-AUTH_SCOPE-001   queued
+  next       arthur follow --once</pre>
+      </div>
+      <div class="row">
+        <div class="who">Agent</div>
+        <div class="bubble">Loop is up. The first planning job is queued. I can follow claim → capture → gate from here, or walk ready Atlas tickets into the queue.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
