@@ -66,7 +66,18 @@ arthur init</pre>
         <p>Then it creates the loop with MCP <code>arthur.loop.create</code> (or the CLI equivalent) and can drive hops with <code>arthur.follow.run</code> / <code>arthur follow --once</code>.</p>
         <pre>arthur loop create --project-id MY_APP --advisor grok --executor claude-code --tracker none
 arthur follow --once</pre>
-        <p>The same wizard lives in the console: <code>arthur web</code> → <strong>+ Loop</strong>.</p>
+        <p>The same wizard lives in the console: <code>arthur web</code> → <strong>+ Loop</strong>. If the tracker is Atlas Tasker and tickets are ready, <code>arthur tracker walk</code> opens them as queue jobs (<code>atlas:AUTH-1</code> idempotency keys). <code>in_review</code> is not ready work.</p>
+        <figure class="shot">
+          <div class="shot-frame">
+            <a href="../media/agent-creates-loop.png">
+              <picture>
+                <source type="image/webp" srcset="../media/agent-creates-loop-sm.webp 900w, ../media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <img src="../media/agent-creates-loop.png" alt="Coding agent running /arthur-loop and arthur.loop.create for AUTH_SCOPE" width="1100" height="720" loading="lazy" decoding="async" />
+              </picture>
+            </a>
+          </div>
+          <figcaption>What the installed skill does: interview, then <code>arthur.loop.create</code>.</figcaption>
+        </figure>
 
         <h2>3. What stays human</h2>
         <p>Follow will not skip an open human decision, invent an <code>APPROVE_PLAN</code> when the implementation gate is NO-GO, or headlessly drive ChatGPT-browser / manual inboxes. Those pause the project and surface on <code>arthur status</code> and the Needs you rail.</p>

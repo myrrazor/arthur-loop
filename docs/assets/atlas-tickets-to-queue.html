@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; width: 1100px; height: 720px; background: #07090c; color: #e7ebef; font-family: ui-monospace, Menlo, Monaco, Consolas, monospace; }
+    .term { height: 100%; display: grid; grid-template-rows: 40px 1fr; border: 1px solid #262c34; }
+    .chrome { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-bottom: 1px solid #262c34; background: #10141a; color: #7d8792; font-size: 12px; }
+    .chrome i { width: 8px; height: 8px; border-radius: 50%; background: #3a424c; }
+    .chrome i:first-child { background: #3fb950; }
+    .body { padding: 22px 26px; font-size: 14.5px; line-height: 1.55; }
+    .prompt { color: #55e878; }
+    .cmd { color: #edf7ef; }
+    .out { margin: 8px 0 20px; color: #c5cdd6; white-space: pre; }
+    .ok { color: #55e878; }
+    .muted { color: #7d8792; }
+    .head { color: #9aa4af; }
+    table { border-collapse: collapse; margin-top: 6px; }
+    td { padding: 3px 18px 3px 0; }
+    .ready { color: #55e878; }
+    .queued { color: #58a6ff; }
+  </style>
+</head>
+<body>
+  <div class="term">
+    <div class="chrome"><i></i><i></i><i></i> terminal · ~/my-loop</div>
+    <div class="body">
+      <div><span class="prompt">›</span> <span class="cmd">tracker board --plain</span></div>
+      <div class="out"><span class="head">Board AUTH · 2 tickets · next ready work AUTH-1</span>
+  <span class="ready">AUTH-1</span>  Ready   Decide session lifetime
+  <span class="ready">AUTH-2</span>  Ready   Ship scoped API tokens</div>
+      <div><span class="prompt">›</span> <span class="cmd">arthur tracker walk</span></div>
+      <div class="out"><span class="ok">opened</span>  2 Atlas tickets into the AUTH_SCOPE queue
+  AUTH-1  Decide session lifetime     →  <span class="queued">BQ-AUTH_SCOPE-002</span>   atlas:AUTH-1
+  AUTH-2  Ship scoped API tokens      →  <span class="queued">BQ-AUTH_SCOPE-003</span>   atlas:AUTH-2
+  <span class="muted">skipped  0 · in_review is not ready work</span></div>
+      <div><span class="prompt">›</span> <span class="cmd">arthur status</span></div>
+      <div class="out">  <span class="ok">POLL_DUE</span>   queue work is ready
+  QUEUE
+    BQ-AUTH_SCOPE-001   AUTH_SCOPE   queued   ready
+    BQ-AUTH_SCOPE-002   AUTH_SCOPE   queued   ready   <span class="muted">atlas:AUTH-1</span>
+    BQ-AUTH_SCOPE-003   AUTH_SCOPE   queued   ready   <span class="muted">atlas:AUTH-2</span>
+  PROJECTS
+    AUTH_SCOPE   Not started.</div>
+    </div>
+  </div>
+</body>
+</html>
