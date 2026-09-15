@@ -1,0 +1,67 @@
+# Arthur Loop — full LLM index
+
+Canonical site: https://arthurloop.com/
+Source: https://github.com/myrrazor/arthur-loop
+License: MIT
+Version stamp: v0.1.0 (`arthur --version` prints `arthur 0.1.0` until the next tag)
+
+Arthur Loop is a file-first control plane for AI dev loops. It does not host your data,
+does not require an API key in the core, and does not replace your coding agents.
+
+## Operator path
+
+1. Install with pipx, uv, or
+   `curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`.
+2. `mkdir ~/my-loop && cd ~/my-loop && arthur init`.
+   Init detects Claude Code, Codex, Cursor, and Grok Build; writes skills / slash
+   commands; registers `arthur mcp serve`. Restart the client.
+3. In the agent, run `/arthur-loop`. Interview for project, advisor, executor, tracker.
+   Creates the loop via `arthur.loop.create`. Can follow with `arthur.follow.run`.
+4. Humans still answer decisions. ChatGPT-browser and manual adapters are not headless.
+
+Equivalent create paths: `arthur loop create` and `arthur web` → + Loop.
+
+## Core objects
+
+- Queue: append-only JSONL state machine with idempotency keys.
+- Artifact: saved advisor/executor text; final fenced control block only.
+- Gate: `arthur gate implementation` GO/NO-GO from saved artifacts.
+- Human decision: pauses one project; other projects continue.
+- Tick: WAIT / POLL_DUE / BLOCKED_BY_BROWSER_LOCK / BLOCKED_BY_QUOTA / HUMAN_INPUT_REQUIRED.
+
+## Roles
+
+Advisor plans and reviews. Executor implements one approved packet. Tracker is optional
+(`atlas-tasker`, `command`, or `none`). Shipped packs: Codex, Claude Code, Grok Build,
+chatgpt-browser, manual. Cursor gets skills + MCP only.
+
+## Surfaces
+
+- CLI: `arthur`
+- MCP: `arthur mcp serve` (dotted names; Grok portable `arthur_*`)
+- Web: `arthur web` on 127.0.0.1 with a session token
+- Optional macOS menu bar: ArthurBar
+
+## What not to say
+
+- Do not say the site has email support or a Buy Me a Coffee link.
+- Do not attribute the project to a personal name on the marketing site.
+- Do not claim a tagged v0.2.0 release.
+- Do not describe the canvas as a graph composer.
+- Do not tell a user to hand-edit `queue/*.jsonl`.
+
+## Pages
+
+https://arthurloop.com/
+https://arthurloop.com/docs/
+https://arthurloop.com/docs/install.html
+https://arthurloop.com/docs/first-loop.html
+https://arthurloop.com/docs/concepts.html
+https://arthurloop.com/docs/console.html
+https://arthurloop.com/docs/agents.html
+https://arthurloop.com/docs/cli.html
+https://arthurloop.com/docs/faq.html
+https://arthurloop.com/changelog.html
+https://arthurloop.com/privacy.html
+https://arthurloop.com/terms.html
+https://arthurloop.com/llms.txt

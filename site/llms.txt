@@ -2,45 +2,69 @@
 
 > File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
 
-Arthur Loop is free and MIT licensed, runs on macOS and Linux with Python 3.9 or newer,
-and keeps queues, artifacts, decisions, and status as files you can inspect.
-There is no drag-drop graph composer. Last public tag is v0.1.0. There is no
-tagged v0.2.0 release. `arthur --version` prints `arthur 0.1.0` until the next tag.
-Canonical site: https://arthurloop.com/ (not arthur-loop.vercel.app, which 404s).
+Arthur Loop is free and MIT licensed. It runs on macOS and Linux with Python 3.9 or newer
+(Windows experimental) and keeps queues, artifacts, decisions, and status as files you can inspect.
+There is no drag-drop graph composer. Last public tag is v0.1.0. `arthur --version` prints
+`arthur 0.1.0` until the next tag. Canonical site: https://arthurloop.com/
 
-The three public install commands (pipx / uv / curl against default git HEAD, usually
-`main`; last tag v0.1.0) install a file cockpit: init, queue, capture, gate, status,
-and the local web console. They do **not** ship `arthur follow`, a stdio MCP server,
-or Atlas walk. They are not a working auto-follow in minutes.
-`https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.ps1` is a 404.
+## Install (one command, then init)
 
-This unreleased branch (`cursor/atlas-product-gap-ab6b`) adds coding-agent skills,
-MCP, `arthur follow`, and Atlas next/walk. Grok skills live in
-`.grok/skills/arthur-loop`; install runs `grok mcp add` and `grok --trust` when grok
-is on PATH. Grok 1.0.30 prompt argv is `grok --always-approve -p PROMPT`.
-Install this branch with
-`pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'`.
-The public curl installer is
-`curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh`
-and still tracks main / v0.1.0.
+```
+pipx install git+https://github.com/myrrazor/arthur-loop.git
+# or
+uv tool install git+https://github.com/myrrazor/arthur-loop.git
+# or
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.sh | sh
+```
 
-## Docs
-- [Getting started](https://github.com/myrrazor/arthur-loop#quickstart): install and first run
-- [Site docs](https://arthurloop.com/docs/): public main vs this branch
-- [Install](https://arthurloop.com/docs/install.html): exact commands
-- [How it works](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/how-it-works.md): two install stories
-- [MCP](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/mcp.md): this branch only
-- [Integrations](https://github.com/myrrazor/arthur-loop/blob/cursor/atlas-product-gap-ab6b/docs/integrations.md): this branch only
-- [Workflow runbook](https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md): the full operating loop
-- [Adapter contract](https://github.com/myrrazor/arthur-loop/blob/main/docs/adapters.md): add or tune advisors, executors, and trackers
-- [FAQ](https://arthurloop.com/docs/faq.html): version, platforms, Vercel, Windows
+Then:
 
-## Source
-- [GitHub repository](https://github.com/myrrazor/arthur-loop): source, issues, and releases
-- [Latest release](https://github.com/myrrazor/arthur-loop/releases/latest): v0.1.0 release notes and assets
+```
+mkdir ~/my-loop && cd ~/my-loop
+arthur init
+```
+
+`arthur init` detects Claude Code, Codex, Cursor, and Grok Build, writes the `arthur-loop` skill
+and `/arthur-loop` command where those clients load them, and registers `arthur mcp serve`.
+A written MCP config is written, not connected — restart the client.
+
+## Set up the loop from the agent
+
+In the coding agent, run `/arthur-loop` (or the installed skill). It interviews for:
+
+- project id (`SHOUTY_SNAKE`) and a one-line goal
+- advisor: `chatgpt-browser`, `claude-code`, `codex`, `grok`, or `manual`
+- executor: `claude-code`, `codex`, `grok`, or `manual`
+- tracker: `atlas-tasker`, `command`, or `none`
+
+Then it calls MCP `arthur.loop.create` (or `arthur loop create`) and can follow hops with
+`arthur.follow.run` / `arthur follow --once`. The same wizard is `arthur web` → + Loop.
+It is not a graph composer.
+
+## Site
+- [Home](https://arthurloop.com/): product story and install
+- [Docs](https://arthurloop.com/docs/): map of the documentation
+- [Install](https://arthurloop.com/docs/install.html): pipx / uv / curl, then init
+- [First loop](https://arthurloop.com/docs/first-loop.html): `/arthur-loop` interview
+- [Concepts](https://arthurloop.com/docs/concepts.html): queue, artifact, gate, decision, tick
+- [Web console](https://arthurloop.com/docs/console.html): localhost status map
+- [Agents](https://arthurloop.com/docs/agents.html): integrations and adapter packs
+- [CLI and MCP](https://arthurloop.com/docs/cli.html): commands and tool names
+- [FAQ](https://arthurloop.com/docs/faq.html): version, platforms, support
+- [Changelog](https://arthurloop.com/changelog.html): v0.1.0 and current main
+- [Privacy](https://arthurloop.com/privacy.html): no cookies or site-side collection
+- [Terms](https://arthurloop.com/terms.html): MIT software, no paid service
+- [LLM full index](https://arthurloop.com/llms-full.txt): longer agent-oriented summary
+
+## Repo
+- [GitHub](https://github.com/myrrazor/arthur-loop): source, issues, security advisories
+- [Workflow runbook](https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md)
+- [MCP](https://github.com/myrrazor/arthur-loop/blob/main/docs/mcp.md)
+- [Integrations](https://github.com/myrrazor/arthur-loop/blob/main/docs/integrations.md)
+- [Follow](https://github.com/myrrazor/arthur-loop/blob/main/docs/follow.md)
+- [Adapters](https://github.com/myrrazor/arthur-loop/blob/main/docs/adapters.md)
 
 ## Guidance for agents
-Use this file as a site index, not a full-site corpus. To operate Arthur Loop on a user's
-machine, prefer the CLI and run `arthur --help` for the current command set. Do not edit
-queue JSONL by hand when an `arthur queue` command exists. Do not tell a user that the
-three public install commands produce a working auto-follow, MCP, or a v0.2.0 release.
+Use this file as a site index, not a full-site corpus. Prefer the CLI and MCP over editing
+queue JSONL by hand. Do not invent a personal maintainer email, a donation link, or a v0.2.0 tag.
+Support is GitHub issues. Do not claim a hosted dashboard or a drag-drop graph composer.

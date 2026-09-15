@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web console — Arthur Loop</title>
+  <meta name="description" content="arthur web is a localhost status map and human cockpit — not a hosted dashboard or graph composer." />
+  <link rel="canonical" href="https://arthurloop.com/docs/console.html" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../site.css" />
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <div class="nav-links">
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+      </div>
+    </div>
+  </nav>
+  <main class="doc">
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html">Concepts</a></li>
+          <li><a href="console.html" aria-current="page">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Web console</p>
+        <h1>The browser twin of <code>arthur status</code>.</h1>
+        <pre>arthur web
+arthur web --root ~/my-loop --port 8080 --no-open</pre>
+        <p>Vanilla JS over Python's stdlib server. No build step, no npm. It binds <code>127.0.0.1</code> only and prints a URL with a per-process session token. Every read and write requires that token.</p>
+
+        <figure class="shot">
+          <div class="shot-frame">
+            <a href="../media/web-console.png">
+              <picture>
+                <source type="image/webp" srcset="../media/web-console-sm.webp 900w, ../media/web-console.webp 1600w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <img src="../media/web-console.png" alt="Arthur Loop web console status map with an open human decision" width="1600" height="1000" loading="lazy" decoding="async" />
+              </picture>
+            </a>
+          </div>
+          <figcaption>Status map of the fixed pipeline. Drag to pan, scroll to zoom. Not a graph composer.</figcaption>
+        </figure>
+
+        <h2>Views</h2>
+        <ul>
+          <li><strong>Canvas</strong> — advisor → queue → in flight → executor → review gate → human, with counts on the nodes.</li>
+          <li><strong>Board</strong> — the queue as kanban columns.</li>
+          <li><strong>Queue</strong> — the dense table, recover inline.</li>
+          <li><strong>Artifacts</strong> — per-project reader; invalid control blocks are flagged.</li>
+          <li><strong>Events</strong> — the ledger tail.</li>
+          <li><strong>Needs you</strong> — always-on rail for decisions, stale jobs, quarantined artifacts, and sessions.</li>
+        </ul>
+
+        <h2>What a human can do here</h2>
+        <p>Six write actions, each the same code path as the CLI: answer a decision, recover a job, create a loop, create a job, clear a session, break a stale browser lock. There are no claim, submit, poll, or “approve plan” buttons. Agents own those hops through MCP or the CLI.</p>
+
+        <figure class="shot">
+          <div class="shot-frame">
+            <a href="../media/create-loop-wizard.png">
+              <picture>
+                <source type="image/webp" srcset="../media/create-loop-wizard-sm.webp 900w, ../media/create-loop-wizard.webp 1600w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <img src="../media/create-loop-wizard.png" alt="Create-loop wizard form" width="1600" height="1000" loading="lazy" decoding="async" />
+              </picture>
+            </a>
+          </div>
+          <figcaption>+ Loop is the same interview as <code>/arthur-loop</code>: project, advisor, executor, tracker, optional first job.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
+      <a href="./">Docs</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+    </div>
+  </footer>
+</body>
+</html>

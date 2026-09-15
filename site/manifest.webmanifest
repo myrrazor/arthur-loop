@@ -1,0 +1,21 @@
+{
+  "name": "Arthur Loop",
+  "short_name": "Arthur Loop",
+  "description": "File-first control plane for AI dev loops — install once, then set up the loop from your coding agent.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#070a08",
+  "theme_color": "#070a08",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ]
+}

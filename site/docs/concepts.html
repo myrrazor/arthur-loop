@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Concepts — Arthur Loop</title>
-  <meta name="description" content="Queue, artifacts, gates, decisions, tick. Public main is a cockpit; follow/MCP are this branch." />
+  <meta name="description" content="Queue, artifacts, gates, human decisions, and tick — the Arthur Loop cockpit model." />
   <link rel="canonical" href="https://arthurloop.com/docs/concepts.html" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="../site.css" />
@@ -14,19 +14,65 @@
     <div class="wrap">
       <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a href="index.html">Docs</a>
+        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="../index.html#install">Install</a>
       </div>
     </div>
   </nav>
   <main class="doc">
-    <div class="wrap">
-      <p class="eyebrow">Concepts</p>
-      <h1>Files, not a hosted loop.</h1>
-      <p>A <strong>queue</strong> is an append-only JSONL state machine. An <strong>artifact</strong> is saved advisor/executor text before anything acts on it. A <strong>gate</strong> is GO/NO-GO from those files. A <strong>human decision</strong> pauses one project. A <strong>tick</strong> classifies what should happen next without spending tokens.</p>
-      <p>Those objects exist on public main / v0.1.0. <code>arthur follow</code>, MCP, and Atlas walk do not. Pause on this branch also blocks poll, complete, and fail.</p>
-      <p>Full operating manual: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md">workflow-runbook.md</a>.</p>
+    <div class="wrap doc-layout">
+      <aside class="doc-side" aria-label="Documentation">
+        <ul class="doc-nav">
+          <li><a href="./">Overview</a></li>
+          <li><a href="install.html">Install</a></li>
+          <li><a href="first-loop.html">First loop</a></li>
+          <li><a href="concepts.html" aria-current="page">Concepts</a></li>
+          <li><a href="console.html">Web console</a></li>
+          <li><a href="agents.html">Agents</a></li>
+          <li><a href="cli.html">CLI and MCP</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </aside>
+      <div>
+        <p class="eyebrow">Concepts</p>
+        <h1>Files, not a hosted loop.</h1>
+        <p>Every object below is something you can open in an editor. The CLI, MCP server, and web console are different windows on the same directory.</p>
+
+        <h2>Queue</h2>
+        <p>An append-only JSONL state machine: <code>queued → claimed → submitted → waiting/stopped → completed | failed | cancelled</code>, plus <code>needs_recovery</code>. Illegal moves are refused. Duplicate job ids and reused idempotency keys are refused. After a crash the ledger replays; <code>arthur queue recover</code> parks or requeues the abandoned job and releases the dead manager's lease.</p>
+
+        <h2>Artifact</h2>
+        <p>Advisor and executor text is saved <em>before</em> anything acts on it. Control blocks parse from the final fenced block only. Values must match the hop enums. A plan that says <code>IMPLEMENTATION_STARTED: true</code> is invalid. Failures are quarantined and open a human decision.</p>
+
+        <h2>Gate</h2>
+        <p><code>arthur gate implementation --project-id X</code> answers GO or NO-GO from saved artifacts alone: newest plan review is a valid <code>APPROVE_PLAN</code>, nothing re-opened planning, no open decision. A handoff captured while the gate is NO-GO is quarantined. Prompts still ask executors to behave; the gate is what the loop checks.</p>
+
+        <h2>Human decision</h2>
+        <p>A blocking question lives in <code>human-decisions/open.md</code>. While it is OPEN, that project cannot be claimed, submitted, polled, completed, or failed. Other projects keep moving. Answer it from the CLI, MCP, or the console.</p>
+
+        <h2>Tick</h2>
+        <p><code>arthur tick</code> reads durable state and answers WAIT, POLL_DUE, BLOCKED_BY_BROWSER_LOCK, BLOCKED_BY_QUOTA, or HUMAN_INPUT_REQUIRED. It costs no tokens. Run it from cron if you want a heartbeat.</p>
+
+        <h2>The hop sequence</h2>
+        <ol>
+          <li>Advisor next-plan request</li>
+          <li>Executor plan (plan only)</li>
+          <li>Advisor plan review</li>
+          <li>Implementation gate GO</li>
+          <li>Executor implementation handoff</li>
+          <li>Advisor sprint review, until release-ready</li>
+        </ol>
+        <p>Full operating manual: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md">workflow-runbook.md</a> in the repository.</p>
+      </div>
     </div>
   </main>
+  <footer>
+    <div class="wrap">
+      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
+      <a href="./">Docs</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+    </div>
+  </footer>
 </body>
 </html>
