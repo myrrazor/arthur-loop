@@ -55,14 +55,17 @@ Grok Build, chatgpt-browser, manual. Cursor gets skills + MCP only.
 
 https://arthurloop.com/
 https://arthurloop.com/docs/
-https://arthurloop.com/docs/install.html
-https://arthurloop.com/docs/first-loop.html
-https://arthurloop.com/docs/concepts.html
-https://arthurloop.com/docs/console.html
-https://arthurloop.com/docs/agents.html
-https://arthurloop.com/docs/cli.html
-https://arthurloop.com/docs/faq.html
-https://arthurloop.com/changelog.html
-https://arthurloop.com/privacy.html
-https://arthurloop.com/terms.html
+https://arthurloop.com/docs/install
+https://arthurloop.com/docs/first-loop
+https://arthurloop.com/docs/roles
+https://arthurloop.com/docs/concepts
+https://arthurloop.com/docs/console
+https://arthurloop.com/docs/agents
+https://arthurloop.com/docs/cli
+https://arthurloop.com/docs/faq
+https://arthurloop.com/changelog
+https://arthurloop.com/privacy
+https://arthurloop.com/terms
 https://arthurloop.com/llms.txt
+https://arthurloop.com/robots.txt
+https://arthurloop.com/sitemap.xml

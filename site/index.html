@@ -110,7 +110,7 @@
       <a class="brand" href="#top" aria-label="Arthur Loop home"><img src="logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
         <a href="#how">How it works</a>
-        <a class="nav-keep" href="docs/">Docs</a>
+        <a class="nav-keep" href="/docs/">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="#install">Install</a>
       </div>
@@ -132,7 +132,7 @@
           </ul>
           <div class="hero-actions">
             <a class="button button-primary" href="#install">Install Arthur Loop</a>
-            <a class="button" href="docs/first-loop.html">Set up your first loop</a>
+            <a class="button" href="/docs/first-loop.html">Set up your first loop</a>
           </div>
           <p class="requirements">Python 3.9+ · macOS and Linux · core needs no API key</p>
           <ul class="release-facts" aria-label="Release facts">
@@ -163,13 +163,13 @@
     </header>
 
     <div class="proof" id="proof">
-      <div class="wrap">
+      <div class="wrap-shot">
         <figure class="shot">
           <div class="shot-frame">
             <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>arthur web · localhost</span></div>
             <a href="media/web-console.png">
               <picture>
-                <source type="image/webp" srcset="media/web-console-sm.webp 900w, media/web-console.webp 1600w" sizes="(max-width: 620px) 160vw, min(72rem, calc(100vw - 40px))" />
+                <source type="image/webp" srcset="media/web-console-sm.webp 900w, media/web-console.webp 1600w" sizes="(max-width: 620px) calc(100vw - 24px), min(90rem, calc(100vw - 40px))" />
                 <img src="media/web-console.png" alt="Arthur Loop web console on a demo instance: advisor-to-human status map, DEMO_APP in flight, and SAMPLE_APP waiting on an auth-scope decision" width="1600" height="1000" fetchpriority="high" />
               </picture>
             </a>
@@ -203,32 +203,34 @@
             <p>Run <code>/arthur-loop</code>. Assign planner, implementer, reviewer, and QA. Arthur formulates the default sequence. Then <code>arthur</code> or console <strong>Run next</strong> calls the next agent. Same wizard: <code>arthur web</code>. Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets walk in with <code>arthur tracker walk</code>.</p>
           </li>
         </ol>
-          <div class="shot-stack" style="margin-top: 22px">
-            <figure class="shot">
-              <div class="shot-frame">
-                <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>/arthur-loop · coding agent</span></div>
-                <a href="media/agent-creates-loop.png">
-                  <picture>
-                    <source type="image/webp" srcset="media/agent-creates-loop-sm.webp 900w, media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
-                    <img src="media/agent-creates-loop.png" alt="Coding agent running /arthur-loop for AUTH_SCOPE with grok, claude-code, and atlas-tasker, then MCP arthur.loop.create" width="1100" height="720" loading="lazy" decoding="async" />
-                  </picture>
-                </a>
-              </div>
-              <figcaption>The skill interview. Same create path as the terminal command and the web wizard.</figcaption>
-            </figure>
-            <figure class="shot">
-              <div class="shot-frame">
-                <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>atlas tickets → queue</span></div>
-                <a href="media/atlas-tickets-to-queue.png">
-                  <picture>
-                    <source type="image/webp" srcset="media/atlas-tickets-to-queue-sm.webp 900w, media/atlas-tickets-to-queue.webp 1100w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
-                    <img src="media/atlas-tickets-to-queue.png" alt="Atlas Tasker ready tickets AUTH-1 and AUTH-2 opened as Arthur Loop queue jobs" width="1100" height="500" loading="lazy" decoding="async" />
-                  </picture>
-                </a>
-              </div>
-              <figcaption>Install <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a>, mark tickets ready, and walk them into the loop.</figcaption>
-            </figure>
-          </div>
+      </div>
+      <div class="wrap-shot shot-band">
+        <div class="shot-stack">
+          <figure class="shot">
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>/arthur-loop · coding agent</span></div>
+              <a href="media/agent-creates-loop.png">
+                <picture>
+                  <source type="image/webp" srcset="media/agent-creates-loop-sm.webp 900w, media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) calc(100vw - 24px), min(90rem, calc(100vw - 40px))" />
+                  <img src="media/agent-creates-loop.png" alt="Coding agent running /arthur-loop for AUTH_SCOPE with grok, claude-code, and atlas-tasker, then MCP arthur.loop.create" width="1100" height="720" loading="lazy" decoding="async" />
+                </picture>
+              </a>
+            </div>
+            <figcaption>The skill interview. Same create path as the terminal command and the web wizard.</figcaption>
+          </figure>
+          <figure class="shot">
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>atlas tickets → queue</span></div>
+              <a href="media/atlas-tickets-to-queue.png">
+                <picture>
+                  <source type="image/webp" srcset="media/atlas-tickets-to-queue-sm.webp 900w, media/atlas-tickets-to-queue.webp 1100w" sizes="(max-width: 620px) calc(100vw - 24px), min(90rem, calc(100vw - 40px))" />
+                  <img src="media/atlas-tickets-to-queue.png" alt="Atlas Tasker ready tickets AUTH-1 and AUTH-2 opened as Arthur Loop queue jobs" width="1100" height="500" loading="lazy" decoding="async" />
+                </picture>
+              </a>
+            </div>
+            <figcaption>Install <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a>, mark tickets ready, and walk them into the loop.</figcaption>
+          </figure>
+        </div>
       </div>
     </section>
 
@@ -252,19 +254,21 @@
     </section>
 
     <section id="console">
-      <div class="wrap section-grid">
-        <div>
+      <div class="wrap">
+        <div class="section-head">
           <p class="section-index">03 / CONSOLE</p>
           <h2>A status map, not a graph composer.</h2>
           <p class="section-intro"><code>arthur web</code> is the browser twin of <code>arthur status</code>. Assign roles, run the next hop, answer decisions, recover stale jobs, create a loop. Agents own the hop itself.</p>
         </div>
+      </div>
+      <div class="wrap-shot shot-band">
         <div class="shot-stack">
           <figure class="shot">
             <div class="shot-frame">
               <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>+ Loop wizard</span></div>
               <a href="media/create-loop-wizard.png">
                 <picture>
-                  <source type="image/webp" srcset="media/create-loop-wizard-sm.webp 900w, media/create-loop-wizard.webp 1600w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
+                  <source type="image/webp" srcset="media/create-loop-wizard-sm.webp 900w, media/create-loop-wizard.webp 1600w" sizes="(max-width: 620px) calc(100vw - 24px), min(90rem, calc(100vw - 40px))" />
                   <img src="media/create-loop-wizard.png" alt="Create-loop wizard choosing project DEMO_APP, grok as advisor, claude-code as executor, and no tracker" width="1600" height="1000" loading="lazy" decoding="async" />
                 </picture>
               </a>
@@ -276,7 +280,7 @@
               <div class="shot-chrome" aria-hidden="true"><i></i><i></i><i></i><span>board · needs you</span></div>
               <a href="media/web-board.png">
                 <picture>
-                  <source type="image/webp" srcset="media/web-board-sm.webp 900w, media/web-board.webp 1600w" sizes="(max-width: 620px) 160vw, min(46rem, calc(100vw - 40px))" />
+                  <source type="image/webp" srcset="media/web-board-sm.webp 900w, media/web-board.webp 1600w" sizes="(max-width: 620px) calc(100vw - 24px), min(90rem, calc(100vw - 40px))" />
                   <img src="media/web-board.png" alt="Web console board view with BQ-DEMO_APP-002 queued and SAMPLE_APP Auth Scope Gate open in the Needs you rail" width="1600" height="1000" loading="lazy" decoding="async" />
                 </picture>
               </a>
@@ -348,10 +352,10 @@
   <footer>
     <div class="wrap">
       <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="docs/">Docs</a><span>·</span>
-      <a href="changelog.html">Changelog</a><span>·</span>
-      <a href="privacy.html">Privacy</a><span>·</span>
-      <a href="terms.html">Terms</a><span>·</span>
+      <a href="/docs/">Docs</a><span>·</span>
+      <a href="/changelog.html">Changelog</a><span>·</span>
+      <a href="/privacy.html">Privacy</a><span>·</span>
+      <a href="/terms.html">Terms</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
       <span>·</span>
       Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>

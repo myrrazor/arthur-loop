@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Your first loop — Arthur Loop</title>
   <meta name="description" content="Set up Arthur Loop with arthur init, then run /arthur-loop in your coding agent." />
-  <link rel="canonical" href="https://arthurloop.com/docs/first-loop.html" />
-  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="../site.css" />
+  <link rel="canonical" href="https://arthurloop.com/docs/first-loop" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/site.css" />
 </head>
 <body>
   <nav class="site-nav" aria-label="Primary">
     <div class="wrap">
-      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <a class="brand" href="/" aria-label="Arthur Loop home"><img src="/logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
-        <a class="nav-keep" href="./">Docs</a>
+        <a class="nav-keep" href="/docs/">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
-        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+        <a class="button button-primary nav-install" href="/#install">Install</a>
       </div>
     </div>
   </nav>
@@ -24,15 +24,15 @@
     <div class="wrap doc-layout">
       <aside class="doc-side" aria-label="Documentation">
         <ul class="doc-nav">
-          <li><a href="./">Overview</a></li>
-          <li><a href="install.html">Install</a></li>
-          <li><a href="first-loop.html" aria-current="page">First loop</a></li>
-          <li><a href="roles.html">Roles and run</a></li>
-          <li><a href="concepts.html">Concepts</a></li>
-          <li><a href="console.html">Web console</a></li>
-          <li><a href="agents.html">Agents</a></li>
-          <li><a href="cli.html">CLI and MCP</a></li>
-          <li><a href="faq.html">FAQ</a></li>
+          <li><a href="/docs/">Overview</a></li>
+          <li><a href="/docs/install.html">Install</a></li>
+          <li><a href="/docs/first-loop.html" aria-current="page">First loop</a></li>
+          <li><a href="/docs/roles.html">Roles and run</a></li>
+          <li><a href="/docs/concepts.html">Concepts</a></li>
+          <li><a href="/docs/console.html">Web console</a></li>
+          <li><a href="/docs/agents.html">Agents</a></li>
+          <li><a href="/docs/cli.html">CLI and MCP</a></li>
+          <li><a href="/docs/faq.html">FAQ</a></li>
         </ul>
       </aside>
       <div>
@@ -72,12 +72,12 @@ arthur loop create --project-id MY_APP --from-ticket AUTH-2 \
   --role planner=grok --role implementer=claude-code --role reviewer=claude-code:opus
 arthur
 arthur run</pre>
-        <p>Same path in the console: <code>arthur web</code> → <strong>Roles</strong>, <strong>+ Loop</strong>, <strong>Run next</strong>. Setup detail: <a href="roles.html">Roles and run</a>. If the tracker is Atlas Tasker and tickets are ready, <code>arthur tracker walk</code> opens them as queue jobs. <code>in_review</code> is not ready work.</p>
+        <p>Same path in the console: <code>arthur web</code> → <strong>Roles</strong>, <strong>+ Loop</strong>, <strong>Run next</strong>. Setup detail: <a href="/docs/roles.html">Roles and run</a>. If the tracker is Atlas Tasker and tickets are ready, <code>arthur tracker walk</code> opens them as queue jobs. <code>in_review</code> is not ready work.</p>
         <figure class="shot">
           <div class="shot-frame">
-            <a href="../media/agent-creates-loop.png">
+            <a href="/media/agent-creates-loop.png">
               <picture>
-                <source type="image/webp" srcset="../media/agent-creates-loop-sm.webp 900w, ../media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) 160vw, min(52rem, calc(100vw - 40px))" />
+                <source type="image/webp" srcset="../media/agent-creates-loop-sm.webp 900w, ../media/agent-creates-loop.webp 1100w" sizes="(max-width: 620px) calc(100vw - 24px), (max-width: 900px) calc(100vw - 40px), min(64rem, calc(100vw - 288px))" />
                 <img src="../media/agent-creates-loop.png" alt="Coding agent running /arthur-loop and arthur.loop.create for AUTH_SCOPE" width="1100" height="720" loading="lazy" decoding="async" />
               </picture>
             </a>
@@ -99,7 +99,7 @@ arthur web</pre>
   <footer>
     <div class="wrap">
       <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="./">Docs</a><span>·</span>
+      <a href="/docs/">Docs</a><span>·</span>
       <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
     </div>
   </footer>

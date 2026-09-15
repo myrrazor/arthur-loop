@@ -34,9 +34,14 @@ class _LaunchPageParser(HTMLParser):
 
         for name in ("href", "src"):
             value = values.get(name)
-            if not value or value.startswith(("#", "http://", "https://", "mailto:")):
+            if not value or value.startswith(("http://", "https://", "mailto:")):
                 continue
-            self.local_assets.add(value.split("?", 1)[0])
+            value = value.split("?", 1)[0].split("#", 1)[0]
+            if not value or value == "/":
+                continue
+            if value.startswith("/"):
+                value = value[1:]
+            self.local_assets.add(value)
 
     def handle_data(self, data: str) -> None:
         if self._json_parts is not None:
@@ -163,6 +168,49 @@ class LaunchSiteTests(unittest.TestCase):
         self.assertIn("https://arthurloop.com/sitemap.xml", robots)
         self.assertIn("https://arthurloop.com/", sitemap)
         self.assertNotIn("arthur-loop.vercel.app", robots + sitemap)
+
+    def test_docs_pages_exist_and_sidebar_uses_root_absolute_urls(self) -> None:
+        pages = (
+            "index.html",
+            "install.html",
+            "first-loop.html",
+            "roles.html",
+            "concepts.html",
+            "console.html",
+            "agents.html",
+            "cli.html",
+            "faq.html",
+        )
+        for name in pages:
+            path = ROOT / "site/docs" / name
+            self.assertTrue(path.is_file(), name)
+            text = path.read_text(encoding="utf-8")
+            self.assertIn('href="/docs/"', text)
+            self.assertIn('href="/docs/first-loop.html"', text)
+            self.assertIn('href="/docs/roles.html"', text)
+            self.assertNotRegex(text, r'href="first-loop\.html"')
+            self.assertNotRegex(text, r'href="\./"')
+            title = re.search(r"<h1>(.*?)</h1>", text, flags=re.DOTALL)
+            self.assertIsNotNone(title, name)
+            self.assertGreater(len(re.sub(r"<[^>]+>", "", title.group(1)).strip()), 8, name)
+
+    def test_crawler_and_not_found_files_are_present(self) -> None:
+        for name in ("robots.txt", "sitemap.xml", "llms.txt", "llms-full.txt", "404.html"):
+            self.assertTrue((ROOT / "site" / name).is_file(), name)
+        sitemap = (ROOT / "site/sitemap.xml").read_text(encoding="utf-8")
+        for loc in (
+            "https://arthurloop.com/docs/",
+            "https://arthurloop.com/docs/first-loop",
+            "https://arthurloop.com/docs/roles",
+            "https://arthurloop.com/llms.txt",
+        ):
+            self.assertIn(f"<loc>{loc}</loc>", sitemap)
+        not_found = (ROOT / "site/404.html").read_text(encoding="utf-8")
+        self.assertIn("Nothing queued at this path.", not_found)
+        self.assertIn('href="/docs/first-loop.html"', not_found)
+        vercel = (ROOT / "site/vercel.json").read_text(encoding="utf-8")
+        self.assertIn('"/first-loop.html"', vercel)
+        self.assertIn('"/docs/first-loop"', vercel)
 
 
 if __name__ == "__main__":

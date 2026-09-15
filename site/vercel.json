@@ -3,7 +3,23 @@
   "trailingSlash": false,
   "redirects": [
     { "source": "/guide", "destination": "/docs", "permanent": true },
-    { "source": "/docs/prompts", "destination": "/docs/first-loop", "permanent": true }
+    { "source": "/docs/prompts", "destination": "/docs/first-loop", "permanent": true },
+    { "source": "/first-loop", "destination": "/docs/first-loop", "permanent": true },
+    { "source": "/first-loop.html", "destination": "/docs/first-loop", "permanent": true },
+    { "source": "/install", "destination": "/docs/install", "permanent": true },
+    { "source": "/install.html", "destination": "/docs/install", "permanent": true },
+    { "source": "/roles", "destination": "/docs/roles", "permanent": true },
+    { "source": "/roles.html", "destination": "/docs/roles", "permanent": true },
+    { "source": "/concepts", "destination": "/docs/concepts", "permanent": true },
+    { "source": "/concepts.html", "destination": "/docs/concepts", "permanent": true },
+    { "source": "/console", "destination": "/docs/console", "permanent": true },
+    { "source": "/console.html", "destination": "/docs/console", "permanent": true },
+    { "source": "/agents", "destination": "/docs/agents", "permanent": true },
+    { "source": "/agents.html", "destination": "/docs/agents", "permanent": true },
+    { "source": "/cli", "destination": "/docs/cli", "permanent": true },
+    { "source": "/cli.html", "destination": "/docs/cli", "permanent": true },
+    { "source": "/faq", "destination": "/docs/faq", "permanent": true },
+    { "source": "/faq.html", "destination": "/docs/faq", "permanent": true }
   ],
   "headers": [
     {
@@ -18,6 +34,12 @@
       "source": "/media/:path*",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+      ]
+    },
+    {
+      "source": "/(robots.txt|sitemap.xml|llms.txt|llms-full.txt)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300, stale-while-revalidate=86400" }
       ]
     }
   ]

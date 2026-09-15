@@ -45,17 +45,17 @@ The v0.1.0 tag is a file cockpit.
 ## Site
 - [Home](https://arthurloop.com/): product story and install
 - [Docs](https://arthurloop.com/docs/): map of the documentation
-- [Install](https://arthurloop.com/docs/install.html): pipx / uv / curl, then init
-- [First loop](https://arthurloop.com/docs/first-loop.html): `/arthur-loop` interview
-- [Roles and run](https://arthurloop.com/docs/roles.html): assign agents; terminal and UI
-- [Concepts](https://arthurloop.com/docs/concepts.html): queue, artifact, gate, decision, tick
-- [Web console](https://arthurloop.com/docs/console.html): localhost status map
-- [Agents](https://arthurloop.com/docs/agents.html): integrations and adapter packs
-- [CLI and MCP](https://arthurloop.com/docs/cli.html): commands and tool names
-- [FAQ](https://arthurloop.com/docs/faq.html): version, platforms, support
-- [Changelog](https://arthurloop.com/changelog.html): v0.1.0 and current main
-- [Privacy](https://arthurloop.com/privacy.html): no cookies or site-side collection
-- [Terms](https://arthurloop.com/terms.html): MIT software, no paid service
+- [Install](https://arthurloop.com/docs/install): pipx / uv / curl, then init
+- [First loop](https://arthurloop.com/docs/first-loop): `/arthur-loop` interview
+- [Roles and run](https://arthurloop.com/docs/roles): assign agents; terminal and UI
+- [Concepts](https://arthurloop.com/docs/concepts): queue, artifact, gate, decision, tick
+- [Web console](https://arthurloop.com/docs/console): localhost status map
+- [Agents](https://arthurloop.com/docs/agents): integrations and adapter packs
+- [CLI and MCP](https://arthurloop.com/docs/cli): commands and tool names
+- [FAQ](https://arthurloop.com/docs/faq): version, platforms, support
+- [Changelog](https://arthurloop.com/changelog): v0.1.0 and current main
+- [Privacy](https://arthurloop.com/privacy): no cookies or site-side collection
+- [Terms](https://arthurloop.com/terms): MIT software, no paid service
 - [LLM full index](https://arthurloop.com/llms-full.txt): longer agent-oriented summary
 
 ## Repo

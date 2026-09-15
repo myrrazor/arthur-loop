@@ -16,7 +16,8 @@
   --action-ink: #06130a;
   --focus: #7af398;
   --human: #c4a6ff;
-  --max: 72rem;
+  --max: 75rem;
+  --shot-max: 90rem;
   --prose: 44rem;
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
@@ -68,6 +69,7 @@ code, kbd { font-family: var(--mono); font-size: 0.92em; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 
 .wrap { width: min(100% - 40px, var(--max)); margin-inline: auto; min-width: 0; }
+.wrap-shot { width: min(100% - 40px, var(--shot-max)); margin-inline: auto; min-width: 0; }
 .skip-link {
   position: fixed;
   left: 16px;
@@ -247,21 +249,26 @@ h1 span { display: block; color: var(--muted); }
 
 .proof { padding: 20px 0 72px; }
 figure { margin: 0; }
-.shot { margin: 0; max-width: 100%; }
+.shot {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
 .shot-frame {
   display: block;
+  width: 100%;
   max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: #0c0e11;
   box-shadow: var(--shadow);
-  -webkit-overflow-scrolling: touch;
 }
+.shot-frame a { display: block; }
 .shot-frame picture,
 .shot-frame img {
   width: 100%;
+  max-width: 100%;
   height: auto;
   display: block;
 }
@@ -284,7 +291,13 @@ figure { margin: 0; }
 }
 .shot-chrome i:nth-child(1) { background: #3fb950; }
 .shot-chrome span { margin-left: 8px; }
-figcaption { margin-top: 10px; color: var(--muted); font: 0.82rem/1.5 var(--mono); }
+figcaption {
+  margin: 12px auto 0;
+  max-width: 48rem;
+  color: var(--muted);
+  font: 0.88rem/1.5 var(--mono);
+  text-align: center;
+}
 figcaption a { color: var(--text); }
 
 section { padding: 76px 0; border-top: 1px solid var(--border); }
@@ -332,7 +345,15 @@ h2 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.6rem); }
 .feature-list h3 { margin: 0; font-size: 1rem; font-family: var(--mono); letter-spacing: -0.01em; }
 .feature-list p { margin: 0; color: var(--muted); }
 
-.shot-stack { display: grid; gap: 28px; margin-top: 8px; }
+.section-head { max-width: var(--prose); }
+.shot-band { margin-top: 40px; }
+.shot-stack {
+  display: grid;
+  gap: 36px;
+  margin: 0;
+  width: 100%;
+  justify-items: stretch;
+}
 
 .install-list { display: grid; gap: 14px; }
 .install-method {
@@ -397,6 +418,17 @@ footer a:hover { color: var(--text); }
 .doc h2 { margin: 36px 0 12px; font-size: 1.35rem; }
 .doc h3 { margin: 28px 0 10px; font-size: 1.05rem; }
 .doc p, .doc li { color: var(--muted); max-width: var(--prose); }
+.doc .shot {
+  margin: 28px 0;
+  width: 100%;
+  max-width: min(64rem, 100%);
+}
+.doc figcaption {
+  margin-left: 0;
+  margin-right: 0;
+  max-width: var(--prose);
+  text-align: left;
+}
 .doc strong, .doc h1, .doc h2, .doc h3 { color: var(--text); }
 .doc pre,
 .doc .command-bar {
@@ -453,6 +485,7 @@ footer a:hover { color: var(--text); }
 
 @media (max-width: 620px) {
   .wrap { width: min(100% - 24px, var(--max)); }
+  .wrap-shot { width: min(100% - 24px, var(--shot-max)); }
   .site-nav .wrap { min-height: 64px; gap: 10px; }
   .brand { width: 156px; }
   .nav-links { gap: 8px; }
@@ -465,10 +498,8 @@ footer a:hover { color: var(--text); }
   .install-method { grid-template-columns: 1fr; gap: 8px; }
   .install-label { padding-top: 0; }
   .command-text { font-size: 0.76rem; }
-  .shot-frame img {
-    width: 640px;
-    max-width: none;
-  }
+  .shot-band { margin-top: 28px; }
+  .shot-stack { gap: 24px; }
   .doc-side .doc-nav { grid-template-columns: 1fr; }
 }
 

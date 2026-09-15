@@ -13,69 +13,75 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/install.html</loc>
+    <loc>https://arthurloop.com/docs/install</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/roles.html</loc>
+    <loc>https://arthurloop.com/docs/first-loop</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/first-loop.html</loc>
+    <loc>https://arthurloop.com/docs/roles</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/concepts.html</loc>
+    <loc>https://arthurloop.com/docs/concepts</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/console.html</loc>
+    <loc>https://arthurloop.com/docs/console</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/agents.html</loc>
+    <loc>https://arthurloop.com/docs/agents</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/cli.html</loc>
+    <loc>https://arthurloop.com/docs/cli</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/docs/faq.html</loc>
+    <loc>https://arthurloop.com/docs/faq</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/changelog.html</loc>
+    <loc>https://arthurloop.com/changelog</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/privacy.html</loc>
+    <loc>https://arthurloop.com/privacy</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://arthurloop.com/terms.html</loc>
+    <loc>https://arthurloop.com/terms</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://arthurloop.com/llms.txt</loc>
+    <lastmod>2026-09-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.4</priority>
   </url>
 </urlset>
