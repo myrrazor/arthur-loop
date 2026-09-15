@@ -200,7 +200,7 @@ TOOL_DEFS: list[dict[str, Any]] = [
     },
     {
         "name": "arthur.queue.poll_result",
-        "description": "Record a poll result and transition the job.",
+        "description": "Record a poll result and transition the job. Refused when the project is paused.",
         "inputSchema": _schema(
             {
                 "job_id": _str("Job id"),
@@ -450,18 +450,19 @@ def _handle_queue_submit(ctx: McpContext, arguments: dict[str, Any]) -> dict[str
 
 
 def _handle_queue_poll(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
-    from arthur_loop.browser_lock import acquire_lock, release_lock
+    from arthur_loop.loop_ops import poll_job
 
     holder = _s(arguments, "holder") or "mcp-agent"
     job_id = _s(arguments, "job_id") or ""
     marker_found = bool(arguments.get("marker_found"))
-    status = _s(arguments, "status") or ("completed" if marker_found else "waiting_for_chatgpt")
-    ledger = QueueLedger(ctx.root)
-    ledger.check_transition(job_id, status)
-    acquire_lock(ctx.root, holder)
-    job = ledger.record_poll_result(job_id, marker_found=marker_found, status=status)
-    if not arguments.get("keep_lock"):
-        release_lock(ctx.root, holder)
+    job = poll_job(
+        ctx.root,
+        job_id,
+        marker_found=marker_found,
+        status=_s(arguments, "status"),
+        holder=holder,
+        keep_lock=bool(arguments.get("keep_lock")),
+    )
     return _ok(job.to_record())
 
 
@@ -645,7 +646,7 @@ Then call arthur.loop.create (portable: arthur_loop_create) with those answers.
 After that, call arthur.follow.run (portable: arthur_follow_run) so claim/capture/gate
 are not hand-typed. Remaining human gates: open decisions, ChatGPT-browser/manual
 adapters, and implementation-gate NO-GO.
-Never hand-edit queue JSONL. Never claim or submit a job on a project paused by an open human decision.
+Never hand-edit queue JSONL. Never claim, submit, poll, complete, or fail a job on a project paused by an open human decision.
 """
 
 

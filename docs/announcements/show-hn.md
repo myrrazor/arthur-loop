@@ -16,6 +16,6 @@ It is free and open source under MIT. v0.1.0 is an alpha, and Windows/browser-ad
 
 I would especially value feedback on two things: whether the final-control-block trust boundary is strict enough, and whether the file-first state model stays understandable once you run several projects at once.
 
-Site: https://arthur-loop.vercel.app/
+Site: https://arthurloop.com/
 
 Source: https://github.com/myrrazor/arthur-loop

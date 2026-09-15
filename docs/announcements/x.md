@@ -32,7 +32,7 @@ The seams stay inspectable.
 
 Arthur Loop v0.1.0 is free and MIT licensed.
 
-Demo + install: https://arthur-loop.vercel.app/
+Demo + install: https://arthurloop.com/
 
 Source: https://github.com/myrrazor/arthur-loop
 

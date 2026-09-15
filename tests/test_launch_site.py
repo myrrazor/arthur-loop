@@ -135,6 +135,31 @@ class LaunchSiteTests(unittest.TestCase):
         self.assertTrue((ROOT / "docs/assets/how-it-works.mp4").is_file())
         self.assertLess((ROOT / "site/create-loop-wizard.png").stat().st_size, 2_000_000)
 
+    def test_public_surfaces_are_honest_about_main_vs_branch(self) -> None:
+        surfaces = [
+            self.index,
+            self.readme,
+            (ROOT / "site/llms.txt").read_text(encoding="utf-8"),
+        ]
+        for text in surfaces:
+            self.assertIn("https://arthurloop.com/", text)
+            self.assertNotIn("https://arthur-loop.vercel.app/", text)
+            self.assertNotIn("raw.githubusercontent.com/myrrazor/arthur-loop/main/install.ps1 |", text)
+            self.assertNotRegex(text, r"(?i)latest release[:\s]+v0\.2\.0")
+            self.assertNotIn("Open source · v0.2.0", text)
+        self.assertIn('<link rel="canonical" href="https://arthurloop.com/" />', self.index)
+        self.assertIn("arthur 0.1.0", self.index)
+        self.assertIn("they do not install", self.index.lower())
+        self.assertTrue((ROOT / "install.ps1").is_file())
+        self.assertTrue((ROOT / "site/docs/index.html").is_file())
+        self.assertTrue((ROOT / "site/docs/install.html").is_file())
+        self.assertIn("file cockpit", (ROOT / "site/llms.txt").read_text(encoding="utf-8"))
+        robots = (ROOT / "site/robots.txt").read_text(encoding="utf-8")
+        sitemap = (ROOT / "site/sitemap.xml").read_text(encoding="utf-8")
+        self.assertIn("https://arthurloop.com/sitemap.xml", robots)
+        self.assertIn("https://arthurloop.com/", sitemap)
+        self.assertNotIn("arthur-loop.vercel.app", robots + sitemap)
+
 
 if __name__ == "__main__":
     unittest.main()

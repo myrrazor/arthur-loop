@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FAQ — Arthur Loop</title>
+  <meta name="description" content="Honest FAQ: version stamp, public main vs this branch, Windows, Vercel." />
+  <link rel="canonical" href="https://arthurloop.com/docs/faq.html" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../site.css" />
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <div class="nav-links">
+        <a href="./">Docs</a>
+        <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+      </div>
+    </div>
+  </nav>
+  <main class="doc">
+    <div class="wrap">
+      <p class="eyebrow">FAQ</p>
+      <h1>Before you wire it in.</h1>
+      <h2>What do I get from the three homepage commands?</h2>
+      <p>Public main / last tag v0.1.0: a Python CLI for durable queues, artifacts, approval gates, human decisions, status, and a local web console. Not MCP. Not <code>arthur follow</code>. Not Atlas walk.</p>
+      <h2>Is there a v0.2.0 release?</h2>
+      <p>No. Some live pages said “latest release v0.2.0.” There is no such tag. <code>arthur --version</code> prints <code>arthur 0.1.0</code>. Unreleased work lives on <code>cursor/atlas-product-gap-ab6b</code>.</p>
+      <h2>Is it free?</h2>
+      <p>Yes. MIT licensed, no paid tier.</p>
+      <h2>Where is my data? Does it phone home?</h2>
+      <p>Markdown and JSONL in the instance directory you choose. The core does not phone home or require an API key.</p>
+      <h2>Which platforms work?</h2>
+      <p>The Python CLI is exercised on macOS and Linux. Windows is experimental; public main has no <code>install.ps1</code> (that URL 404s). This branch ships an experimental <code>install.ps1</code> in the repo only. ArthurBar is macOS 14+.</p>
+      <h2>Why did arthur-loop.vercel.app 404?</h2>
+      <p>That hostname is not the production site. Canonical URLs in this repo now point at <a href="https://arthurloop.com/">https://arthurloop.com/</a>.</p>
+      <h2>How do I update or uninstall?</h2>
+      <p>Repeat pipx/uv/curl (add <code>--force</code> for pipx/uv). Uninstall with <code>pipx uninstall arthur-loop</code> or delete <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p>
+    </div>
+  </main>
+  <footer>
+    <div class="wrap">
+      <a href="./">Docs</a><span>·</span>
+      <a href="https://github.com/myrrazor/arthur-loop">GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>

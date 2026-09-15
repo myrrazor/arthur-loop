@@ -16,4 +16,4 @@ Allow: /
 User-agent: Google-Extended
 Allow: /
 
-Sitemap: https://arthur-loop.vercel.app/sitemap.xml
+Sitemap: https://arthurloop.com/sitemap.xml

@@ -1,8 +1,12 @@
 # Install honesty
 
-The last tagged release is **v0.1.0**. `arthur --version` reports that package version until the next tag. This repository's default git install (the three commands on the README and launch site) tracks `main`.
+The last tagged release is **v0.1.0**. There is no tagged v0.2.0. `arthur --version` reports `arthur 0.1.0` until the next tag. This repository's default git install (the three commands on the README and launch site) tracks `main`.
 
-That public tree is a **file cockpit**: `arthur init`, queue, capture, gate, `status`, `arthur web`. It does **not** include `arthur follow`, the stdio MCP server, client skills/integrations, or Atlas `next`/`walk`.
+That public tree is a **file cockpit**: `arthur init`, queue, capture, gate, `status`, `arthur web`. It does **not** include `arthur follow`, the stdio MCP server, client skills/integrations, or Atlas `next`/`walk`. It is not a working auto-follow in minutes.
+
+Canonical site: [https://arthurloop.com/](https://arthurloop.com/). `arthur-loop.vercel.app` 404s — do not use it as canonical.
+
+`https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.ps1` is a **404**. This branch ships an experimental `install.ps1` in the repo; run it from a checkout. Do not advertise the `/main/install.ps1` URL.
 
 ## This branch (Atlas product-gap)
 
@@ -16,7 +20,12 @@ uv tool install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-pr
 ./install.sh
 ```
 
-Then `arthur --version` still prints `arthur 0.1.0` (setuptools metadata). That is the last release number, not a claim that you installed the tagged commit.
+Then `arthur --version` still prints `arthur 0.1.0` (setuptools metadata). That is the last release number, not a claim that you installed the tagged commit. Prove the tree with `arthur follow --help` / `arthur mcp --help`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/cursor/atlas-product-gap-ab6b/install.sh \
+  | ARTHUR_LOOP_REF=cursor/atlas-product-gap-ab6b sh
+```
 
 ## Grok
 

@@ -405,7 +405,6 @@ def follow_step(
             text=out_path.read_text(encoding="utf-8"),
         )
         step["capture"] = artifact.to_record()
-        ledger = QueueLedger(root)
         if artifact.needs_human:
             try:
                 release_lock(root, holder)
@@ -417,7 +416,16 @@ def follow_step(
         marker_found = True
         if job.expected_marker:
             marker_found = job.expected_marker in out_path.read_text(encoding="utf-8")
-        job = ledger.record_poll_result(job.job_id, marker_found=marker_found, status="completed")
+        from arthur_loop.loop_ops import poll_job
+
+        job = poll_job(
+            root,
+            job.job_id,
+            marker_found=marker_found,
+            status="completed",
+            holder=holder,
+            keep_lock=True,
+        )
         try:
             release_lock(root, holder)
         except Exception:

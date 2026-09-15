@@ -53,7 +53,7 @@ so claim → capture → gate is not hand-typed. It is not a drag-drop graph com
 If the tracker is Atlas Tasker, walk ready work with `arthur.tracker.next` /
 `arthur tracker next --json` / `arthur tracker walk`. `open-jobs` only opens
 ready/in_progress (not `in_review`). Map Arthur `project_id` to an Atlas key with
-`tracker.project_map`. The old three argv templates remain for decision/sprint hooks.
+`tracker.project_map` (init / `arthur loop create` write `DEMO_APP` → `DEMO`; do not walk an empty map). The old three argv templates remain for decision/sprint hooks.
 
 ## Commands
 

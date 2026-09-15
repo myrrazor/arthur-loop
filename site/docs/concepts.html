@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Concepts — Arthur Loop</title>
+  <meta name="description" content="Queue, artifacts, gates, decisions, tick. Public main is a cockpit; follow/MCP are this branch." />
+  <link rel="canonical" href="https://arthurloop.com/docs/concepts.html" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="../site.css" />
+</head>
+<body>
+  <nav class="site-nav" aria-label="Primary">
+    <div class="wrap">
+      <a class="brand" href="../index.html" aria-label="Arthur Loop home"><img src="../logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
+      <div class="nav-links">
+        <a href="index.html">Docs</a>
+        <a class="button button-primary nav-install" href="../index.html#install">Install</a>
+      </div>
+    </div>
+  </nav>
+  <main class="doc">
+    <div class="wrap">
+      <p class="eyebrow">Concepts</p>
+      <h1>Files, not a hosted loop.</h1>
+      <p>A <strong>queue</strong> is an append-only JSONL state machine. An <strong>artifact</strong> is saved advisor/executor text before anything acts on it. A <strong>gate</strong> is GO/NO-GO from those files. A <strong>human decision</strong> pauses one project. A <strong>tick</strong> classifies what should happen next without spending tokens.</p>
+      <p>Those objects exist on public main / v0.1.0. <code>arthur follow</code>, MCP, and Atlas walk do not. Pause on this branch also blocks poll, complete, and fail.</p>
+      <p>Full operating manual: <a href="https://github.com/myrrazor/arthur-loop/blob/main/docs/workflow-runbook.md">workflow-runbook.md</a>.</p>
+    </div>
+  </main>
+</body>
+</html>

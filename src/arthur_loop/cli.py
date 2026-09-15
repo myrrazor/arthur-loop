@@ -175,58 +175,48 @@ def cmd_queue_submit(args: argparse.Namespace) -> int:
 
 
 def cmd_queue_poll_result(args: argparse.Namespace) -> int:
-    root = resolve_root(args)
-    ledger = QueueLedger(root)
-    status = args.status or ("completed" if args.marker_found else "waiting_for_chatgpt")
-    ledger.check_transition(args.job_id, status)
-    acquire_lock(root, args.holder, ttl_minutes=args.ttl_minutes, now=parse_at(args.at))
-    output_paths = args.output_artifact_path or None
-    job = ledger.record_poll_result(
+    from arthur_loop.loop_ops import poll_job
+
+    job = poll_job(
+        resolve_root(args),
         args.job_id,
         marker_found=args.marker_found,
-        status=status,
+        status=args.status,
+        holder=args.holder,
+        ttl_minutes=args.ttl_minutes,
+        keep_lock=args.keep_lock,
         now=parse_at(args.at),
         data=parse_data_json(args.data_json),
         error=args.error,
-        output_artifact_paths=output_paths,
+        output_artifact_paths=args.output_artifact_path or None,
     )
-    if status in {"completed", "completed_with_warnings"}:
-        ledger.append_event(
-            args.job_id,
-            "job_completed",
-            {"status": status, "artifact_paths": output_paths or []},
-            at=parse_at(args.at),
-        )
-    if not args.keep_lock:
-        release_lock(root, args.holder, now=parse_at(args.at))
     print_record(job)
     return EXIT_OK
 
 
 def cmd_queue_complete(args: argparse.Namespace) -> int:
-    root = resolve_root(args)
-    status = "completed_with_warnings" if args.warning else "completed"
-    ledger = QueueLedger(root)
-    job = ledger.transition(
+    from arthur_loop.loop_ops import complete_job
+
+    job = complete_job(
+        resolve_root(args),
         args.job_id,
-        status,
         now=parse_at(args.at),
-        error=args.warning,
+        warning=args.warning,
         output_artifact_paths=args.output_artifact_path or None,
-    )
-    ledger.append_event(
-        args.job_id,
-        "job_completed",
-        {"status": status, "artifact_paths": args.output_artifact_path or []},
-        at=parse_at(args.at),
     )
     print_record(job)
     return EXIT_OK
 
 
 def cmd_queue_fail(args: argparse.Namespace) -> int:
-    root = resolve_root(args)
-    job = QueueLedger(root).transition(args.job_id, "failed", now=parse_at(args.at), error=args.error)
+    from arthur_loop.loop_ops import fail_job
+
+    job = fail_job(
+        resolve_root(args),
+        args.job_id,
+        error=args.error,
+        now=parse_at(args.at),
+    )
     print_record(job)
     return EXIT_OK
 
@@ -746,7 +736,9 @@ def cmd_decision(args: argparse.Namespace) -> int:
                     "status": "skipped",
                     "reason": (
                         f"Arthur project_id {args.project_id!r} is not an Atlas project key. "
-                        "Set tracker.project_map / tracker.project_key or pass --project."
+                        "Set tracker.project_map "
+                        f'(e.g. {{"{args.project_id}": "{args.project_id.split("_", 1)[0]}"}}) '
+                        "or tracker.project_key or pass --project."
                     ),
                 }
             if record["tracker"]["status"] == "error":
