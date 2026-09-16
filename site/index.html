@@ -91,6 +91,11 @@
       },
       {
         "@type": "Question",
+        "name": "Can I watch the loop from the Mac menu bar?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. ArthurBar is a native macOS 14+ menu extra. An infinity icon sits in the menu bar and badges when a human decision or a stale job needs you. The popover shows workers, the queue, projects, remaining quota for the agents you configured, and the browser lock. It reads arthur status --json and does not change loop state. Build it from menubar/ArthurBar. Pair with arthur watch if you also want Notification Center banners." }
+      },
+      {
+        "@type": "Question",
         "name": "How do I update or uninstall it?",
         "acceptedAnswer": { "@type": "Answer", "text": "Repeat the pipx, uv, or curl install command to update (add --force for pipx or uv). Uninstall with pipx uninstall arthur-loop or uv tool uninstall arthur-loop. Curl installs can be removed by deleting ~/.arthur-loop and ~/.local/bin/arthur." }
       },
@@ -110,6 +115,7 @@
       <a class="brand" href="#top" aria-label="Arthur Loop home"><img src="logo.svg" alt="Arthur Loop" width="214" height="39" /></a>
       <div class="nav-links">
         <a href="#how">How it works</a>
+        <a href="#menu-bar">Menu bar</a>
         <a class="nav-keep" href="/docs/">Docs</a>
         <a class="nav-keep" href="https://github.com/myrrazor/arthur-loop">GitHub</a>
         <a class="button button-primary nav-install" href="#install">Install</a>
@@ -291,10 +297,46 @@
       </div>
     </section>
 
+    <section id="menu-bar">
+      <div class="wrap section-grid">
+        <div>
+          <p class="section-index">04 / MENU BAR</p>
+          <h2>The loop, from the macOS menu bar.</h2>
+          <p class="section-intro">ArthurBar is a native menu extra for macOS 14+. It lives in the <strong>menu bar</strong> — the strip at the top of the screen — so you can manage agent loops without a terminal or a browser tab in the way.</p>
+        </div>
+        <div>
+          <ul class="feature-list">
+            <li><h3>Always in reach</h3><p>An ∞ icon sits with the other menu extras, next to Control Center and the clock. One click opens workers, the queue, projects, and the browser lock — the same snapshot as <code>arthur status</code>.</p></li>
+            <li><h3>It taps you when you are needed</h3><p>The icon badges with a count of open human decisions and stale jobs. Hover the item for the loop state. Want a banner as well? Run <code>arthur watch</code> for Notification Center alerts on decisions, quota blocks, due work, and stale jobs.</p></li>
+            <li><h3>Quota for the agents you run</h3><p>The popover's quota bar is the loop's governor: percent left, reset time, GREEN / YELLOW / RED. Point it at CodexBar (Codex, Claude, and the other subscriptions CodexBar already reads) or at a command or file. At your reserve line the loop checkpoints instead of burning the last 5%.</p></li>
+          </ul>
+        </div>
+      </div>
+      <div class="wrap-shot shot-band">
+        <figure class="shot">
+          <div class="menubar-stage">
+            <div class="menubar-strip" aria-hidden="true">
+              <span>menu bar</span>
+              <span class="menubar-right"><span class="menubar-icon">∞</span><span class="menubar-badge">1</span></span>
+            </div>
+            <div class="shot-frame menubar-frame">
+              <a href="media/arthurbar-demo.png">
+                <picture>
+                  <source type="image/webp" srcset="media/arthurbar-demo.webp" />
+                  <img src="media/arthurbar-demo.png" alt="ArthurBar menu bar popover for the my-loop instance: three workers, a ready queue job, SAMPLE_APP blocked on an auth-scope decision, and quota at 62 percent left" width="640" height="1038" loading="lazy" decoding="async" />
+                </picture>
+              </a>
+            </div>
+          </div>
+          <figcaption>The menu extra. The badge is 1 because SAMPLE_APP is waiting on a human. Quota is the same meter as the console.</figcaption>
+        </figure>
+      </div>
+    </section>
+
     <section id="install">
       <div class="wrap section-grid">
         <div>
-          <p class="section-index">04 / INSTALL</p>
+          <p class="section-index">05 / INSTALL</p>
           <h2>One tool. Three paths.</h2>
           <p class="section-intro">Each method installs an isolated <code>arthur</code> command from current <code>main</code>. Then <code>arthur init</code> is the whole setup.</p>
         </div>
@@ -333,7 +375,7 @@
     <section id="faq">
       <div class="wrap section-grid">
         <div>
-          <p class="section-index">05 / FAQ</p>
+          <p class="section-index">06 / FAQ</p>
           <h2>Before you wire it in.</h2>
         </div>
         <div class="faq-list">
@@ -342,6 +384,7 @@
           <details><summary>Where is my data stored? Does it phone home?</summary><p>Queues, artifacts, decisions, sessions, and quota snapshots stay as markdown and JSONL inside the instance directory you choose. The core does not phone home or require an API key. Adapters only invoke tools you configure.</p></details>
           <details><summary>How do I set up the loop in my agent?</summary><p>Install Arthur Loop, run <code>arthur init</code> in an empty directory, restart the coding agent so MCP connects, then run <code>/arthur-loop</code>. The skill interviews you for project, roles, and tracker, creates the loop, and <code>arthur run</code> invokes the next assigned agent.</p></details>
           <details><summary>Which platforms are supported?</summary><p>The Python CLI is exercised on macOS and Linux with Python 3.9 or newer. Windows is experimental. ArthurBar requires macOS 14 or newer.</p></details>
+          <details><summary>Can I watch the loop from the Mac menu bar?</summary><p>Yes. ArthurBar is a native macOS 14+ menu extra. An infinity icon sits in the menu bar and badges when a human decision or a stale job needs you. The popover shows workers, the queue, projects, remaining quota for the agents you configured, and the browser lock. It reads <code>arthur status --json</code> and does not change loop state. Build it from <code>menubar/ArthurBar</code>. Pair with <code>arthur watch</code> if you also want Notification Center banners.</p></details>
           <details><summary>How do I update or uninstall it?</summary><p>Repeat the pipx, uv, or curl install command to update (add <code>--force</code> for pipx or uv). Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs can be removed by deleting <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p></details>
           <details><summary>How do I get support?</summary><p>Open a <a href="https://github.com/myrrazor/arthur-loop/issues">GitHub issue</a> for bugs and questions. There is no email support inbox on this site.</p></details>
         </div>
@@ -350,18 +393,18 @@
   </main>
 
   <footer>
-    <div class="wrap">
-      <a href="https://github.com/myrrazor/arthur-loop">Source on GitHub</a><span>·</span>
-      <a href="/docs/">Docs</a><span>·</span>
-      <a href="/changelog.html">Changelog</a><span>·</span>
-      <a href="/privacy.html">Privacy</a><span>·</span>
-      <a href="/terms.html">Terms</a><span>·</span>
-      <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
-      <span>·</span>
-      Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>
-    </div>
-    <div class="wrap">
-      <p class="note">The v0.1.0 tag is a file cockpit; tagged installers they do not install current main. Install from git HEAD for roles and <code>arthur run</code>.</p>
+    <div class="wrap footer-bar">
+      <nav class="footer-links" aria-label="Footer">
+        <a href="/docs/">Docs</a>
+        <a href="/changelog.html">Changelog</a>
+        <a href="/privacy.html">Privacy</a>
+        <a href="/terms.html">Terms</a>
+        <a href="https://github.com/myrrazor/arthur-loop/blob/main/LICENSE">MIT</a>
+      </nav>
+      <a class="button footer-star" href="https://github.com/myrrazor/arthur-loop">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+        Star on GitHub
+      </a>
     </div>
   </footer>
   <script src="site.js"></script>

@@ -74,4 +74,5 @@ human answers the questions only a human can.
   It runs on a machine that only has Python.
 - It polls `arthur status` every few seconds and pauses when the tab is hidden.
 - `arthur status --json` is still the integration seam for bots and notifiers;
-  the web console is the human-facing view of the same data.
+  the web console is the human-facing view of the same data. The macOS menu
+  extra (ArthurBar) reads that JSON too: [menu-bar.md](menu-bar.md).

@@ -41,7 +41,8 @@ Grok Build, chatgpt-browser, manual. Cursor gets skills + MCP only.
 - CLI: `arthur`
 - MCP: `arthur mcp serve` (dotted names; Grok portable `arthur_*`)
 - Web: `arthur web` on 127.0.0.1 with a session token
-- Optional macOS menu bar: ArthurBar
+- Optional macOS 14+ menu extra: ArthurBar (∞ icon, attention badge, quota bar)
+- Desktop alerts: `arthur watch` → Notification Center
 
 ## What not to say
 
@@ -60,6 +61,7 @@ https://arthurloop.com/docs/first-loop
 https://arthurloop.com/docs/roles
 https://arthurloop.com/docs/concepts
 https://arthurloop.com/docs/console
+https://arthurloop.com/docs/menu-bar
 https://arthurloop.com/docs/agents
 https://arthurloop.com/docs/cli
 https://arthurloop.com/docs/faq

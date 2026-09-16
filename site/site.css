@@ -112,6 +112,7 @@ code, kbd { font-family: var(--mono); font-size: 0.92em; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   padding: 9px 16px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -398,9 +399,53 @@ footer {
   color: var(--muted);
   font-size: 0.88rem;
 }
-footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
-footer a { text-decoration: none; }
-footer a:hover { color: var(--text); }
+footer .footer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+}
+.footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+}
+.footer-links a { text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
+.footer-links a:hover { color: var(--text); }
+.footer-star { margin-left: auto; }
+.footer-star svg { width: 16px; height: 16px; flex: 0 0 auto; }
+
+.menubar-stage { max-width: 22rem; margin-inline: auto; }
+.menubar-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--surface-raised) 90%, #000 10%);
+  color: var(--muted);
+  font: 0.75rem/1 var(--sans);
+}
+.menubar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text);
+  font: 700 0.78rem/1 var(--mono);
+}
+.menubar-icon { font-size: 0.95rem; }
+.menubar-badge { font-variant-numeric: tabular-nums; }
+.menubar-frame {
+  border-radius: 0 0 12px 12px;
+  background: #e8e8ed;
+  box-shadow: var(--shadow);
+}
+.menubar-frame img { width: 100%; height: auto; display: block; }
 
 .doc { padding: 56px 0 88px; }
 .doc-layout {
@@ -501,6 +546,8 @@ footer a:hover { color: var(--text); }
   .shot-band { margin-top: 28px; }
   .shot-stack { gap: 24px; }
   .doc-side .doc-nav { grid-template-columns: 1fr; }
+  .footer-bar { align-items: stretch; }
+  .footer-star { width: 100%; margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

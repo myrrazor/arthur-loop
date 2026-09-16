@@ -14,6 +14,8 @@
     { "source": "/concepts.html", "destination": "/docs/concepts", "permanent": true },
     { "source": "/console", "destination": "/docs/console", "permanent": true },
     { "source": "/console.html", "destination": "/docs/console", "permanent": true },
+    { "source": "/menu-bar", "destination": "/docs/menu-bar", "permanent": true },
+    { "source": "/menu-bar.html", "destination": "/docs/menu-bar", "permanent": true },
     { "source": "/agents", "destination": "/docs/agents", "permanent": true },
     { "source": "/agents.html", "destination": "/docs/agents", "permanent": true },
     { "source": "/cli", "destination": "/docs/cli", "permanent": true },
