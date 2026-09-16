@@ -1,6 +1,6 @@
 # ArthurBar
 
-A macOS menu bar companion for Arthur Loop: the whole loop — workers, queue, projects, human decisions, quota, browser lock — one click away, styled after [CodexBar](https://github.com/steipete/CodexBar) (whose MIT-licensed progress-bar and card patterns this app follows; thanks, Peter).
+A macOS menu extra for Arthur Loop: the whole loop — workers, queue, projects, human decisions, quota, browser lock — one click away from the menu bar, styled after [CodexBar](https://github.com/steipete/CodexBar) (whose MIT-licensed progress-bar and card patterns this app follows; thanks, Peter). Product write-up: [docs/menu-bar.md](../../docs/menu-bar.md).
 
 ## Build & run
 

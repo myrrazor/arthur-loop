@@ -17,9 +17,9 @@ Shape → revamp → harden, followed by anti-slop gate mode.
 
 1. Arthur Loop holds long-running agent work to a written contract.
 2. It stores state as files and works with the user’s existing tools.
-3. The terminal and web-console captures prove the current product.
+3. The terminal, web-console, and macOS menu-bar captures prove the current product.
 4. pipx, uv, and curl are equal install paths.
-5. FAQ answers storage, platform, update, and scope objections.
+5. FAQ answers storage, platform, menu bar, update, and scope objections.
 
 ## Responsive behavior
 

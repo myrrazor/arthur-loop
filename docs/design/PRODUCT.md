@@ -28,7 +28,7 @@ On the launch site, their arrival question is: “Does this solve the trust and 
 1. Understand that Arthur Loop coordinates existing tools rather than replacing them.
 2. See the real terminal and web-console state.
 3. Pick pipx, uv, or the shell installer.
-4. Run `arthur init`. On this branch it writes skills + MCP where those clients load them. Public main / v0.1.0 is a file cockpit only — no follow/MCP/walk. Then create a loop with `arthur loop create`, the web wizard, or `/arthur-loop` (branch).
+4. Run `arthur init`. On this branch it writes skills + MCP where those clients load them. Public main / v0.1.0 is the original file-based control plane — no follow/MCP/walk. Then create a loop with `arthur loop create`, the web wizard, or `/arthur-loop` (branch).
 
 ## Constraints
 

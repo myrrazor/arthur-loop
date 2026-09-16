@@ -1,6 +1,6 @@
 # How it works
 
-Public `main` / last tag **v0.1.0** is a file cockpit: install `arthur`, `init`, then queue / capture / gate / status / `arthur web`. That is **not** a download-to-working-auto-follow. Those three default git commands do not ship `arthur follow`, MCP, or Atlas walk.
+Public `main` / last tag **v0.1.0** is the original file-based control plane: install `arthur`, `init`, then queue / capture / gate / status / `arthur web`. That is **not** a download-to-working-auto-follow. Those three default git commands do not ship `arthur follow`, MCP, or Atlas walk.
 
 This branch adds coding-agent install, MCP, `arthur follow`, and Atlas next/walk. See [install.md](install.md) for the two install stories.
 
@@ -16,5 +16,6 @@ This branch adds coding-agent install, MCP, `arthur follow`, and Atlas next/walk
 - Terminal demo: [arthur-loop-demo.gif](assets/arthur-loop-demo.gif)
 - Web console status map: [web-console.png](assets/web-console.png)
 - Create-loop wizard: [create-loop-wizard.png](assets/create-loop-wizard.png)
+- macOS menu extra: [arthurbar-demo.png](../assets/arthurbar-demo.png) — see [menu-bar.md](menu-bar.md)
 
 See the [workflow runbook](workflow-runbook.md), [MCP](mcp.md), [integrations](integrations.md), and [install](install.md).

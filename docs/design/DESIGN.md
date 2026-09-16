@@ -5,7 +5,7 @@
 - **Register:** Brand surface for a technical product.
 - **Character:** Exact, inspectable, low-drama.
 - **Vocabulary:** Terminal frame, prompt glyph, queue ledger, control contract, hairline rules.
-- **Signature:** The real status GIF followed by the actual advisor-to-human web-console canvas.
+- **Signature:** The real status GIF followed by the actual advisor-to-human web-console canvas, then the native menu extra.
 - **Quiet elements:** Navigation, install rows, FAQ, and footer use flat surfaces and ordinary links.
 
 ## Direction decision

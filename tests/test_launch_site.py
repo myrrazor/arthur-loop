@@ -98,7 +98,10 @@ class LaunchSiteTests(unittest.TestCase):
     def test_launch_copy_and_install_commands_stay_in_sync(self) -> None:
         self.assertIn(ONE_LINER, self.readme)
         self.assertIn(ONE_LINER, self.index)
-        self.assertIn('Maintained at <a href="https://github.com/myrrazor">@myrrazor</a>', self.index)
+        self.assertIn("Star on GitHub", self.index)
+        self.assertNotIn("Maintained at", self.index)
+        self.assertNotIn(">@myrrazor</a>", self.index)
+        self.assertNotIn("file cockpit", self.index)
         self.assertNotRegex(self.index, r'href="[^"]+"@')
         for command in INSTALL_COMMANDS:
             self.assertIn(command, self.readme)
@@ -129,12 +132,15 @@ class LaunchSiteTests(unittest.TestCase):
             "og.png",
             "logo.svg",
             "favicon.svg",
+            "media/arthurbar-demo.png",
         )
         oversized = [
             name
             for name in asset_names
             if (ROOT / "site" / name).stat().st_size >= 2_000_000
         ]
+        self.assertTrue((ROOT / "assets/arthurbar-demo.png").is_file())
+        self.assertTrue((ROOT / "site/media/arthurbar-demo.webp").is_file())
         self.assertEqual(oversized, [])
         self.assertEqual(
             (ROOT / "site/logo.svg").read_bytes(),
@@ -158,11 +164,17 @@ class LaunchSiteTests(unittest.TestCase):
             self.assertNotIn("Open source · v0.2.0", text)
         self.assertIn('<link rel="canonical" href="https://arthurloop.com/" />', self.index)
         self.assertIn("arthur 0.1.0", self.index)
-        self.assertIn("they do not install", self.index.lower())
+        self.assertIn('id="menu-bar"', self.index)
+        self.assertIn("macOS menu bar", self.index)
+        self.assertIn("Star on GitHub", self.index)
         self.assertTrue((ROOT / "install.ps1").is_file())
         self.assertTrue((ROOT / "site/docs/index.html").is_file())
         self.assertTrue((ROOT / "site/docs/install.html").is_file())
-        self.assertIn("file cockpit", (ROOT / "site/llms.txt").read_text(encoding="utf-8"))
+        self.assertTrue((ROOT / "site/docs/menu-bar.html").is_file())
+        llms = (ROOT / "site/llms.txt").read_text(encoding="utf-8")
+        self.assertNotIn("file cockpit", llms)
+        self.assertIn("docs/menu-bar", llms)
+        self.assertIn("ArthurBar", llms)
         robots = (ROOT / "site/robots.txt").read_text(encoding="utf-8")
         sitemap = (ROOT / "site/sitemap.xml").read_text(encoding="utf-8")
         self.assertIn("https://arthurloop.com/sitemap.xml", robots)
@@ -177,6 +189,7 @@ class LaunchSiteTests(unittest.TestCase):
             "roles.html",
             "concepts.html",
             "console.html",
+            "menu-bar.html",
             "agents.html",
             "cli.html",
             "faq.html",
@@ -188,6 +201,7 @@ class LaunchSiteTests(unittest.TestCase):
             self.assertIn('href="/docs/"', text)
             self.assertIn('href="/docs/first-loop.html"', text)
             self.assertIn('href="/docs/roles.html"', text)
+            self.assertIn('href="/docs/menu-bar.html"', text)
             self.assertNotRegex(text, r'href="first-loop\.html"')
             self.assertNotRegex(text, r'href="\./"')
             title = re.search(r"<h1>(.*?)</h1>", text, flags=re.DOTALL)
@@ -202,6 +216,7 @@ class LaunchSiteTests(unittest.TestCase):
             "https://arthurloop.com/docs/",
             "https://arthurloop.com/docs/first-loop",
             "https://arthurloop.com/docs/roles",
+            "https://arthurloop.com/docs/menu-bar",
             "https://arthurloop.com/llms.txt",
         ):
             self.assertIn(f"<loc>{loc}</loc>", sitemap)
@@ -211,6 +226,13 @@ class LaunchSiteTests(unittest.TestCase):
         vercel = (ROOT / "site/vercel.json").read_text(encoding="utf-8")
         self.assertIn('"/first-loop.html"', vercel)
         self.assertIn('"/docs/first-loop"', vercel)
+        self.assertIn('"/docs/menu-bar"', vercel)
+        self.assertIn("ArthurBar", self.readme)
+        self.assertIn("assets/arthurbar-demo.png", self.readme)
+        menu_bar_doc = (ROOT / "site/docs/menu-bar.html").read_text(encoding="utf-8")
+        self.assertIn("menu bar", menu_bar_doc.lower())
+        self.assertIn("quota", menu_bar_doc.lower())
+        self.assertIn("Notification Center", menu_bar_doc)
 
 
 if __name__ == "__main__":

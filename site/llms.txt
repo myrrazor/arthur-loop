@@ -40,7 +40,10 @@ Then it calls MCP `arthur.loop.create`. Arthur formulates the default hop sequen
 Run the next hop with `arthur`, `arthur run`, or console **Run next**.
 Same wizard: `arthur web` → Roles / + Loop / Run next. It is not a graph composer.
 
-The v0.1.0 tag is a file cockpit.
+Optional macOS 14+ menu extra (ArthurBar): an infinity icon in the menu bar badges
+when a human decision or stale job needs you. The popover shows workers, queue,
+projects, remaining quota, and the browser lock. Pair with `arthur watch` for
+Notification Center banners.
 
 ## Site
 - [Home](https://arthurloop.com/): product story and install
@@ -50,6 +53,7 @@ The v0.1.0 tag is a file cockpit.
 - [Roles and run](https://arthurloop.com/docs/roles): assign agents; terminal and UI
 - [Concepts](https://arthurloop.com/docs/concepts): queue, artifact, gate, decision, tick
 - [Web console](https://arthurloop.com/docs/console): localhost status map
+- [Menu bar](https://arthurloop.com/docs/menu-bar): macOS menu extra, quota, attention badge
 - [Agents](https://arthurloop.com/docs/agents): integrations and adapter packs
 - [CLI and MCP](https://arthurloop.com/docs/cli): commands and tool names
 - [FAQ](https://arthurloop.com/docs/faq): version, platforms, support

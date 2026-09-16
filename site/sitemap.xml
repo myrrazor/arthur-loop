@@ -43,6 +43,12 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://arthurloop.com/docs/menu-bar</loc>
+    <lastmod>2026-09-15</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://arthurloop.com/docs/agents</loc>
     <lastmod>2026-09-15</lastmod>
     <changefreq>weekly</changefreq>

@@ -2,7 +2,7 @@
 
 The last tagged release is **v0.1.0**. There is no tagged v0.2.0. `arthur --version` reports `arthur 0.1.0` until the next tag. This repository's default git install (the three commands on the README and launch site) tracks `main`.
 
-That public tree is a **file cockpit**: `arthur init`, queue, capture, gate, `status`, `arthur web`. It does **not** include `arthur follow`, the stdio MCP server, client skills/integrations, or Atlas `next`/`walk`. It is not a working auto-follow in minutes.
+That public tree is the original file-based control plane: `arthur init`, queue, capture, gate, `status`, `arthur web`. It does **not** include `arthur follow`, the stdio MCP server, client skills/integrations, or Atlas `next`/`walk`. It is not a working auto-follow in minutes.
 
 Canonical site: [https://arthurloop.com/](https://arthurloop.com/). `arthur-loop.vercel.app` 404s — do not use it as canonical.
 
