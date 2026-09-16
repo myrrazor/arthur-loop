@@ -59,7 +59,10 @@
         <p>The Python CLI is exercised on macOS and Linux. Windows is experimental. ArthurBar is macOS 14+.</p>
 
         <h2>Can I watch the loop from the Mac menu bar?</h2>
-        <p>Yes. ArthurBar is a native menu extra: an ∞ icon in the <a href="/docs/menu-bar.html">menu bar</a> badges when a human decision or a stale job needs you. The popover shows workers, the queue, projects, remaining quota for the agents you configured, and the browser lock. Pair with <code>arthur watch</code> for Notification Center banners.</p>
+        <p>Yes. ArthurBar is a <strong>separate macOS 14+ install</strong> — pipx, uv, and the CLI curl installer do not include it. After <code>arthur</code> is installed:</p>
+        <pre>curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh
+ArthurBar --root ~/my-loop</pre>
+        <p>The popover's quota bar is the loop's governor: percent left, reset time, GREEN / YELLOW / RED for the agents you configured. At the reserve line the loop checkpoints. The ∞ icon badges when a human decision or stale job needs you. Full page: <a href="/docs/menu-bar.html">Menu bar</a>.</p>
 
         <h2>How do I get support?</h2>
         <p>Open a <a href="https://github.com/myrrazor/arthur-loop/issues">GitHub issue</a>. This site does not collect email and does not list a personal inbox.</p>

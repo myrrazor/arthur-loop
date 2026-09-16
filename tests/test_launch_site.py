@@ -165,7 +165,7 @@ class LaunchSiteTests(unittest.TestCase):
         self.assertIn('<link rel="canonical" href="https://arthurloop.com/" />', self.index)
         self.assertIn("arthur 0.1.0", self.index)
         self.assertIn('id="menu-bar"', self.index)
-        self.assertIn("macOS menu bar", self.index)
+        self.assertIn("Watch quota from the Mac menu bar", self.index)
         self.assertIn("Star on GitHub", self.index)
         self.assertTrue((ROOT / "install.ps1").is_file())
         self.assertTrue((ROOT / "site/docs/index.html").is_file())
@@ -229,12 +229,18 @@ class LaunchSiteTests(unittest.TestCase):
         self.assertIn('"/docs/menu-bar"', vercel)
         self.assertIn("ArthurBar", self.readme)
         self.assertIn("docs/assets/arthurbar-demo.png", self.readme)
-        self.assertGreaterEqual(self.readme.count("docs/assets/arthurbar-demo.png"), 2)
+        self.assertEqual(self.readme.count("docs/assets/arthurbar-demo.png"), 1)
         self.assertTrue((ROOT / "docs/assets/arthurbar-demo.png").is_file())
+        bar_install = "curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh"
+        self.assertIn(bar_install, self.readme)
+        self.assertIn(bar_install, self.index)
+        self.assertIn("quota", self.index.lower())
+        self.assertIn("Watch quota from the Mac menu bar", self.index)
         menu_bar_doc = (ROOT / "site/docs/menu-bar.html").read_text(encoding="utf-8")
         self.assertIn("menu bar", menu_bar_doc.lower())
         self.assertIn("quota", menu_bar_doc.lower())
-        self.assertIn("Notification Center", menu_bar_doc)
+        self.assertIn(bar_install, menu_bar_doc)
+        self.assertTrue((ROOT / "menubar/install.sh").is_file())
 
 
 if __name__ == "__main__":

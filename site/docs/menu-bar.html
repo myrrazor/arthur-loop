@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>macOS menu bar — Arthur Loop</title>
-  <meta name="description" content="ArthurBar is a native macOS menu extra: workers, queue, quota, and a badge when a loop needs you." />
+  <meta name="description" content="ArthurBar is a Mac-only extra: quota in the menu bar, a badge when the loop needs you, separate from the CLI install." />
   <link rel="canonical" href="https://arthurloop.com/docs/menu-bar" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/site.css" />
@@ -38,8 +38,8 @@
       </aside>
       <div>
         <p class="eyebrow">Menu bar</p>
-        <h1>The loop, from the macOS menu bar.</h1>
-        <p>ArthurBar is a native <strong>menu extra</strong> for macOS 14+. It lives in the <a href="https://support.apple.com/guide/mac-help/whats-in-the-menu-bar-mchlp1446/mac">menu bar</a> — the strip at the top of the screen — so you can watch agent loops without keeping a terminal or the localhost console in front of you.</p>
+        <h1>Watch quota from the Mac menu bar.</h1>
+        <p>ArthurBar is a <strong>Mac-only</strong> extra. The popover's quota bar is the loop's governor: percent left, reset time, GREEN / YELLOW / RED for the agents you configured. You do not open the console to see how much subscription is left. At the reserve line the loop checkpoints. The same popover shows workers, the queue, and a badge when a human decision or stale job needs you.</p>
 
         <figure class="shot">
           <div class="menubar-stage">
@@ -51,36 +51,36 @@
               <a href="/media/arthurbar-demo.png">
                 <picture>
                   <source type="image/webp" srcset="/media/arthurbar-demo.webp" />
-                  <img src="/media/arthurbar-demo.png" alt="ArthurBar menu bar popover for the my-loop instance: three workers, a ready queue job, SAMPLE_APP blocked on an auth-scope decision, and quota at 62 percent left" width="640" height="1038" loading="lazy" decoding="async" />
+                  <img src="/media/arthurbar-demo.png" alt="ArthurBar menu bar popover: quota at 62 percent left, SAMPLE_APP blocked on an auth-scope decision, workers and a ready queue job" width="640" height="1038" loading="lazy" decoding="async" />
                 </picture>
               </a>
             </div>
           </div>
-          <figcaption>The menu extra. The badge is 1 because SAMPLE_APP is waiting on a human. Quota is the same meter as <code>arthur status</code>.</figcaption>
+          <figcaption>Quota at 62% left — the same governor as <code>arthur status</code>. SAMPLE_APP is blocked, so the menu extra badges 1.</figcaption>
         </figure>
 
-        <h2>What you see</h2>
-        <p>An ∞ icon appears among the other menu extras, typically on the right next to Control Center and the clock.</p>
+        <h2>Install (macOS 14+ only)</h2>
+        <p>pipx, uv, and the CLI <code>curl | sh</code> installer <strong>do not</strong> install ArthurBar. You need <code>arthur</code> already, plus Xcode or Command Line Tools. There is no Homebrew cask or signed <code>.app</code> yet — this builds from source on your Mac.</p>
+        <pre>curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh
+ArthurBar --root ~/my-loop</pre>
+        <p>From a checkout: <code>./menubar/install.sh --root ~/my-loop</code>. Add <code>--login</code> to start at login. The binary is <code>~/.local/bin/ArthurBar</code>. Uninstall with <code>rm ~/.local/bin/ArthurBar</code>.</p>
+
+        <h2>Quota</h2>
+        <p>The quota bar is the loop's governor, not a decoration. It is the same meter <code>arthur status</code> prints. Point the governor at <a href="https://github.com/steipete/CodexBar">CodexBar</a> (Codex, Claude, and the other subscriptions CodexBar already reads), or at a command or file. ArthurBar shows the primary remaining percent. At 5% remaining (the default reserve) the tick answers <code>BLOCKED_BY_QUOTA</code> and new work does not start.</p>
+
+        <h2>What else you see</h2>
         <ul>
-          <li><strong>Badge.</strong> The number next to the icon is how many things need a human: open decisions plus stale jobs. Zero hides the number. Hover the item for the loop state (<code>POLL_DUE</code>, <code>HUMAN_INPUT_REQUIRED</code>, <code>BLOCKED_BY_QUOTA</code>, …).</li>
-          <li><strong>Workers, queue, projects.</strong> The popover lists reporting sessions, ready or overdue jobs, and which project is blocked.</li>
-          <li><strong>Needs you.</strong> Open decisions show up by title so you can see which project is waiting without opening the console first.</li>
-          <li><strong>Quota.</strong> The bar is the loop’s governor: percent left, reset time, and GREEN / YELLOW / RED. Point the governor at <a href="https://github.com/steipete/CodexBar">CodexBar</a> (Codex, Claude, and the other subscriptions CodexBar already reads), or at a command or file. The loop stores a primary and a secondary remaining percent when the payload has both; ArthurBar shows the primary bar, the same meter <code>arthur status</code> prints. At your reserve line (5% by default) the loop checkpoints instead of starting new work.</li>
-          <li><strong>Browser lock.</strong> Whether the advisor browser lease is free, held, or stale.</li>
+          <li><strong>Badge.</strong> Open decisions plus stale jobs. Hover for <code>POLL_DUE</code>, <code>HUMAN_INPUT_REQUIRED</code>, <code>BLOCKED_BY_QUOTA</code>, …</li>
+          <li><strong>Workers, queue, projects.</strong> Reporting sessions, ready or overdue jobs, which project is blocked.</li>
+          <li><strong>Needs you.</strong> Open decisions by title.</li>
+          <li><strong>Browser lock.</strong> Free, held, or stale.</li>
         </ul>
         <p>ArthurBar reads <code>arthur status --json</code> and does not change loop state.</p>
 
         <h2>Alerts</h2>
-        <p>The menu extra is the glance surface. For banners, run <code>arthur watch</code> in a spare pane or from cron with <code>--once</code>. That posts to Notification Center (macOS <code>osascript</code>) when a human decision opens, quota blocks, work goes due, or a job goes stale — never on repeats.</p>
+        <p>The menu extra is the glance surface. For banners, <code>arthur watch</code> posts to Notification Center on decisions, quota blocks, due work, and stale jobs.</p>
         <pre>arthur watch
 arthur watch --once --no-desktop</pre>
-
-        <h2>Build and run</h2>
-        <p>Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools):</p>
-        <pre>cd menubar/ArthurBar
-swift build -c release
-.build/release/ArthurBar --root ~/my-loop</pre>
-        <p>ArthurBar ships as source. It is not a signed or notarized app bundle. Config, login-item setup, and snapshot rendering: <a href="https://github.com/myrrazor/arthur-loop/blob/main/menubar/ArthurBar/README.md">menubar/ArthurBar/README.md</a>.</p>
       </div>
     </div>
   </main>
