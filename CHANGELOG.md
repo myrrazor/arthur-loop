@@ -14,7 +14,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 
 ### Added
 
-- Launch site, README, and docs cover ArthurBar again: the macOS menu extra, attention badge, quota meter, and `arthur watch` banners. Footer is a Star on GitHub button; the leftover v0.1.0 “file cockpit” line is gone.
+- Launch site, README, and docs cover ArthurBar again: quota in the menu bar, attention badge, and a **separate macOS installer** (`menubar/install.sh`). pipx/uv/CLI curl do not install it. Footer is a Star on GitHub button; the leftover v0.1.0 “file cockpit” line is gone.
 - Assignable roles: planner, implementer, reviewer, QA. `arthur roles set reviewer=claude-code:opus`. Bare `arthur` and `arthur run` invoke the next assigned agent. Same **Run next** / **Roles** controls in `arthur web`. Default hop sequence is formulated from the project or ticket, with QA inserted only when assigned.
 - Stdio MCP server (`arthur mcp serve`) with read tools (status, tick, queue, gate, decision, loop, board) and gated writes (queue, capture, decision, loop create, board open-jobs). Dotted names plus Grok-safe portable names (`arthur_status`). `/arthur-loop` prompt.
 - `arthur integrations detect|install|status|probe` — writes skills, slash commands, and MCP config for Claude Code, Codex, Cursor, and Grok Build. Grok skill is `.grok/skills/arthur-loop`. `grok mcp add` when `grok` is on PATH (trusted, not just written toml).

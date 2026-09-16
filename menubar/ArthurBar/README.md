@@ -1,8 +1,24 @@
 # ArthurBar
 
-A macOS menu extra for Arthur Loop: the whole loop — workers, queue, projects, human decisions, quota, browser lock — one click away from the menu bar, styled after [CodexBar](https://github.com/steipete/CodexBar) (whose MIT-licensed progress-bar and card patterns this app follows; thanks, Peter). Product write-up: [docs/menu-bar.md](../../docs/menu-bar.md).
+A macOS menu extra for Arthur Loop. The popover's **quota bar** is the loop's
+governor (percent left, reset time, GREEN / YELLOW / RED) plus workers, queue,
+projects, human decisions, and the browser lock — one click from the menu bar.
+Styled after [CodexBar](https://github.com/steipete/CodexBar) (MIT progress-bar
+and card patterns; thanks, Peter). Product write-up: [docs/menu-bar.md](../../docs/menu-bar.md).
 
-## Build & run
+## Install (macOS 14+ only)
+
+This is **not** part of the pipx / uv / `./install.sh` CLI install.
+
+```bash
+# after `arthur` is on the machine
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh
+ArthurBar --root ~/my-loop
+```
+
+From this checkout: `../install.sh --root ~/my-loop` (or `./menubar/install.sh` from the repo root). `--login` starts at login. There is no Homebrew cask or signed `.app` yet.
+
+## Build by hand
 
 Requires macOS 14+ and a Swift toolchain (Xcode or Command Line Tools):
 

@@ -92,7 +92,7 @@
       {
         "@type": "Question",
         "name": "Can I watch the loop from the Mac menu bar?",
-        "acceptedAnswer": { "@type": "Answer", "text": "Yes. ArthurBar is a native macOS 14+ menu extra. An infinity icon sits in the menu bar and badges when a human decision or a stale job needs you. The popover shows workers, the queue, projects, remaining quota for the agents you configured, and the browser lock. It reads arthur status --json and does not change loop state. Build it from menubar/ArthurBar. Pair with arthur watch if you also want Notification Center banners." }
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. ArthurBar is a separate macOS 14+ install — pipx, uv, and the CLI curl installer do not include it. After arthur is installed: curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh then ArthurBar --root ~/my-loop. The popover's quota bar is the loop's governor: percent left, reset time, and GREEN / YELLOW / RED for the agents you configured. At the reserve line the loop checkpoints. The infinity icon badges when a human decision or stale job needs you." }
       },
       {
         "@type": "Question",
@@ -301,15 +301,26 @@
       <div class="wrap section-grid">
         <div>
           <p class="section-index">04 / MENU BAR</p>
-          <h2>The loop, from the macOS menu bar.</h2>
-          <p class="section-intro">ArthurBar is a native menu extra for macOS 14+. It lives in the <strong>menu bar</strong> — the strip at the top of the screen — so you can manage agent loops without a terminal or a browser tab in the way.</p>
+          <h2>Watch quota from the Mac menu bar.</h2>
+          <p class="section-intro">ArthurBar is a <strong>Mac-only</strong> extra. The popover's quota bar is the loop's governor sitting next to the clock: percent left, reset time, GREEN / YELLOW / RED for the agents you configured. You do not open the console to see how much subscription is left. At the reserve line the loop checkpoints instead of starting new work.</p>
         </div>
         <div>
           <ul class="feature-list">
-            <li><h3>Always in reach</h3><p>An ∞ icon sits with the other menu extras, next to Control Center and the clock. One click opens workers, the queue, projects, and the browser lock — the same snapshot as <code>arthur status</code>.</p></li>
-            <li><h3>It taps you when you are needed</h3><p>The icon badges with a count of open human decisions and stale jobs. Hover the item for the loop state. Want a banner as well? Run <code>arthur watch</code> for Notification Center alerts on decisions, quota blocks, due work, and stale jobs.</p></li>
-            <li><h3>Quota for the agents you run</h3><p>The popover's quota bar is the loop's governor: percent left, reset time, GREEN / YELLOW / RED. Point it at CodexBar (Codex, Claude, and the other subscriptions CodexBar already reads) or at a command or file. At your reserve line the loop checkpoints instead of burning the last 5%.</p></li>
+            <li><h3>Quota, always visible</h3><p>The same meter as <code>arthur status</code>. Point the governor at CodexBar (Codex, Claude, and the other subscriptions CodexBar already reads) or at a command or file. Remaining percent and reset time stay in the menu bar while agents run.</p></li>
+            <li><h3>It taps you when you are needed</h3><p>The ∞ icon badges with open human decisions and stale jobs. Hover for the loop state. Want a banner as well? <code>arthur watch</code> posts to Notification Center on decisions, quota blocks, due work, and stale jobs.</p></li>
+            <li><h3>Separate Mac install</h3><p>pipx, uv, and the CLI <code>curl | sh</code> do <strong>not</strong> install ArthurBar. After <code>arthur</code> is on the machine, run the macOS 14+ installer below. It builds from source with Swift. There is no Homebrew cask or signed app yet.</p></li>
           </ul>
+          <div class="install-list">
+            <div class="install-method">
+              <div class="install-label">macos 14+</div>
+              <div class="command-bar">
+                <span class="command-prompt" aria-hidden="true">›</span>
+                <code class="command-text" id="bar-command">curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh</code>
+                <button class="copy-button" type="button" data-copy="bar-command" aria-label="Copy ArthurBar install command">Copy</button>
+              </div>
+            </div>
+          </div>
+          <p class="after-install">Then <code>ArthurBar --root ~/my-loop</code>. From a checkout: <code>./menubar/install.sh --root ~/my-loop</code>. Add <code>--login</code> to start at login. Uninstall: <code>rm ~/.local/bin/ArthurBar</code>.</p>
         </div>
       </div>
       <div class="wrap-shot shot-band">
@@ -323,12 +334,12 @@
               <a href="media/arthurbar-demo.png">
                 <picture>
                   <source type="image/webp" srcset="media/arthurbar-demo.webp" />
-                  <img src="media/arthurbar-demo.png" alt="ArthurBar menu bar popover for the my-loop instance: three workers, a ready queue job, SAMPLE_APP blocked on an auth-scope decision, and quota at 62 percent left" width="640" height="1038" loading="lazy" decoding="async" />
+                  <img src="media/arthurbar-demo.png" alt="ArthurBar menu bar popover: quota at 62 percent left, SAMPLE_APP blocked on an auth-scope decision, workers and a ready queue job" width="640" height="1038" loading="lazy" decoding="async" />
                 </picture>
               </a>
             </div>
           </div>
-          <figcaption>The menu extra. The badge is 1 because SAMPLE_APP is waiting on a human. Quota is the same meter as the console.</figcaption>
+          <figcaption>Quota at 62% left — the same governor as <code>arthur status</code>. SAMPLE_APP is blocked, so the menu extra badges 1.</figcaption>
         </figure>
       </div>
     </section>
@@ -367,7 +378,7 @@
               </div>
             </div>
           </div>
-          <p class="after-install">Then: <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. Restart your coding agent, run <code>/arthur-loop</code>, and say how you want the loop set up. Impatient? <code>arthur init --demo &amp;&amp; arthur web</code> opens a seeded console. <code>arthur --version</code> still prints <code>arthur 0.1.0</code> until the next tag.</p>
+          <p class="after-install">Then: <code>mkdir ~/my-loop &amp;&amp; cd ~/my-loop &amp;&amp; arthur init</code>. Restart your coding agent, run <code>/arthur-loop</code>, and say how you want the loop set up. Impatient? <code>arthur init --demo &amp;&amp; arthur web</code> opens a seeded console. <code>arthur --version</code> still prints <code>arthur 0.1.0</code> until the next tag. The Mac menu bar is a <a href="#menu-bar">separate install</a>.</p>
         </div>
       </div>
     </section>
@@ -384,7 +395,7 @@
           <details><summary>Where is my data stored? Does it phone home?</summary><p>Queues, artifacts, decisions, sessions, and quota snapshots stay as markdown and JSONL inside the instance directory you choose. The core does not phone home or require an API key. Adapters only invoke tools you configure.</p></details>
           <details><summary>How do I set up the loop in my agent?</summary><p>Install Arthur Loop, run <code>arthur init</code> in an empty directory, restart the coding agent so MCP connects, then run <code>/arthur-loop</code>. The skill interviews you for project, roles, and tracker, creates the loop, and <code>arthur run</code> invokes the next assigned agent.</p></details>
           <details><summary>Which platforms are supported?</summary><p>The Python CLI is exercised on macOS and Linux with Python 3.9 or newer. Windows is experimental. ArthurBar requires macOS 14 or newer.</p></details>
-          <details><summary>Can I watch the loop from the Mac menu bar?</summary><p>Yes. ArthurBar is a native macOS 14+ menu extra. An infinity icon sits in the menu bar and badges when a human decision or a stale job needs you. The popover shows workers, the queue, projects, remaining quota for the agents you configured, and the browser lock. It reads <code>arthur status --json</code> and does not change loop state. Build it from <code>menubar/ArthurBar</code>. Pair with <code>arthur watch</code> if you also want Notification Center banners.</p></details>
+          <details><summary>Can I watch the loop from the Mac menu bar?</summary><p>Yes. ArthurBar is a separate macOS 14+ install — pipx, uv, and the CLI curl installer do not include it. After <code>arthur</code> is installed: <code>curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh</code> then <code>ArthurBar --root ~/my-loop</code>. The popover's quota bar is the loop's governor: percent left, reset time, and GREEN / YELLOW / RED for the agents you configured. At the reserve line the loop checkpoints. The infinity icon badges when a human decision or stale job needs you.</p></details>
           <details><summary>How do I update or uninstall it?</summary><p>Repeat the pipx, uv, or curl install command to update (add <code>--force</code> for pipx or uv). Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs can be removed by deleting <code>~/.arthur-loop</code> and <code>~/.local/bin/arthur</code>.</p></details>
           <details><summary>How do I get support?</summary><p>Open a <a href="https://github.com/myrrazor/arthur-loop/issues">GitHub issue</a> for bugs and questions. There is no email support inbox on this site.</p></details>
         </div>

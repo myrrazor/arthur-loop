@@ -40,10 +40,19 @@ Then it calls MCP `arthur.loop.create`. Arthur formulates the default hop sequen
 Run the next hop with `arthur`, `arthur run`, or console **Run next**.
 Same wizard: `arthur web` → Roles / + Loop / Run next. It is not a graph composer.
 
-Optional macOS 14+ menu extra (ArthurBar): an infinity icon in the menu bar badges
-when a human decision or stale job needs you. The popover shows workers, queue,
-projects, remaining quota, and the browser lock. Pair with `arthur watch` for
-Notification Center banners.
+## Mac menu bar (separate from the CLI install)
+
+pipx / uv / `install.sh` do not install ArthurBar. After `arthur` is installed,
+macOS 14+ only:
+
+```
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh
+ArthurBar --root ~/my-loop
+```
+
+The popover's quota bar is the loop's governor (percent left, reset time,
+GREEN / YELLOW / RED). At the reserve line the loop checkpoints. The infinity
+icon badges when a human decision or stale job needs you.
 
 ## Site
 - [Home](https://arthurloop.com/): product story and install

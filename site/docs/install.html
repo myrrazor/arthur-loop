@@ -59,7 +59,13 @@ arthur init</pre>
         <p>Without a terminal, <code>arthur init</code> fails fast and asks for <code>--yes</code>. Every interview question is also a flag:</p>
         <pre>arthur init --yes --main-agent grok --preset solo
 arthur init --yes --demo</pre>
-        <p><code>--demo</code> seeds sample projects, a job, sessions, a decision, and a quota bar so <code>arthur status</code>, <code>arthur web</code>, and ArthurBar have something to show. The macOS menu extra is built from source; see <a href="/docs/menu-bar.html">Menu bar</a>.</p>
+        <p><code>--demo</code> seeds sample projects, a job, sessions, a decision, and a quota bar so <code>arthur status</code>, <code>arthur web</code>, and ArthurBar have something to show.</p>
+
+        <h2>Mac menu bar (separate install)</h2>
+        <p>The commands above do <strong>not</strong> install ArthurBar. After <code>arthur</code> works, macOS 14+ only:</p>
+        <pre>curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/main/menubar/install.sh | sh
+ArthurBar --root ~/my-loop</pre>
+        <p>That builds from source (Xcode or Command Line Tools). There is no Homebrew cask or signed app yet. Quota in the menu bar: <a href="/docs/menu-bar.html">Menu bar</a>.</p>
 
         <h2>Update and uninstall</h2>
         <p>Repeat the install command to update. pipx and uv need <code>--force</code>. Uninstall with <code>pipx uninstall arthur-loop</code> or <code>uv tool uninstall arthur-loop</code>. Curl installs live under <code>~/.arthur-loop</code> with a shim at <code>~/.local/bin/arthur</code>.</p>
