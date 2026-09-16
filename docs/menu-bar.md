@@ -6,7 +6,7 @@ ArthurBar is a native **menu extra** for macOS 14+. It lives in the
 keeping a terminal or the localhost console in front of you.
 
 <p align="center">
-  <img src="../assets/arthurbar-demo.png" alt="ArthurBar menu bar popover: workers, queue, a blocked project, a human decision, and quota at 62 percent left" width="360">
+  <img src="assets/arthurbar-demo.png" alt="ArthurBar menu bar popover: workers, queue, a blocked project, a human decision, and quota at 62 percent left" width="440">
 </p>
 
 It is read-only. Data comes from `arthur status --json`. The app never writes

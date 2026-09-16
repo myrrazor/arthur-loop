@@ -29,6 +29,12 @@ Assign agents to **planner**, **implementer**, **reviewer**, and **QA**. Arthur 
   <sub>Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets become queue jobs with <code>arthur tracker walk</code>.</sub>
 </p>
 
+<p align="center">
+  <img src="docs/assets/arthurbar-demo.png" alt="ArthurBar macOS menu extra: workers, a ready queue job, SAMPLE_APP blocked on an auth-scope decision, and quota at 62 percent left" width="440">
+  <br>
+  <sub>ArthurBar in the macOS menu bar. The badge is 1 because SAMPLE_APP needs a human. Quota is the same meter as <code>arthur status</code>.</sub>
+</p>
+
 Site: [arthurloop.com](https://arthurloop.com/). Last tag is **v0.1.0** — `arthur --version` prints that until the next tag.
 
 ## Install
@@ -89,12 +95,16 @@ arthur web
   <img src="docs/assets/web-console.png" alt="Arthur Loop web console" width="100%">
 </p>
 
-### macOS menu bar
+### Agent skill
+
+`/arthur-loop` asks for project, ticket, and the four roles, then calls `arthur.loop.create` and `arthur.run`.
+
+## The macOS menu bar
 
 ArthurBar is a native **menu extra** for macOS 14+. It lives in the [menu bar](https://support.apple.com/guide/mac-help/whats-in-the-menu-bar-mchlp1446/mac) — the strip at the top of the screen — so you can watch workers, the queue, and quota without a terminal or a browser tab in the way.
 
 <p align="center">
-  <img src="assets/arthurbar-demo.png" alt="ArthurBar menu bar popover: workers, queue, a blocked project, a human decision, and quota at 62 percent left" width="360">
+  <img src="docs/assets/arthurbar-demo.png" alt="ArthurBar macOS menu extra: workers, a ready queue job, SAMPLE_APP blocked on an auth-scope decision, and quota at 62 percent left" width="440">
 </p>
 
 An ∞ icon sits with the other menu extras, typically on the right next to Control Center. The number next to it is how many things need a human (open decisions + stale jobs). Click for the status card: workers, queue, projects, remaining quota, and the browser lock. It reads `arthur status --json` and does not change loop state.
@@ -111,10 +121,6 @@ arthur watch
 ```
 
 More: [docs/menu-bar.md](docs/menu-bar.md), [menubar/ArthurBar/README.md](menubar/ArthurBar/README.md).
-
-### Agent skill
-
-`/arthur-loop` asks for project, ticket, and the four roles, then calls `arthur.loop.create` and `arthur.run`.
 
 ## Manual hop (no agents)
 
