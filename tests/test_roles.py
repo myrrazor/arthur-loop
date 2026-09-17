@@ -8,6 +8,7 @@ import unittest
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.cli import main
 from arthur_loop.config import load_config
@@ -16,7 +17,7 @@ from arthur_loop.loop_ops import create_loop
 from arthur_loop.mcp import dispatch_tool
 from arthur_loop.queue_ledger import QueueLedger
 from arthur_loop.roles import formulate_default_loop, next_hop_kind, parse_role_updates, resolve_roles
-from arthur_loop.web import make_server
+from arthur_loop.web import WebApp, make_server
 
 
 PLAN_REPLY = """# Plan
@@ -98,7 +99,9 @@ def _init(tmp: str) -> None:
 def _invoke(root: Path, request: dict) -> dict:
     dest = root / "runtime" / "follow" / f"{request['job_id']}.out.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(REPLIES[request["kind"]], encoding="utf-8")
+    marker = str(request.get("expected_marker") or "")
+    reply = REPLIES[request["kind"]]
+    dest.write_text(reply + (f"\n{marker}\n" if marker else ""), encoding="utf-8")
     return {"status": "ok", "adapter": request["adapter"], "model": request.get("model"), "output": dest.relative_to(root).as_posix()}
 
 
@@ -264,6 +267,23 @@ class RoleCliTests(unittest.TestCase):
 
 
 class RoleMcpAndWebTests(unittest.TestCase):
+    def test_web_run_next_does_not_hold_global_write_lock_during_follow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            app = WebApp(Path(tmp))
+            observed: list[bool] = []
+
+            def fake_follow(*_args, **_kwargs):
+                acquired = app._write_lock.acquire(blocking=False)
+                observed.append(acquired)
+                if acquired:
+                    app._write_lock.release()
+                return {"stopped": "idle", "steps": []}
+
+            with patch("arthur_loop.web.follow_loop", side_effect=fake_follow):
+                app.run_next({"once": True})
+            self.assertEqual(observed, [True])
+
     def test_mcp_roles_and_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _init(tmp)

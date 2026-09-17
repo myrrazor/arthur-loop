@@ -18,6 +18,10 @@ FILE_HEADER = "# Open Human Decisions\n"
 EMPTY_STUB = FILE_HEADER + "\nNone right now. The loop appends here when a project needs you.\n"
 
 
+class DecisionAlreadyOpen(ValueError):
+    """Raised when an identical human decision is already open."""
+
+
 def decisions_path(root: Path) -> Path:
     """The human-decision queue: one markdown file, one `##` section per decision."""
 
@@ -116,7 +120,7 @@ def open_decision(
         text = path.read_text(encoding="utf-8") if path.exists() else ""
         for section in _sections(text):
             if section["title"] == full_title and section["open"]:
-                raise ValueError(f"decision {full_title!r} is already open")
+                raise DecisionAlreadyOpen(f"decision {full_title!r} is already open")
         if not text.strip():
             text = FILE_HEADER
         # the fresh-instance stub reads oddly once real decisions exist

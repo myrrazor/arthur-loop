@@ -19,6 +19,7 @@ from arthur_loop.decisions import answer_decision as _answer_decision
 from arthur_loop.decisions import list_decisions
 from arthur_loop.follow import follow_loop, preview_next_step
 from arthur_loop.loop_ops import apply_role_updates, create_loop, wizard_options
+from arthur_loop.pathguard import READABLE_SUFFIXES, resolve_instance_file
 from arthur_loop.roles import formulate_default_loop, resolve_roles, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
 from arthur_loop.recovery import recover_job
@@ -36,9 +37,6 @@ STATIC_FILES = {
     "app.js": "application/javascript; charset=utf-8",
     "style.css": "text/css; charset=utf-8",
 }
-
-# artifact viewer may only open loop text files
-READABLE_SUFFIXES = {".md", ".jsonl", ".txt", ".log", ".json"}
 
 # viewer cap — loop logs grow without bound, don't slurp them whole
 MAX_VIEW_BYTES = 2_000_000
@@ -148,15 +146,7 @@ class WebApp:
     def read_instance_file(self, rel_path: str) -> str:
         """Resolve a repo-relative text file, refusing anything outside the root."""
 
-        candidate = (self.root / rel_path).resolve()
-        try:
-            candidate.relative_to(self.root.resolve())
-        except ValueError:
-            raise PermissionError("path escapes the instance root")
-        if candidate.suffix.lower() not in READABLE_SUFFIXES:
-            raise PermissionError("only loop text files can be viewed")
-        if not candidate.is_file():
-            raise FileNotFoundError(rel_path)
+        candidate = resolve_instance_file(self.root, rel_path, suffixes=READABLE_SUFFIXES)
         size = candidate.stat().st_size
         if size <= MAX_VIEW_BYTES:
             return candidate.read_text(encoding="utf-8")
@@ -250,16 +240,18 @@ class WebApp:
         once = body.get("once")
         if once is None:
             once = True
-        with self._write_lock:
-            record = follow_loop(
-                self.root,
-                once=bool(once),
-                max_steps=int(body.get("max_steps") or 12),
-                project_id=str(body["project_id"]).strip() if body.get("project_id") else None,
-                chain=body.get("chain", True),
-                dry_run=bool(body.get("dry_run")),
-            )
-        return record
+        # follow_loop may spend minutes inside an agent CLI. Its queue and
+        # browser-lease writes have their own cross-process locks, so do not
+        # block unrelated web mutations on the process-wide write lock.
+        return follow_loop(
+            self.root,
+            once=bool(once),
+            max_steps=int(body.get("max_steps") or 12),
+            project_id=str(body["project_id"]).strip() if body.get("project_id") else None,
+            holder=f"web-run-next-{secrets.token_hex(8)}",
+            chain=body.get("chain", True),
+            dry_run=bool(body.get("dry_run")),
+        )
 
     def clear_session_action(self, session_id: str) -> dict[str, Any]:
         cleared = clear_session(self.root, session_id)

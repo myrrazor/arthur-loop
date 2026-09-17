@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -82,12 +83,18 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
-    """Append one JSON record to a JSONL file."""
+    """Append one JSON record with one write while holding a file lock."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(record, sort_keys=True, separators=(",", ":")))
-        handle.write("\n")
+    payload = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    with exclusive(path):
+        descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            written = os.write(descriptor, payload)
+            if written != len(payload):
+                raise OSError(f"short JSONL append to {path}: {written} of {len(payload)} bytes")
+        finally:
+            os.close(descriptor)
 
 
 def next_poll_at(

@@ -123,6 +123,39 @@ class McpDispatchTests(unittest.TestCase):
             )
             self.assertTrue(created.get("isError"))
 
+    def test_file_arguments_cannot_escape_instance_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as outside_tmp:
+            _init(tmp)
+            outside = Path(outside_tmp) / "outside.md"
+            outside.write_text("private", encoding="utf-8")
+            captured = dispatch_tool(
+                Path(tmp),
+                "arthur.capture",
+                {
+                    "project_id": "MCP_APP",
+                    "job_id": "BQ-MCP_APP-001",
+                    "kind": "plan",
+                    "source_chat_title": "test",
+                    "source_file": str(outside),
+                },
+            )
+            self.assertTrue(captured.get("isError"))
+            self.assertIn("escapes the instance root", captured["content"][0]["text"])
+
+            created = dispatch_tool(
+                Path(tmp),
+                "arthur.queue.create",
+                {
+                    "job_id": "BQ-MCP_APP-001",
+                    "project_id": "MCP_APP",
+                    "target_chat_title": "test",
+                    "target_chat_url": "manual",
+                    "prompt_path": str(outside),
+                },
+            )
+            self.assertTrue(created.get("isError"))
+            self.assertIn("escapes the instance root", created["content"][0]["text"])
+
 
 class McpProtocolTests(unittest.TestCase):
     def test_initialize_tools_list_and_prompt(self) -> None:
@@ -164,6 +197,17 @@ class McpProtocolTests(unittest.TestCase):
         message = reader.read()
         self.assertEqual(message["method"], "ping")
         self.assertEqual(reader.framing, "content-length")
+
+    def test_content_length_counts_utf8_bytes_without_consuming_next_frame(self) -> None:
+        first = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "écho"}, ensure_ascii=False)
+        second = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "ping"})
+        framed = (
+            f"Content-Length: {len(first.encode('utf-8'))}\r\n\r\n{first}"
+            f"Content-Length: {len(second.encode('utf-8'))}\r\n\r\n{second}"
+        )
+        reader = MessageReader(io.StringIO(framed))
+        self.assertEqual(reader.read()["method"], "écho")
+        self.assertEqual(reader.read()["method"], "ping")
 
 
 class McpCliTests(unittest.TestCase):
