@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from arthur_loop.decisions import open_decision
+from arthur_loop.decisions import DecisionAlreadyOpen, open_decision
 from arthur_loop.queue_ledger import QueueLedger, append_jsonl, isoformat, parse_ledger_time, read_jsonl
 from arthur_loop.tick import open_human_decision_projects
 
@@ -382,7 +382,7 @@ def _escalate(root: Path, artifact: ChatGptArtifact, *, now: datetime | None) ->
             now=now,
             source=f"capture:{artifact.artifact_id}",
         )
-    except ValueError:
+    except DecisionAlreadyOpen:
         # already open for this exact hop (a retry captured the same response twice)
         return f"{artifact.project_id} {title}"
     return str(record["title"])

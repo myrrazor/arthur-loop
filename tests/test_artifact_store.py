@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.artifact_store import (
     implementation_gate,
@@ -320,6 +321,15 @@ class EscalationTests(unittest.TestCase):
             self.assertFalse(artifact.control_block_valid)
             self.assertIsNone(artifact.escalated_decision)
             self.assertFalse((root / "human-decisions/open.md").exists())
+
+    def test_escalation_does_not_hide_unrelated_validation_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(
+                "arthur_loop.artifact_store.open_decision",
+                side_effect=ValueError("decision storage is invalid"),
+            ):
+                with self.assertRaisesRegex(ValueError, "decision storage is invalid"):
+                    _capture(Path(tmp), "plan", PLAN_IMPLEMENTED)
 
     def test_valid_trusted_artifacts_open_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

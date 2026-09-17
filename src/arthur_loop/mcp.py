@@ -19,7 +19,15 @@ from arthur_loop.atlas_board import (
 from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision, list_decisions, open_decision
 from arthur_loop.follow import follow_loop
-from arthur_loop.loop_ops import apply_role_updates, claim_job, create_loop, list_loops, submit_job, wizard_options
+from arthur_loop.loop_ops import (
+    apply_role_updates,
+    claim_job,
+    create_loop,
+    list_loops,
+    submit_job,
+    wizard_options,
+)
+from arthur_loop.pathguard import instance_file_reference, resolve_instance_file
 from arthur_loop.roles import LOOP_ROLES, parse_role_spec, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.recovery import recover_job
@@ -459,12 +467,15 @@ def _handle_loop_list(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, A
 
 
 def _handle_queue_create(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any]:
+    prompt_path = _s(arguments, "prompt_path")
+    if prompt_path:
+        prompt_path = instance_file_reference(ctx.root, prompt_path)
     job = QueueJob(
         job_id=_s(arguments, "job_id") or "",
         project_id=_s(arguments, "project_id") or "",
         target_chat_title=_s(arguments, "target_chat_title") or "",
         target_chat_url=_s(arguments, "target_chat_url") or "",
-        prompt_path=_s(arguments, "prompt_path"),
+        prompt_path=prompt_path,
         expected_marker=_s(arguments, "expected_marker"),
         idempotency_key=_s(arguments, "idempotency_key"),
     )
@@ -520,9 +531,7 @@ def _handle_capture(ctx: McpContext, arguments: dict[str, Any]) -> dict[str, Any
     text = _s(arguments, "text")
     source_file = _s(arguments, "source_file")
     if source_file:
-        path = Path(source_file)
-        if not path.is_absolute():
-            path = ctx.root / source_file
+        path = resolve_instance_file(ctx.root, source_file)
         text = path.read_text(encoding="utf-8")
     if text is None:
         raise ValueError("capture needs text or source_file")
@@ -835,12 +844,29 @@ class MessageReader:
                 header = self.stream.readline()
                 if header in ("", "\r\n", "\n"):
                     break
-            body = self.stream.read(length)
+            body = self._read_utf8_bytes(length)
             return json.loads(body)
         stripped = line.strip()
         if not stripped:
             return self.read()
         return json.loads(stripped)
+
+    def _read_utf8_bytes(self, length: int) -> str:
+        """Read exactly Content-Length UTF-8 bytes from a text stream."""
+
+        if length < 0:
+            raise ValueError("Content-Length must not be negative")
+        chunks: list[str] = []
+        byte_count = 0
+        while byte_count < length:
+            char = self.stream.read(1)
+            if char == "":
+                raise ValueError("unexpected EOF in Content-Length body")
+            byte_count += len(char.encode("utf-8"))
+            if byte_count > length:
+                raise ValueError("Content-Length splits a UTF-8 character")
+            chunks.append(char)
+        return "".join(chunks)
 
 
 def serve(

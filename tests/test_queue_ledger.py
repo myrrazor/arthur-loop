@@ -3,18 +3,33 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
 
-from arthur_loop.queue_ledger import QueueJob, QueueLedger, next_poll_at, read_jsonl
+from arthur_loop.queue_ledger import QueueJob, QueueLedger, append_jsonl, next_poll_at, read_jsonl
 
 
 UTC = timezone.utc
 
 
 class QueueLedgerTests(unittest.TestCase):
+    def test_concurrent_event_appends_remain_whole_json_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "queue/events.jsonl"
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                list(
+                    pool.map(
+                        lambda index: append_jsonl(path, {"index": index, "body": "é" * 500}),
+                        range(64),
+                    )
+                )
+            records = read_jsonl(path)
+            self.assertEqual(len(records), 64)
+            self.assertEqual({record["index"] for record in records}, set(range(64)))
+
     def test_next_poll_uses_one_minute_then_five_minutes(self) -> None:
         now = datetime(2026, 6, 22, 4, 0, tzinfo=UTC)
 

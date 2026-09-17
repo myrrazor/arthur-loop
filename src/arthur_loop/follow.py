@@ -32,6 +32,7 @@ from arthur_loop.loop_ops import (
     seed_first_prompt,
     submit_job,
 )
+from arthur_loop.pathguard import resolve_instance_file
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
 from arthur_loop.tick import classify_tick, open_human_decision_projects
 
@@ -181,9 +182,8 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
 
 def _prompt_text(root: Path, job: QueueJob, kind: str) -> str:
     if job.prompt_path:
-        path = root / job.prompt_path
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
+        path = resolve_instance_file(root, job.prompt_path)
+        return path.read_text(encoding="utf-8")
     return seed_hop_prompt(root, project_id=job.project_id, job_id=job.job_id, kind=kind)
 
 
@@ -419,6 +419,11 @@ def follow_step(
         step["claimed"] = job.to_record()
 
     if job.status == "claimed":
+        if job.claimed_by and job.claimed_by != holder:
+            step["action"] = "stop"
+            step["reason"] = "claimed_by_other"
+            step["note"] = f"job is claimed by {job.claimed_by}, not {holder}"
+            return step
         prompt = _prompt_text(root, job, kind)
         invoked = invoke(
             root,
@@ -430,6 +435,7 @@ def follow_step(
                 "adapter": adapter,
                 "model": model,
                 "prompt": prompt,
+                "expected_marker": job.expected_marker,
             },
         )
         step["invoke"] = {k: v for k, v in invoked.items() if k != "prompt"}
@@ -461,10 +467,7 @@ def follow_step(
         )
         step["capture"] = artifact.to_record()
         if artifact.needs_human:
-            try:
-                release_lock(root, holder)
-            except Exception:
-                pass
+            step["lock_released"] = release_lock(root, holder)
             step["action"] = "needs_human"
             step["human_gates"] = [artifact.escalated_decision or "capture opened a human decision"]
             return step
@@ -477,14 +480,16 @@ def follow_step(
             root,
             job.job_id,
             marker_found=marker_found,
-            status="completed",
+            status="completed" if marker_found else "waiting_for_chatgpt",
             holder=holder,
             keep_lock=True,
         )
-        try:
-            release_lock(root, holder)
-        except Exception:
-            pass
+        step["lock_released"] = release_lock(root, holder)
+        if not marker_found:
+            step["waiting"] = job.to_record()
+            step["action"] = "waiting_for_marker"
+            step["note"] = "captured output did not contain the expected marker; the job remains non-terminal"
+            return step
         step["completed"] = job.to_record()
         gate = implementation_gate(root, job.project_id)
         step["gate"] = gate.to_record()
@@ -541,7 +546,7 @@ def follow_loop(
         )
         steps.append(step)
         action = str(step.get("action") or "noop")
-        if action in {"idle", "stop", "needs_human", "invoke_failed", "waiting_for_output", "gate_no_go"}:
+        if action in {"idle", "stop", "needs_human", "invoke_failed", "waiting_for_output", "waiting_for_marker", "gate_no_go"}:
             stopped = action
             break
         if dry_run:

@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.cli import main
 from arthur_loop.follow import follow_loop, transport_argv
@@ -45,6 +46,14 @@ def _init(tmp: str) -> None:
 
 
 def _fake_invoke(root: Path, request: dict) -> dict:
+    dest = root / "runtime" / "follow" / f"{request['job_id']}.out.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    marker = str(request.get("expected_marker") or "")
+    dest.write_text(REPLY + (f"\n{marker}\n" if marker else ""), encoding="utf-8")
+    return {"status": "ok", "adapter": request["adapter"], "output": dest.relative_to(root).as_posix()}
+
+
+def _missing_marker_invoke(root: Path, request: dict) -> dict:
     dest = root / "runtime" / "follow" / f"{request['job_id']}.out.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(REPLY, encoding="utf-8")
@@ -103,6 +112,48 @@ class FollowTests(unittest.TestCase):
             report = json.loads(out)
             self.assertEqual(report["stopped"], "needs_human")
             self.assertIn("inbox", report["steps"][0]["invoke"])
+
+    def test_missing_marker_stays_non_terminal_and_does_not_chain(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            _, out, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "manual",
+                    "--executor", "manual",
+                ]
+            )
+            self.assertFalse(err)
+            job_id = json.loads(out)["job"]["job_id"]
+
+            report = follow_loop(root, once=True, invoke=_missing_marker_invoke)
+
+            step = report["steps"][0]
+            self.assertEqual(report["stopped"], "waiting_for_marker")
+            self.assertEqual(step["action"], "waiting_for_marker")
+            self.assertNotIn("completed", step)
+            self.assertNotIn("enqueued", step)
+            jobs = QueueLedger(root).latest_jobs()
+            self.assertEqual(jobs[job_id].status, "waiting_for_chatgpt")
+            self.assertEqual(len(jobs), 1)
+
+    def test_lock_release_errors_are_not_swallowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "manual",
+                    "--executor", "manual",
+                ]
+            )
+            with patch("arthur_loop.follow.release_lock", side_effect=OSError("release failed")):
+                with self.assertRaisesRegex(OSError, "release failed"):
+                    follow_loop(root, once=True, invoke=_fake_invoke)
 
     def test_mcp_follow_run_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
