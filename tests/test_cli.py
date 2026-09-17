@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -66,5 +67,8 @@ class CaptureSourceFileTests(unittest.TestCase):
                 "--source-file", "runtime/advisor-reply.md",
             ])
             self.assertEqual(code, 3, err)
-            self.assertIn("safe", out)
-            self.assertNotIn("root:x:", out)
+            record = json.loads(out)
+            saved = Path(tmp) / record["path"]
+            self.assertTrue(saved.is_file())
+            self.assertIn("safe", saved.read_text(encoding="utf-8"))
+            self.assertNotIn("root:x:", saved.read_text(encoding="utf-8"))
