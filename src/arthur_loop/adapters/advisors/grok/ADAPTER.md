@@ -6,10 +6,10 @@ A [Grok Build](https://docs.x.ai/build) (`grok`) session plays the planner/revie
 
 Grok answers in-process, so submit and capture collapse into one pass. Prefer a non-interactive prompt flag when your build has one (`grok --always-approve -p` on Grok Build 1.0.30 — flag order is load-bearing; same idea as `claude -p` / `codex exec`). If your `grok` build only has an interactive TUI, paste the rendered prompt and save the reply yourself — the artifact contract does not change.
 
-    grok --always-approve -p "$(cat <rendered-prompt>.md)" > /tmp/advisor-reply.md
+    grok --always-approve -p "$(cat <rendered-prompt>.md)" > runtime/advisor-reply.md
     arthur queue submit --job-id <JOB> --keep-lock
     arthur capture --project-id <ID> --job-id <JOB> --kind <kind> \
-      --source-chat-title grok --source-file /tmp/advisor-reply.md
+      --source-chat-title grok --source-file runtime/advisor-reply.md
     arthur queue poll-result --job-id <JOB> --marker-found true --status completed
 
 Use the same prompt pack and control blocks as the other advisors — only the transport differs. Keep one working directory (or session) per project so planning context does not cross streams.

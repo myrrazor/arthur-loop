@@ -838,12 +838,19 @@ class MessageReader:
             return None
         if line.lower().startswith("content-length:"):
             self.framing = "content-length"
-            length = int(line.split(":", 1)[1].strip())
-            # consume remaining headers
+            raw = line.split(":", 1)[1].strip()
+            # consume remaining headers even when the length is garbage so the
+            # next frame stays aligned
             while True:
                 header = self.stream.readline()
                 if header in ("", "\r\n", "\n"):
                     break
+            try:
+                length = int(raw, 10)
+            except ValueError as exc:
+                raise ValueError(f"invalid Content-Length: {raw!r}") from exc
+            if length < 0:
+                raise ValueError("Content-Length must not be negative")
             body = self._read_utf8_bytes(length)
             return json.loads(body)
         stripped = line.strip()
@@ -886,7 +893,7 @@ def serve(
     while True:
         try:
             message = reader.read()
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, ValueError, UnicodeError) as exc:
             out.write(encode_message(_rpc_error(None, -32700, f"parse error: {exc}"), framing=reader.framing).decode("utf-8"))
             out.flush()
             continue

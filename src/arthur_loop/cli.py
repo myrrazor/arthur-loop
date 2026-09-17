@@ -37,6 +37,7 @@ from arthur_loop.notify import (
     unsupported_detail,
     watch_events,
 )
+from arthur_loop.pathguard import resolve_instance_file
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, parse_ledger_time
 from arthur_loop.quota import fetch_quota_payload, quota_settings
 from arthur_loop.recovery import recover_job
@@ -954,7 +955,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
     root = resolve_root(args)
     require_instance(root)
     if args.source_file:
-        text = Path(args.source_file).read_text(encoding="utf-8")
+        text = resolve_instance_file(root, args.source_file).read_text(encoding="utf-8")
     else:
         text = sys.stdin.read()
 
@@ -995,7 +996,10 @@ def _build_capture_parser(subparsers: Any) -> None:
     capture.add_argument("--job-id", required=True)
     capture.add_argument("--kind", required=True, choices=list(ARTIFACT_KINDS), help="which hop of the loop this text is")
     capture.add_argument("--source-chat-title", required=True, help="conversation title, or the adapter name (manual, codex, ...)")
-    capture.add_argument("--source-file", help="Markdown/text file to capture. Reads stdin when omitted.")
+    capture.add_argument(
+        "--source-file",
+        help="Instance-relative or absolute text file under the instance root. Reads stdin when omitted.",
+    )
     capture.add_argument("--created-at", help="Override capture timestamp")
     capture.add_argument("--title", help="Human title for the artifact")
     capture.add_argument("--no-link-queue", action="store_true", help="Do not append artifact path to queue job state")
