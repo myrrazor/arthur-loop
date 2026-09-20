@@ -209,6 +209,31 @@ class McpProtocolTests(unittest.TestCase):
         self.assertEqual(reader.read()["method"], "écho")
         self.assertEqual(reader.read()["method"], "ping")
 
+    def test_serve_reports_invalid_content_length_instead_of_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            hello = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            stdin = io.StringIO(
+                "Content-Length: abc\r\n\r\n"
+                "Content-Length: -1\r\n\r\n"
+                + hello + "\n"
+            )
+            stdout = io.StringIO()
+            self.assertEqual(serve(Path(tmp), stdin=stdin, stdout=stdout, tool_name_style="dotted"), 0)
+            raw = stdout.getvalue()
+            self.assertIn('"code":-32700', raw.replace(" ", ""))
+            self.assertIn("invalid Content-Length: 'abc'", raw)
+            self.assertIn("Content-Length must not be negative", raw)
+            self.assertIn("arthur-loop", raw)
+
+    def test_content_length_reader_rejects_non_integer_and_negative_lengths(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            MessageReader(io.StringIO("Content-Length: abc\r\n\r\n")).read()
+        self.assertIn("invalid Content-Length: 'abc'", str(ctx.exception))
+        with self.assertRaises(ValueError) as ctx:
+            MessageReader(io.StringIO("Content-Length: -1\r\n\r\n")).read()
+        self.assertIn("must not be negative", str(ctx.exception))
+
 
 class McpCliTests(unittest.TestCase):
     def test_mcp_tools_cli(self) -> None:

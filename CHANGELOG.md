@@ -36,6 +36,8 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 
 ### Fixed
 
+- `arthur capture --source-file` now uses the same instance-root path guard as MCP capture, so host files such as `/etc/passwd` are refused instead of being copied into project artifacts.
+- `arthur mcp serve` answers `Content-Length: abc` / `Content-Length: -1` with JSON-RPC `-32700` and keeps serving; those frames used to raise and kill the stdio process.
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).
 - Duplicate `expected_marker` across different job ids is refused; a blank marker is treated as omitted.
 - `queue claim` and `queue submit` (CLI and MCP) refuse a project paused by an open human decision.
