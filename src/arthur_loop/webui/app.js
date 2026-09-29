@@ -1032,7 +1032,7 @@ function runNextToast(record) {
   if (stopped === "waiting_for_output") {
     return { kind: "warn", title: "Waiting for reply", body: note || stopped };
   }
-  if (stopped === "stop" || step.reason === "claimed_by_other") {
+  if (stopped === "stop" || stopped === "follow_in_flight" || step.reason === "claimed_by_other" || step.reason === "follow_in_flight") {
     return { kind: "err", title: "Run next stopped", body: note || step.reason || stopped };
   }
   if (stopped === "invoke_failed" || stopped === "waiting_for_marker" || stopped === "gate_no_go") {

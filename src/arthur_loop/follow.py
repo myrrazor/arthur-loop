@@ -380,8 +380,54 @@ def follow_step(
     dry_run: bool = False,
     timeout: float | None = None,
 ) -> dict[str, Any]:
-    """One auto-follow step. Returns a JSON-serializable record."""
+    """One auto-follow step. Returns a JSON-serializable record.
 
+    Overlapping callers (two `arthur follow` processes, or two web Run next
+    threads) share one holder name, so the claimed-by check cannot tell them
+    apart. A non-blocking instance lock lets the second caller stop instead
+    of starting a second agent on the same hop.
+    """
+
+    if dry_run:
+        return _follow_step_body(
+            root,
+            project_id=project_id,
+            holder=holder,
+            invoke=invoke,
+            chain=chain,
+            dry_run=True,
+            timeout=timeout,
+        )
+    from arthur_loop.filelock import instance_lock_path, try_exclusive
+
+    with try_exclusive(instance_lock_path(root, "follow-step")) as acquired:
+        if not acquired:
+            return {
+                "action": "follow_in_flight",
+                "reason": "follow_in_flight",
+                "note": "another arthur follow is already running a step in this instance",
+            }
+        return _follow_step_body(
+            root,
+            project_id=project_id,
+            holder=holder,
+            invoke=invoke,
+            chain=chain,
+            dry_run=False,
+            timeout=timeout,
+        )
+
+
+def _follow_step_body(
+    root: Path,
+    *,
+    project_id: str | None = None,
+    holder: str = HOLDER,
+    invoke: Invoker | None = None,
+    chain: bool = True,
+    dry_run: bool = False,
+    timeout: float | None = None,
+) -> dict[str, Any]:
     invoke = invoke or default_invoke
     config = load_config(root)
     if timeout is None:
@@ -605,7 +651,16 @@ def follow_loop(
         )
         steps.append(step)
         action = str(step.get("action") or "noop")
-        if action in {"idle", "stop", "needs_human", "invoke_failed", "waiting_for_output", "waiting_for_marker", "gate_no_go"}:
+        if action in {
+            "idle",
+            "stop",
+            "needs_human",
+            "invoke_failed",
+            "waiting_for_output",
+            "waiting_for_marker",
+            "gate_no_go",
+            "follow_in_flight",
+        }:
             stopped = action
             break
         if dry_run:

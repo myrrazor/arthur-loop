@@ -1340,7 +1340,7 @@ def cmd_follow(args: argparse.Namespace) -> int:
     stopped = record.get("stopped")
     if stopped in {"needs_human", "gate_no_go"}:
         return EXIT_NEEDS_HUMAN
-    if stopped in {"invoke_failed"}:
+    if stopped in {"invoke_failed", "follow_in_flight"}:
         return EXIT_ERROR
     return EXIT_OK
 
