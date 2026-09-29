@@ -342,10 +342,26 @@ function pendingReplyCard(row) {
   return card;
 }
 
+function appendEmphasis(parent, text) {
+  const re = /_([^_\n]+)_/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(text))) {
+    if (match.index > last) parent.append(document.createTextNode(text.slice(last, match.index)));
+    parent.append(el("em", null, match[1]));
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parent.append(document.createTextNode(text.slice(last)));
+}
+
 function decisionCard(d) {
   const card = el("div", "decision");
   card.append(el("div", "d-title", d.title), el("div", "d-project", d.projectId || ""));
-  if (d.body) card.append(el("div", "d-body", d.body));
+  if (d.body) {
+    const body = el("div", "d-body");
+    appendEmphasis(body, d.body);
+    card.append(body);
+  }
   const ta = el("textarea"); ta.placeholder = "Answer this decision. It records into human-decisions/open.md and unblocks the project.";
   card.append(ta);
   const actions = el("div", "d-actions");
@@ -720,13 +736,13 @@ function renderQueue(panel, s) {
   const tb = el("tbody");
   for (const j of s.queue) {
     const tr = el("tr");
-    tr.append(td("mono-id", j.jobId), td(null, j.projectId));
-    const st = el("td"); const pill = el("span", null, j.status); pill.style.cssText = `color:${JOB_STATE[j.status] || "var(--text)"}`; st.append(pill); tr.append(st);
-    tr.append(td("num", String(j.attemptCount)));
+    tr.append(td("mono-id", j.jobId, "Job"), td(null, j.projectId, "Project"));
+    const st = el("td"); st.dataset.label = "Status"; const pill = el("span", null, j.status); pill.style.cssText = `color:${JOB_STATE[j.status] || "var(--text)"}`; st.append(pill); tr.append(st);
+    tr.append(td("num", String(j.attemptCount), "Att"));
     const eta = j.status === "queued" ? "ready" : rel(j.nextPollAt, now);
-    tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta));
-    const err = td(null, j.lastError || "—"); err.style.color = "var(--text-faint)"; err.style.maxWidth = "220px"; err.style.overflow = "hidden"; err.style.textOverflow = "ellipsis"; err.style.whiteSpace = "nowrap"; err.title = j.lastError || ""; tr.append(err);
-    const act = el("td");
+    tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta, "Next poll"));
+    const err = td(null, j.lastError || "—", "Last error"); err.style.color = "var(--text-faint)"; err.title = j.lastError || ""; tr.append(err);
+    const act = el("td"); act.dataset.label = "";
     if (!TERMINAL.has(j.status)) {
       const r = el("button", "btn ghost sm", "Recover"); r.onclick = () => runRecover(j.jobId, true, r); act.append(r);
     }
@@ -736,7 +752,11 @@ function renderQueue(panel, s) {
   table.append(tb);
   panel.append(table);
 }
-function td(cls, text) { return el("td", cls, text); }
+function td(cls, text, label) {
+  const cell = el("td", cls, text);
+  if (label) cell.dataset.label = label;
+  return cell;
+}
 
 /* ---- artifacts view ---------------------------------------------------- */
 
@@ -938,11 +958,13 @@ function openJobModal() {
     body.append(f);
   };
   const proj = (s && s.projects[0] && s.projects[0].projectId) || "MY_APP";
-  add("job_id", "Job id", "BQ-" + proj + "-001", "BQ-" + proj + "-001");
-  add("project_id", "Project", proj, proj);
-  add("target_chat_title", "Advisor conversation title", proj + " planning");
-  add("target_chat_url", "Advisor target URL", "manual");
-  add("expected_marker", "Expected marker (optional)", "");
+  const nextIds = (s && s.nextJobIds) || {};
+  const jobId = nextIds[proj] || ("BQ-" + proj + "-001");
+  add("job_id", "Job id", "", jobId);
+  add("project_id", "Project", "", proj);
+  add("target_chat_title", "Advisor conversation title", "", proj + " planning");
+  add("target_chat_url", "Advisor target URL", "", "manual");
+  add("expected_marker", "Expected marker (optional)", "", "");
   const actions = el("div", "modal-actions");
   const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeModal;
   const create = el("button", "btn primary", "Create job");

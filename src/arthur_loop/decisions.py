@@ -129,7 +129,7 @@ def open_decision(
             text += "\n"
         text += (
             f"\n## {full_title}\n\nStatus: `OPEN`\n\n{body}\n\n"
-            f"_Opened {isoformat(now)} via {source}._\n"
+            f"Opened {isoformat(now)} via {source}.\n"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")

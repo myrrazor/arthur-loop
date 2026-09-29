@@ -40,6 +40,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 - Hop prompts include the expected marker and no longer leave literal `{{...}}` tokens in the rendered text.
 - Agent invoke waits 45 minutes by default (`--timeout` or `polling_policy.invoke_timeout_seconds`). The browser lock covers that wait, and a timed-out hop is left in `needs_recovery` with the lock released.
 - `loop create` refuses to enqueue a second live job for a project. `queue recover` refuses a never-claimed queued job. `lock release` exits 2 on a holder mismatch. `queue create` in a bare directory says so on stderr.
+- Narrow terminals ellipsize status columns instead of folding headers mid-word. The web console keeps the decision rail and Run next usable below 1080px, stacks the queue at phone width, and prefills the next free job id.
 - `arthur capture --source-file` now uses the same instance-root path guard as MCP capture, so host files such as `/etc/passwd` are refused instead of being copied into project artifacts.
 - `arthur mcp serve` answers `Content-Length: abc` / `Content-Length: -1` with JSON-RPC `-32700` and keeps serving; those frames used to raise and kill the stdio process.
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).

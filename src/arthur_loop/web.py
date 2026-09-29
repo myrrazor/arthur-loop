@@ -18,7 +18,7 @@ from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision as _answer_decision
 from arthur_loop.decisions import list_decisions
 from arthur_loop.follow import follow_loop, preview_next_step
-from arthur_loop.loop_ops import apply_role_updates, create_loop, wizard_options
+from arthur_loop.loop_ops import _next_job_id, apply_role_updates, create_loop, wizard_options
 from arthur_loop.pathguard import READABLE_SUFFIXES, resolve_instance_file
 from arthur_loop.roles import formulate_default_loop, resolve_roles, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
@@ -107,6 +107,10 @@ class WebApp:
         payload["nextRun"] = preview_next_step(self.root)
         payload["loopWizard"] = wizard_options(self.root)
         payload["pendingReplies"] = self.pending_replies()
+        payload["nextJobIds"] = {
+            project["projectId"]: _next_job_id(self.root, project["projectId"])
+            for project in payload["projects"]
+        }
         return payload
 
     def pending_replies(self) -> list[dict[str, Any]]:
