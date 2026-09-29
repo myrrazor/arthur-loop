@@ -316,13 +316,21 @@ def enqueue_hop(
     return job
 
 
-def _pick_job(root: Path, project_id: str | None) -> QueueJob | None:
+def _pick_job(
+    root: Path,
+    project_id: str | None,
+    *,
+    jobs: dict[str, QueueJob] | None = None,
+) -> QueueJob | None:
     paused = set(open_human_decision_projects(root))
-    jobs = list(QueueLedger(root).latest_jobs().values())
+    if jobs is None:
+        loaded = list(QueueLedger(root).latest_jobs().values())
+    else:
+        loaded = list(jobs.values())
     if project_id:
-        jobs = [job for job in jobs if job.project_id == project_id]
+        loaded = [job for job in loaded if job.project_id == project_id]
     actionable = []
-    for job in jobs:
+    for job in loaded:
         if job.project_id in paused:
             continue
         if job.status in {"queued", "claimed", "submitted", "waiting_for_chatgpt"}:
@@ -342,10 +350,15 @@ def _job_role(root: Path, job: QueueJob, kind: str) -> str:
     return role_for_kind(kind)
 
 
-def preview_next_step(root: Path, project_id: str | None = None) -> dict[str, Any] | None:
+def preview_next_step(
+    root: Path,
+    project_id: str | None = None,
+    *,
+    jobs: dict[str, QueueJob] | None = None,
+) -> dict[str, Any] | None:
     """Read-only: which hop and role would run next."""
 
-    job = _pick_job(root, project_id)
+    job = _pick_job(root, project_id, jobs=jobs)
     if job is None:
         return None
     config = load_config(root)

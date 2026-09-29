@@ -119,19 +119,25 @@ class WebApp:
         }
         payload["roles"] = roles_payload(self.config)
         payload["loopSequence"] = formulate_default_loop(self.config).get("hops") or []
-        payload["nextRun"] = preview_next_step(self.root)
+        # Preview, pending replies, and next job ids all need the latest jobs.
+        # Read the ledger once and hand that snapshot down; a second pass per
+        # project made GET /api/status scale with the queue.
+        jobs = QueueLedger(self.root).latest_jobs()
+        payload["nextRun"] = preview_next_step(self.root, jobs=jobs)
         payload["loopWizard"] = wizard_options(self.root)
-        payload["pendingReplies"] = self.pending_replies()
+        payload["pendingReplies"] = self.pending_replies(jobs)
+        known_ids = set(jobs)
         payload["nextJobIds"] = {
-            project["projectId"]: _next_job_id(self.root, project["projectId"])
+            project["projectId"]: _next_job_id(self.root, project["projectId"], known=known_ids)
             for project in payload["projects"]
         }
         return payload
 
-    def pending_replies(self) -> list[dict[str, Any]]:
+    def pending_replies(self, jobs: dict[str, QueueJob] | None = None) -> list[dict[str, Any]]:
         """Submitted hops whose inbox is waiting on an empty sibling .out.md."""
 
-        jobs = QueueLedger(self.root).latest_jobs()
+        if jobs is None:
+            jobs = QueueLedger(self.root).latest_jobs()
         follow = self.root / "runtime" / "follow"
         if not follow.is_dir():
             return []

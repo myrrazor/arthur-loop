@@ -286,8 +286,19 @@ def _fill_project_map(data: dict[str, Any], atlas_key: str | None = None) -> dic
     return {str(k): str(v) for k, v in mapping.items()}
 
 
-def _next_job_id(root: Path, project_id: str, reserved: set[str] | None = None) -> str:
-    existing = set(QueueLedger(root).latest_jobs())
+def _next_job_id(
+    root: Path,
+    project_id: str,
+    reserved: set[str] | None = None,
+    *,
+    known: set[str] | None = None,
+) -> str:
+    # `known` is the job-id set already loaded by the caller. Scanning the
+    # ledger again here made one status response reread every job per project.
+    if known is None:
+        existing = set(QueueLedger(root).latest_jobs())
+    else:
+        existing = set(known)
     if reserved:
         existing |= reserved
     prefix = f"BQ-{project_id}-"

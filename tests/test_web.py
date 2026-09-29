@@ -17,8 +17,11 @@ from unittest.mock import patch
 from arthur_loop.artifact_store import save_chatgpt_artifact
 from arthur_loop.browser_lock import acquire_lock, read_lock
 from arthur_loop.cli import main
+from arthur_loop.follow import preview_next_step
 from arthur_loop.init_cli import seed_demo
-from arthur_loop.queue_ledger import QueueLedger
+from arthur_loop.loop_ops import _next_job_id
+from arthur_loop.queue_ledger import QueueJob, QueueLedger
+from arthur_loop.status import collect_status
 from arthur_loop.web import make_server
 
 
@@ -639,6 +642,63 @@ class ApiShapeTests(unittest.TestCase):
         self.assertEqual(created["roles"]["planner"]["agent"], "manual")
         self.assertEqual(created["roles"]["implementer"]["agent"], "codex")
         self.assertEqual(created["roles"]["implementer"]["model"], "gpt-5")
+
+    def test_status_payload_reuses_one_job_read(self) -> None:
+        root = self.root
+        for project_id in ("SHOP", "OTHER"):
+            state = root / "projects" / project_id / "state.md"
+            state.parent.mkdir(parents=True, exist_ok=True)
+            state.write_text(f"# {project_id}\n\nready\n", encoding="utf-8")
+        ledger = QueueLedger(root)
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-001", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="submitted"))
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-003", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="submitted"))
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-004", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="completed"))
+        ledger.record_job(QueueJob(job_id="BQ-OTHER-002", project_id="OTHER", target_chat_title="t", target_chat_url="manual", status="queued"))
+        ledger.record_job(QueueJob(job_id="BQ-OTHER-010", project_id="OTHER", target_chat_title="t", target_chat_url="manual", status="completed"))
+        follow = root / "runtime" / "follow"
+        follow.mkdir(parents=True, exist_ok=True)
+        (follow / "BQ-SHOP-001.inbox.md").write_text("inbox\n", encoding="utf-8")
+        (follow / "BQ-SHOP-001.out.md").write_text("   \n", encoding="utf-8")
+        (follow / "BQ-SHOP-003.inbox.md").write_text("inbox\n", encoding="utf-8")
+        (follow / "BQ-SHOP-003.out.md").write_text("already answered\n", encoding="utf-8")
+        (follow / "BQ-OTHER-002.inbox.md").write_text("inbox\n", encoding="utf-8")
+
+        app = self.server.arthur_app  # type: ignore[attr-defined]
+        config = app.config
+
+        def baseline() -> None:
+            collect_status(
+                root,
+                reserve_percent=float(config["reserve_policy"]["minimum_reserve_percent"]),
+                quota_enabled=bool(config["components"]["resource_governor"]),
+            )
+            preview_next_step(root)
+
+        def count_reads(fn) -> int:
+            calls = {"n": 0}
+            original = QueueLedger.latest_jobs
+
+            def wrapped(ledger, *args, **kwargs):
+                calls["n"] += 1
+                return original(ledger, *args, **kwargs)
+
+            with patch.object(QueueLedger, "latest_jobs", wrapped):
+                fn()
+            return calls["n"]
+
+        self.assertEqual(count_reads(app.status_payload), count_reads(baseline))
+        payload = app.status_payload()
+        self.assertEqual(
+            payload["nextJobIds"],
+            {project_id: _next_job_id(root, project_id) for project_id in ("SHOP", "OTHER")},
+        )
+        self.assertEqual([row["jobId"] for row in payload["pendingReplies"]], ["BQ-SHOP-001"])
+        self.assertEqual(payload["pendingReplies"], app.pending_replies())
+        with patch.object(QueueLedger, "latest_jobs", side_effect=AssertionError("ledger reread")):
+            self.assertEqual(
+                _next_job_id(root, "SHOP", {"BQ-SHOP-009"}, known={"BQ-SHOP-004"}),
+                "BQ-SHOP-010",
+            )
 
 
 if __name__ == "__main__":
