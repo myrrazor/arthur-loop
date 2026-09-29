@@ -391,6 +391,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .toast.ok { border-left-color: var(--go); }
+.toast.warn { border-left-color: var(--lock); }
 .toast.err { border-left-color: var(--quota); }
 .toast .t-title { font-weight: 700; }
 .toast .t-body { color: var(--text-muted); margin-top: 2px; }

@@ -440,16 +440,32 @@ def follow_step(
         )
         step["invoke"] = {k: v for k, v in invoked.items() if k != "prompt"}
         if invoked.get("status") == "needs_human":
-            step["action"] = "needs_human"
-            step["human_gates"] = [
-                f"{adapter} transport is human-gated; inbox at {invoked.get('inbox')}"
-            ]
-            return step
-        if invoked.get("status") != "ok":
+            # A human gate must not leave the job claimed under a dead holder.
+            # An already-pasted sibling .out.md is captured on this step; an
+            # empty one moves the job to submitted and drops the lease so the
+            # next follow reads the reply instead of invoking again.
+            out_path = follow_dir(root) / f"{job.job_id}.out.md"
+            pasted = out_path.is_file() and bool(out_path.read_text(encoding="utf-8").strip())
+            job = submit_job(root, job.job_id, holder=holder, keep_lock=pasted)
+            step["submitted"] = job.to_record()
+            if not pasted:
+                out_rel = out_path.relative_to(root).as_posix()
+                inbox = invoked.get("inbox")
+                step["action"] = "needs_human"
+                step["out"] = out_rel
+                step["lock_released"] = True
+                step["note"] = str(invoked.get("note") or "")
+                where = f"paste the reply into {out_rel}"
+                if inbox:
+                    where += f" (inbox {inbox})"
+                step["human_gates"] = [f"{adapter} transport is human-gated; {where}"]
+                return step
+        elif invoked.get("status") != "ok":
             step["action"] = "invoke_failed"
             return step
-        job = submit_job(root, job.job_id, holder=holder, keep_lock=True)
-        step["submitted"] = job.to_record()
+        else:
+            job = submit_job(root, job.job_id, holder=holder, keep_lock=True)
+            step["submitted"] = job.to_record()
 
     if job.status in {"submitted", "waiting_for_chatgpt"}:
         out_path = follow_dir(root) / f"{job.job_id}.out.md"

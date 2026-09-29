@@ -106,11 +106,23 @@ async function poll() {
 
 /* ---- derived: the next-action headline --------------------------------- */
 
+function pendingReplyLine(status) {
+  const rows = status.pendingReplies || [];
+  if (!rows.length) return null;
+  const row = rows[0];
+  const extra = rows.length > 1 ? ` (+${rows.length - 1} more)` : "";
+  return `awaited for ${row.jobId} — paste into ${row.out}${extra}`;
+}
+
 function nextAction(status) {
   const meta = STATE_META[status.state] || STATE_META.WAIT;
   const now = Date.now();
   if (status.state === "HUMAN_INPUT_REQUIRED" && status.decisions.length) {
     return { verb: "Answer", target: status.decisions[0].title, color: meta.color };
+  }
+  const pending = pendingReplyLine(status);
+  if (pending && status.state !== "POLL_DUE" && status.state !== "BLOCKED_BY_BROWSER_LOCK") {
+    return { verb: "Reply", target: pending, color: "var(--human)" };
   }
   if (status.state === "POLL_DUE" && status.tick.dueJobId) {
     const job = status.queue.find((j) => j.jobId === status.tick.dueJobId);
@@ -176,6 +188,10 @@ function updateFreshness() {
   txt.textContent = "live";
 }
 
+function webRunHolder(holder) {
+  return String(holder || "").startsWith("web-run-next");
+}
+
 function renderLock(s) {
   const wrap = bind("lock-chip");
   const lock = s.browserLock;
@@ -184,11 +200,22 @@ function renderLock(s) {
   wrap.classList.toggle("is-stale", !lock.fresh);
   bind("lock-text").textContent = lock.fresh ? `lock: ${lock.holder}` : `stale lock: ${lock.holder}`;
   const btn = bind("lock-break");
-  btn.hidden = lock.fresh; // breaking a fresh lock would yank it from an active agent
+  // A fresh CLI holder is still working. A stale lock, or one left by a
+  // finished web Run next, can be broken after an explicit confirm.
+  const recoverable = !lock.fresh || webRunHolder(lock.holder);
+  btn.hidden = !recoverable;
   btn.onclick = async () => {
+    const who = lock.holder || "the current holder";
+    const prompt = lock.fresh
+      ? `Break the lock held by ${who}? Only if that web run has finished.`
+      : `Break the stale lock held by ${who}?`;
+    if (!window.confirm(prompt)) return;
     btn.disabled = true;
-    try { await action("/api/actions/break-lock", {}); toast("ok", "Stale lock broken", lock.holder); poll(); }
-    catch (e) { toast("err", "Could not break lock", e.message); }
+    try {
+      await action("/api/actions/break-lock", { force: true });
+      toast("ok", "Lock broken", who);
+      poll();
+    } catch (e) { toast("err", "Could not break lock", e.message); }
     finally { btn.disabled = false; }
   };
 }
@@ -228,13 +255,15 @@ function railSignature(s) {
     s.tick.staleJobIds,
     s.sessions.map((x) => [x.sessionId, x.state, x.activity, x.stale, x.projectId]),
     (s.quarantine || []).map((q) => q.path),
+    (s.pendingReplies || []).map((row) => [row.jobId, row.out]),
   ]);
 }
 
 function renderRail(s) {
   const body = bind("rail-body");
   const quarantine = s.quarantine || [];
-  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0) + quarantine.length;
+  const pending = s.pendingReplies || [];
+  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0) + quarantine.length + pending.length;
   const badge = bind("attention-badge");
   badge.hidden = attention === 0; badge.textContent = attention;
 
@@ -253,6 +282,11 @@ function renderRail(s) {
   if (s.decisions.length) {
     body.append(el("div", "rail-group-title", "Open decisions"));
     for (const d of s.decisions) body.append(decisionCard(d));
+  }
+
+  if (pending.length) {
+    body.append(el("div", "rail-group-title", "Replies awaited"));
+    for (const row of pending) body.append(pendingReplyCard(row));
   }
 
   const staleIds = new Set(s.tick.staleJobIds || []);
@@ -292,6 +326,18 @@ function quarantineCard(q) {
   const inspect = el("button", "btn ghost sm", "Inspect");
   inspect.onclick = () => openFile(q.path, `${q.projectId} quarantined ${q.kind}`);
   actions.append(inspect);
+  card.append(actions);
+  return card;
+}
+
+function pendingReplyCard(row) {
+  const card = el("div", "stale-job");
+  card.append(el("div", "s-id", row.jobId));
+  card.append(el("div", "s-meta", `Paste the reply into ${row.out}`));
+  const actions = el("div", "s-actions");
+  const view = el("button", "btn ghost sm", "Inbox");
+  view.onclick = () => openFile(row.inbox, `${row.jobId} inbox`);
+  actions.append(view);
   card.append(actions);
   return card;
 }
@@ -543,6 +589,7 @@ function patchCanvas(s) {
 function deriveCanvas(s) {
   const by = (pred) => s.queue.filter(pred).length;
   const decisions = s.decisions.length;
+  const pending = (s.pendingReplies || []).length;
   const sessions = s.sessions.filter((x) => !x.stale);
   const execSess = sessions.filter((x) => x.role === "executor" || x.role === "project-loop");
   const queued = by((j) => j.status === "queued");
@@ -553,7 +600,16 @@ function deriveCanvas(s) {
     inflight: { big: String(inflight), sub: "awaiting advisor", n: inflight, mood: inflight ? "warn" : "idle", pip: inflight ? "var(--lock)" : "var(--wait)" },
     executor: { big: String(execSess.length), sub: execSess[0] ? execSess[0].projectId || "working" : "idle", n: execSess.length, mood: execSess.length ? "active" : "idle", pip: execSess.length ? "var(--go)" : "var(--wait)" },
     gate: { big: String(by((j) => j.status === "needs_recovery")), sub: "review · recover", mood: by((j) => j.status === "needs_recovery") ? "warn" : "idle", pip: by((j) => j.status === "needs_recovery") ? "var(--quota)" : "var(--wait)" },
-    human: { big: String(decisions), sub: decisions === 1 ? "decision open" : "decisions open", mood: decisions ? "blocked" : "idle", pip: decisions ? "var(--human)" : "var(--wait)" },
+    human: {
+      big: String(decisions || pending),
+      sub: decisions
+        ? (decisions === 1 ? "decision open" : "decisions open")
+        : pending
+          ? `reply awaited · ${(s.pendingReplies[0].out || "").split("/").pop()}`
+          : "decisions open",
+      mood: decisions || pending ? "blocked" : "idle",
+      pip: decisions || pending ? "var(--human)" : "var(--wait)",
+    },
   };
 }
 
@@ -941,14 +997,36 @@ document.querySelectorAll(".railnav-item").forEach((b, i) => {
   b.onclick = () => setView(b.dataset.view);
   if (i < 5) b.title = `Shortcut: ${i + 1}`;
 });
+function runNextToast(record) {
+  const step = (record.steps && record.steps[0]) || {};
+  const stopped = record.stopped;
+  const note = step.note || (step.humanGates && step.humanGates[0]) || "";
+  const inbox = step.invoke && step.invoke.inbox;
+  if (stopped === "needs_human") {
+    const where = step.out ? `paste into ${step.out}` : "";
+    const body = [note, inbox ? `inbox ${inbox}` : "", where].filter(Boolean).join(" — ");
+    return { kind: "warn", title: "Reply needed", body: body || stopped };
+  }
+  if (stopped === "waiting_for_output") {
+    return { kind: "warn", title: "Waiting for reply", body: note || stopped };
+  }
+  if (stopped === "stop" || step.reason === "claimed_by_other") {
+    return { kind: "err", title: "Run next stopped", body: note || step.reason || stopped };
+  }
+  if (stopped === "invoke_failed" || stopped === "waiting_for_marker" || stopped === "gate_no_go") {
+    return { kind: "err", title: "Run next stopped", body: note || stopped };
+  }
+  const label = step.role ? `${step.role} · ${step.adapter || ""}` : stopped;
+  return { kind: "ok", title: "Run next", body: label || stopped };
+}
+
 async function runNextHop() {
   const btn = document.querySelector('[data-action="run-next"]');
   if (btn) btn.disabled = true;
   try {
     const record = await action("/api/actions/run-next", { once: true });
-    const step = (record.steps && record.steps[0]) || {};
-    const label = step.role ? `${step.role} · ${step.adapter || ""}` : record.stopped;
-    toast(record.stopped === "invoke_failed" ? "err" : "ok", "Run next", label || record.stopped);
+    const toastInfo = runNextToast(record);
+    toast(toastInfo.kind, toastInfo.title, toastInfo.body);
     poll();
   } catch (e) {
     toast("err", "Could not run next hop", e.message);

@@ -36,6 +36,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 
 ### Fixed
 
+- Web Run next keeps one process holder, releases the browser lock when a hop is waiting on a human reply, and returns 409 (not 500) when that lock is still held. Break accepts `{"force": true}`.
 - `arthur capture --source-file` now uses the same instance-root path guard as MCP capture, so host files such as `/etc/passwd` are refused instead of being copied into project artifacts.
 - `arthur mcp serve` answers `Content-Length: abc` / `Content-Length: -1` with JSON-RPC `-32700` and keeps serving; those frames used to raise and kill the stdio process.
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).

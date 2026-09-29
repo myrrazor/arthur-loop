@@ -27,6 +27,9 @@ from arthur_loop.status import clear_session, collect_status, status_to_dict
 
 
 DEFAULT_PORT = 7433
+# One holder for every Run next in this process. A fresh id per click made
+# the second claim collide with the lock the first click was still holding.
+WEB_RUN_HOLDER = "web-run-next"
 
 # routes that never need the session token: the bootstrap page (which itself
 # requires ?token=) and the static assets it loads
@@ -67,6 +70,7 @@ class WebApp:
         # one secret per process: the operator gets it in the URL `arthur web` prints,
         # and every read or write over the API must present it
         self.token = secrets.token_urlsafe(24)
+        self.run_holder = WEB_RUN_HOLDER
         # ThreadingHTTPServer: writes are read-modify-write, serialize them
         self._write_lock = threading.Lock()
 
@@ -102,7 +106,39 @@ class WebApp:
         payload["loopSequence"] = formulate_default_loop(self.config).get("hops") or []
         payload["nextRun"] = preview_next_step(self.root)
         payload["loopWizard"] = wizard_options(self.root)
+        payload["pendingReplies"] = self.pending_replies()
         return payload
+
+    def pending_replies(self) -> list[dict[str, Any]]:
+        """Submitted hops whose inbox is waiting on an empty sibling .out.md."""
+
+        jobs = QueueLedger(self.root).latest_jobs()
+        follow = self.root / "runtime" / "follow"
+        if not follow.is_dir():
+            return []
+        waiting_status = {"submitted", "waiting_for_chatgpt", "claimed"}
+        pending: list[dict[str, Any]] = []
+        for inbox in sorted(follow.glob("*.inbox.md")):
+            job_id = inbox.name[: -len(".inbox.md")]
+            out = follow / f"{job_id}.out.md"
+            try:
+                if out.is_file() and out.read_text(encoding="utf-8").strip():
+                    continue
+            except OSError:
+                continue
+            job = jobs.get(job_id)
+            if job is None or job.status not in waiting_status:
+                continue
+            pending.append(
+                {
+                    "jobId": job.job_id,
+                    "projectId": job.project_id,
+                    "status": job.status,
+                    "inbox": inbox.relative_to(self.root).as_posix(),
+                    "out": out.relative_to(self.root).as_posix(),
+                }
+            )
+        return pending
 
     def _decision_bodies(self) -> dict[str, str]:
         """Map open-decision titles to their question text (status line stripped)."""
@@ -248,7 +284,7 @@ class WebApp:
             once=bool(once),
             max_steps=int(body.get("max_steps") or 12),
             project_id=str(body["project_id"]).strip() if body.get("project_id") else None,
-            holder=f"web-run-next-{secrets.token_hex(8)}",
+            holder=self.run_holder,
             chain=body.get("chain", True),
             dry_run=bool(body.get("dry_run")),
         )
@@ -257,16 +293,14 @@ class WebApp:
         cleared = clear_session(self.root, session_id)
         return {"session_id": session_id, "cleared": cleared}
 
-    def break_lock(self) -> dict[str, Any]:
-        """Remove a STALE browser lock. A fresh lock means the holder is active: refuse."""
+    def break_lock(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Remove a browser lock. A fresh lock needs {"force": true}."""
 
+        force = bool((body or {}).get("force"))
         with self._write_lock:
             if read_lock(self.root) is None:
                 return {"broken": False, "reason": "no lock held"}
-            try:
-                broken = break_lock(self.root, force=False, via="web-console")
-            except BrowserLockError as exc:
-                raise ValueError(str(exc))
+            broken = break_lock(self.root, force=force, via="web-console")
         return {"broken": broken is not None, "holder": broken.holder if broken else None}
 
 
@@ -374,6 +408,8 @@ class Handler(BaseHTTPRequestHandler):
                 except FileNotFoundError:
                     return self._fail(HTTPStatus.NOT_FOUND, "no such file")
             return self._fail(HTTPStatus.NOT_FOUND, "unknown route")
+        except BrowserLockError as exc:
+            return self._fail(HTTPStatus.CONFLICT, str(exc))
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
             return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
@@ -405,13 +441,15 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/actions/clear-session":
                 return self._send_json(self.app.clear_session_action(str(body.get("session_id", ""))))
             if self.path == "/api/actions/break-lock":
-                return self._send_json(self.app.break_lock())
+                return self._send_json(self.app.break_lock(body))
             return self._fail(HTTPStatus.NOT_FOUND, "unknown action")
         except KeyError as exc:
             # str(KeyError) wraps the message in quotes
             return self._fail(HTTPStatus.BAD_REQUEST, str(exc.args[0]) if exc.args else str(exc))
         except ValueError as exc:
             return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
+        except BrowserLockError as exc:
+            return self._fail(HTTPStatus.CONFLICT, str(exc))
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
             return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
