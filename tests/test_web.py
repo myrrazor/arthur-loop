@@ -155,6 +155,12 @@ class WebConsoleTests(unittest.TestCase):
         self.assertIn("arthur-loop-token", script)
         self.assertIn('aria-label", "Project"', script)
 
+    def test_canvas_bars_stay_in_separate_halves(self) -> None:
+        with self._get("/assets/style.css", token=None) as response:
+            css = response.read().decode("utf-8")
+        self.assertIn("max-width: calc(50% - 8px)", css)
+        self.assertIn(".canvas-legend { right: var(--pad); max-width: none; }", css)
+
     def test_events_endpoint_returns_recent_first(self) -> None:
         with self._get("/api/events?n=5") as response:
             events = json.load(response)

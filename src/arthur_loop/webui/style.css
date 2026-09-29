@@ -205,6 +205,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .canvas-legend {
   position: absolute; left: var(--pad); bottom: var(--pad);
   display: flex; gap: 14px; flex-wrap: wrap;
+  max-width: calc(50% - 8px);
   padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(8px); font-size: 10.5px; color: var(--text-muted);
@@ -213,6 +214,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .canvas-legend i { width: 8px; height: 8px; border-radius: 2px; }
 .canvas-hint {
   position: absolute; right: var(--pad); bottom: var(--pad);
+  max-width: calc(50% - 8px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 10.5px; color: var(--text-faint);
   padding: 7px 11px; border: 1px solid var(--line-soft); border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
@@ -465,7 +468,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 @media (max-width: 720px) {
   .role-strip { right: 72px; }
   .canvas-hint { display: none; }
-  .canvas-legend { right: var(--pad); }
+  .canvas-legend { right: var(--pad); max-width: none; }
   .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
   .topbar-right { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
   .topbar-state { flex: 1 1 100%; order: 5; margin-left: 0; }
