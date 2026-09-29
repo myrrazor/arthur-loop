@@ -15,6 +15,7 @@ Human gates that remain (minimized, documented):
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import Any, Callable
 
 from arthur_loop.artifact_store import ARTIFACT_KINDS, implementation_gate, save_chatgpt_artifact
 from arthur_loop.browser_lock import release_lock
-from arthur_loop.config import load_config
+from arthur_loop.config import DEFAULT_INVOKE_TIMEOUT_SECONDS, load_config
 from arthur_loop.roles import assignment_for, next_hop_kind, role_for_kind
 from arthur_loop.loop_ops import (
     _next_job_id,
@@ -159,6 +160,8 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
             "inbox": inbox.relative_to(root).as_posix(),
             "note": f"{binary} is not on PATH; wrote the prompt inbox. Install the CLI or capture a reply by hand.",
         }
+    raw_timeout = request.get("timeout")
+    timeout = DEFAULT_INVOKE_TIMEOUT_SECONDS if raw_timeout is None else float(raw_timeout)
     try:
         proc = subprocess.run(
             argv,
@@ -166,7 +169,7 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
             capture_output=True,
             check=False,
             cwd=str(root),
-            timeout=float(request.get("timeout") or 120),
+            timeout=timeout,
             stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -375,11 +378,18 @@ def follow_step(
     invoke: Invoker | None = None,
     chain: bool = True,
     dry_run: bool = False,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """One auto-follow step. Returns a JSON-serializable record."""
 
     invoke = invoke or default_invoke
     config = load_config(root)
+    if timeout is None:
+        timeout_seconds = float(
+            config["polling_policy"].get("invoke_timeout_seconds") or DEFAULT_INVOKE_TIMEOUT_SECONDS
+        )
+    else:
+        timeout_seconds = float(timeout)
     tick = classify_tick(root, dry_run=True, quota_enabled=bool(config["components"]["resource_governor"]))
     paused = _human_gates(root, project_id)
     if tick.status == "BLOCKED_BY_QUOTA":
@@ -434,7 +444,10 @@ def follow_step(
 
     if job.status == "queued":
         ensure_project_not_paused(root, job.project_id)
-        job = claim_job(root, job.job_id, holder=holder)
+        # The lease has to outlive the invoke. A 15-minute TTL used to go stale
+        # under a long agent run and let another holder steal the browser.
+        ttl_minutes = max(15, math.ceil(timeout_seconds / 60) + 1)
+        job = claim_job(root, job.job_id, holder=holder, ttl_minutes=ttl_minutes)
         step["claimed"] = job.to_record()
 
     if job.status == "claimed":
@@ -455,6 +468,7 @@ def follow_step(
                 "model": model,
                 "prompt": prompt,
                 "expected_marker": job.expected_marker,
+                "timeout": timeout_seconds,
             },
         )
         step["invoke"] = {k: v for k, v in invoked.items() if k != "prompt"}
@@ -480,7 +494,12 @@ def follow_step(
                 step["human_gates"] = [f"{adapter} transport is human-gated; {where}"]
                 return step
         elif invoked.get("status") != "ok":
+            error = str(invoked.get("error") or invoked.get("stderr_head") or "invoke failed")
+            failed = QueueLedger(root).transition(job.job_id, "needs_recovery", error=error)
+            step["lock_released"] = release_lock(root, holder)
+            step["recovered"] = failed.to_record()
             step["action"] = "invoke_failed"
+            step["note"] = error
             return step
         else:
             job = submit_job(root, job.job_id, holder=holder, keep_lock=True)
@@ -567,6 +586,7 @@ def follow_loop(
     invoke: Invoker | None = None,
     chain: bool = True,
     dry_run: bool = False,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """Run one or more follow steps until idle, human-gated, or max_steps."""
 
@@ -581,6 +601,7 @@ def follow_loop(
             invoke=invoke,
             chain=chain,
             dry_run=dry_run,
+            timeout=timeout,
         )
         steps.append(step)
         action = str(step.get("action") or "noop")

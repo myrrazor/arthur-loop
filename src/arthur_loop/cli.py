@@ -1326,6 +1326,7 @@ def cmd_follow(args: argparse.Namespace) -> int:
         holder=args.holder,
         chain=not args.no_chain,
         dry_run=args.dry_run,
+        timeout=getattr(args, "timeout", None),
     )
     print_record(record)
     stopped = record.get("stopped")
@@ -1354,6 +1355,12 @@ def _build_follow_parser(subparsers: Any) -> None:
     follow.add_argument("--holder", default="arthur-follow")
     follow.add_argument("--no-chain", action="store_true", help="Do not enqueue the next hop from the control block")
     follow.add_argument("--dry-run", action="store_true")
+    follow.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Seconds to wait for the agent CLI (default: polling_policy.invoke_timeout_seconds, 45 minutes)",
+    )
     follow.set_defaults(func=cmd_follow)
 
 
@@ -1402,6 +1409,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     args.holder = getattr(args, "holder", None) or "arthur-follow"
     args.no_chain = getattr(args, "no_chain", False)
     args.dry_run = getattr(args, "dry_run", False)
+    args.timeout = getattr(args, "timeout", None)
     return cmd_follow(args)
 
 
@@ -1421,6 +1429,12 @@ def _build_run_parser(subparsers: Any) -> None:
     run.add_argument("--holder", default="arthur-follow")
     run.add_argument("--no-chain", action="store_true")
     run.add_argument("--dry-run", action="store_true")
+    run.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Seconds to wait for the agent CLI (default: polling_policy.invoke_timeout_seconds, 45 minutes)",
+    )
     run.set_defaults(func=cmd_run, once=True)
 
 
@@ -1477,6 +1491,7 @@ def main(argv: list[str] | None = None) -> int:
             args.holder = "arthur-follow"
             args.no_chain = False
             args.dry_run = False
+            args.timeout = None
             try:
                 return cmd_follow(args)
             except (BrowserLockError, KeyError, ValueError, OSError, RuntimeError) as exc:

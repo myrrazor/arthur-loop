@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import io
 import json
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from arthur_loop.browser_lock import read_lock
 from arthur_loop.cli import main
-from arthur_loop.follow import follow_loop, transport_argv
+from arthur_loop.config import DEFAULT_INVOKE_TIMEOUT_SECONDS, load_config
+from arthur_loop.follow import default_invoke, follow_loop, transport_argv
 from arthur_loop.mcp import dispatch_tool
-from arthur_loop.queue_ledger import QueueLedger
+from arthur_loop.queue_ledger import QueueLedger, parse_ledger_time
 
 
 REPLY = """# Next plan
@@ -224,6 +227,80 @@ class FollowTests(unittest.TestCase):
             self.assertNotIn("NOT_A_REAL_TOKEN", rendered)
             self.assertIn("(not available)", rendered)
             self.assertIn(report["steps"][0]["capture"]["path"], rendered)
+
+    def test_invoke_timeout_defaults_long_and_failure_is_recoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            self.assertEqual(
+                load_config(root)["polling_policy"]["invoke_timeout_seconds"],
+                DEFAULT_INVOKE_TIMEOUT_SECONDS,
+            )
+            code, out, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "codex",
+                    "--executor", "codex",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            job_id = json.loads(out)["job"]["job_id"]
+            seen: dict = {}
+
+            def _boom(instance: Path, request: dict) -> dict:
+                seen["timeout"] = request.get("timeout")
+                seen["lock"] = json.loads((instance / "runtime/browser-lock.json").read_text(encoding="utf-8"))
+                return {"status": "error", "error": "timed out waiting"}
+
+            with patch("arthur_loop.follow.default_invoke", side_effect=_boom):
+                code, _, err = _run(["follow", "--root", tmp, "--once", "--timeout", "0.2"])
+            self.assertEqual(code, 2, err)
+            self.assertEqual(seen["timeout"], 0.2)
+            job = QueueLedger(root).latest_jobs()[job_id]
+            self.assertEqual(job.status, "needs_recovery")
+            self.assertIn("timed out", job.last_error or "")
+            self.assertIsNone(read_lock(root))
+            self.assertNotEqual(job.claimed_by, None)
+
+            code, _, err = _run(["queue", "--root", tmp, "recover", "--job-id", job_id, "--requeue"])
+            self.assertEqual(code, 0, err)
+            follow_loop(root, once=True, invoke=_boom, timeout=3600)
+            acquired = parse_ledger_time(seen["lock"]["acquired_at"])
+            stale = parse_ledger_time(seen["lock"]["stale_after"])
+            self.assertIsNotNone(acquired)
+            self.assertIsNotNone(stale)
+            self.assertGreaterEqual((stale - acquired).total_seconds(), 3600)
+            self.assertEqual(QueueLedger(root).latest_jobs()[job_id].status, "needs_recovery")
+            self.assertIsNone(read_lock(root))
+
+            code, _, err = _run(["queue", "--root", tmp, "recover", "--job-id", job_id, "--requeue"])
+            self.assertEqual(code, 0, err)
+            cfg_path = root / "config" / "arthur-loop.json"
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            cfg.setdefault("polling_policy", {})["invoke_timeout_seconds"] = 99
+            cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+            follow_loop(root, once=True, invoke=_boom)
+            self.assertEqual(seen["timeout"], 99)
+
+            with patch(
+                "arthur_loop.follow.transport_argv",
+                return_value=[sys.executable, "-c", "import time; time.sleep(30)"],
+            ):
+                result = default_invoke(
+                    root,
+                    {"adapter": "codex", "prompt": "ping", "job_id": "BQ-TIMEOUT", "timeout": 0.3, "model": ""},
+                )
+            self.assertEqual(result["status"], "error")
+            self.assertIn("timed out", result["error"].lower())
+
+            for command in ("follow", "run"):
+                help_out = io.StringIO()
+                with redirect_stdout(help_out):
+                    with self.assertRaises(SystemExit) as ctx:
+                        main([command, "--help"])
+                self.assertEqual(ctx.exception.code, 0)
+                self.assertIn("--timeout", help_out.getvalue())
 
     def test_mcp_follow_run_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
