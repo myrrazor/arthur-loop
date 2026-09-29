@@ -424,7 +424,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .role-strip {
   position: absolute;
   left: 14px;
-  right: 14px;
+  /* Fit (.canvas-reset) is top-right; keep it clear of the chips at every width. */
+  right: 72px;
   top: 10px;
   display: flex;
   flex-wrap: wrap;
@@ -466,7 +467,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 }
 
 @media (max-width: 720px) {
-  .role-strip { right: 72px; }
   .canvas-hint { display: none; }
   .canvas-legend { right: var(--pad); max-width: none; }
   .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
