@@ -142,7 +142,10 @@ class WebConsoleTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
 
     def test_recover_job_parks_then_requeues(self) -> None:
+        from arthur_loop.loop_ops import claim_job
+
         ledger = QueueLedger(self.root)
+        claim_job(self.root, "BQ-DEMO_APP-002", holder="web-test")
         with self._post(
             "/api/actions/recover-job",
             {"job_id": "BQ-DEMO_APP-002", "requeue": True},

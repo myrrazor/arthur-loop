@@ -49,6 +49,11 @@ def recover_job(
     current = ledger.require_job(job_id)
     if current.status in TERMINAL_STATUSES:
         raise ValueError(f"{job_id} is {current.status}; finished jobs are not recoverable")
+    if current.status == "queued" and not current.claimed_by:
+        raise ValueError(
+            f"{job_id} is queued and has never been claimed; nothing to recover. "
+            "Cancel it, or let the loop claim it."
+        )
 
     note = error
     if current.last_error and error and error != current.last_error:

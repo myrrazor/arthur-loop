@@ -171,17 +171,18 @@ class RecoverLockStealTests(unittest.TestCase):
             acquire_lock(root, "browser-queue-manager", now=T0)
             ledger.transition("BQ-KN-001", "claimed", now=T0, holder="browser-queue-manager")
 
-            result = recover_job(
-                root,
-                "BQ-KN-002",
-                requeue=False,
-                now=T0,
-                holder_hint="browser-queue-manager",
-            )
+            with self.assertRaises(ValueError) as ctx:
+                recover_job(
+                    root,
+                    "BQ-KN-002",
+                    requeue=False,
+                    now=T0,
+                    holder_hint="browser-queue-manager",
+                )
 
-            self.assertIsNone(result.released_lock)
+            self.assertIn("never been claimed", str(ctx.exception))
             self.assertEqual(read_lock(root).holder, "browser-queue-manager")
-            self.assertIn("did not claim", result.lock_note)
+            self.assertEqual(ledger.latest_jobs()["BQ-KN-002"].status, "queued")
 
     def test_recover_still_releases_the_claimer_of_the_abandoned_job(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

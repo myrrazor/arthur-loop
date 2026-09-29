@@ -26,7 +26,7 @@ from arthur_loop.roles import (
     validate_roles,
 )
 from arthur_loop.decisions import PROJECT_ID_RE
-from arthur_loop.queue_ledger import QueueJob, QueueLedger
+from arthur_loop.queue_ledger import TERMINAL_STATUSES, QueueJob, QueueLedger
 from arthur_loop.tick import open_human_decision_projects
 
 
@@ -444,6 +444,23 @@ def ensure_project(root: Path, project_id: str, *, goal: str = "") -> dict[str, 
     return {"project_id": project_id, "state_path": state_rel, "created": created}
 
 
+def _loop_honest_copy(*, created_project: bool, seeded_job: bool, hops: list[dict[str, Any]]) -> str:
+    if created_project and seeded_job:
+        lead = "Created a project and the first queue job."
+    elif created_project:
+        lead = "Created a project. No queue job was seeded."
+    elif seeded_job:
+        lead = "The project already existed. Seeded a queue job."
+    else:
+        lead = "The project already existed. No queue job was seeded."
+    order = " → ".join(f"{hop['role']}({hop['agent']})" for hop in hops)
+    return (
+        f"{lead} This is not a drag-drop graph composer. "
+        f"Assigned agents run in order: {order}. "
+        "Run `arthur` or `arthur run` to invoke the next role."
+    )
+
+
 def create_loop(
     root: Path,
     *,
@@ -471,6 +488,17 @@ def create_loop(
     project_id = project_id.strip()
     if not PROJECT_ID_PATTERN.match(project_id):
         raise ValueError(f"project id {project_id!r} must be a single word like MY_APP")
+    if seed_job:
+        live = sorted(
+            job.job_id
+            for job in QueueLedger(root).latest_jobs().values()
+            if job.project_id == project_id and job.status not in TERMINAL_STATUSES
+        )
+        if live:
+            raise ValueError(
+                f"{project_id} already has a non-terminal queue job ({', '.join(live)}). "
+                "Finish or cancel it before seeding another loop job."
+            )
 
     ticket = (ticket or "").strip() or None
     if ticket and not goal.strip():
@@ -544,11 +572,10 @@ def create_loop(
         "sequence": sequence,
         "ticket": ticket,
         "job": job_record,
-        "honest_copy": (
-            "Created a project and the first queue job. This is not a drag-drop "
-            "graph composer. Assigned agents run in order: "
-            + " → ".join(f"{hop['role']}({hop['agent']})" for hop in sequence["hops"])
-            + ". Run `arthur` or `arthur run` to invoke the next role."
+        "honest_copy": _loop_honest_copy(
+            created_project=bool(project.get("created")),
+            seeded_job=job_record is not None,
+            hops=sequence["hops"],
         ),
         "next": [
             "arthur",
