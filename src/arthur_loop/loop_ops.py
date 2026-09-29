@@ -21,6 +21,7 @@ from arthur_loop.roles import (
     ROLE_AGENTS,
     formulate_default_loop,
     merge_roles,
+    parse_role_spec,
     resolve_roles,
     roles_payload,
     validate_roles,
@@ -231,8 +232,10 @@ def apply_role_updates(
         for role, value in roles.items():
             if role not in LOOP_ROLES:
                 raise ValueError(f"unknown role {role!r} — expected one of {list(LOOP_ROLES)}")
-            if not isinstance(value, dict):
-                raise ValueError(f"role {role} must be an object with agent and optional model")
+            if isinstance(value, str):
+                value = parse_role_spec(value)
+            elif not isinstance(value, dict):
+                raise ValueError(f"role {role} must be an object with agent and optional model, or agent[:model]")
             overlay[role] = {
                 "agent": str(value.get("agent") or current[role]["agent"]),
                 "model": str(value.get("model") if value.get("model") is not None else current[role].get("model") or ""),

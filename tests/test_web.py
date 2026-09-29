@@ -502,5 +502,84 @@ class RunNextResumeTests(unittest.TestCase):
                 server.server_close()
 
 
+class ApiShapeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        code, _, err = _cli(
+            [
+                "init", "--root", self._tmp.name, "--yes", "--main-agent", "none",
+                "--advisor", "manual", "--executor", "manual", "--tracker", "none",
+                "--no-governor", "--no-integrations",
+            ]
+        )
+        if code != 0:
+            raise AssertionError(err)
+        self.root = Path(self._tmp.name)
+        self.server = make_server(self.root, port=0)
+        self.token = self.server.arthur_app.token  # type: ignore[attr-defined]
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self._tmp.cleanup()
+
+    def _get(self, path: str):
+        request = urllib.request.Request(self.base + path, headers={"X-Arthur-Token": self.token})
+        return urllib.request.urlopen(request, timeout=5)
+
+    def _post_raw(self, path: str, data: bytes | None) -> tuple[int, dict]:
+        headers = {"X-Arthur-Token": self.token, "Content-Type": "application/json"}
+        request = urllib.request.Request(self.base + path, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8")
+            return exc.code, json.loads(raw) if raw else {}
+
+    def test_file_without_a_path_is_400(self) -> None:
+        for path in ("/api/file", "/api/file?path="):
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self._get(path)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertIn(b"required", ctx.exception.read().lower())
+
+    def test_unknown_action_is_404_before_the_body_is_read(self) -> None:
+        for data in (None, b"", b'{"unused": true}'):
+            code, body = self._post_raw("/api/actions/not-a-real-action", data)
+            self.assertEqual(code, 404, body)
+            self.assertIn("unknown action", body.get("error", ""))
+
+    def test_role_strings_are_accepted_beside_objects(self) -> None:
+        code, saved = self._post_raw(
+            "/api/actions/set-roles",
+            json.dumps({"roles": {"reviewer": "claude-code:opus"}}).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, saved)
+        self.assertEqual(saved["roles"]["reviewer"]["agent"], "claude-code")
+        self.assertEqual(saved["roles"]["reviewer"]["model"], "opus")
+
+        code, created = self._post_raw(
+            "/api/actions/create-loop",
+            json.dumps(
+                {
+                    "project_id": "SHOP",
+                    "seed_job": False,
+                    "roles": {
+                        "planner": "manual",
+                        "implementer": {"agent": "codex", "model": "gpt-5"},
+                    },
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, created)
+        self.assertEqual(created["roles"]["planner"]["agent"], "manual")
+        self.assertEqual(created["roles"]["implementer"]["agent"], "codex")
+        self.assertEqual(created["roles"]["implementer"]["model"], "gpt-5")
+
+
 if __name__ == "__main__":
     unittest.main()

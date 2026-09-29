@@ -44,6 +44,17 @@ STATIC_FILES = {
 # viewer cap — loop logs grow without bound, don't slurp them whole
 MAX_VIEW_BYTES = 2_000_000
 
+ACTION_PATHS = {
+    "/api/actions/answer-decision",
+    "/api/actions/recover-job",
+    "/api/actions/create-job",
+    "/api/actions/create-loop",
+    "/api/actions/set-roles",
+    "/api/actions/run-next",
+    "/api/actions/clear-session",
+    "/api/actions/break-lock",
+}
+
 
 def _camel_key(key: str) -> str:
     head, *rest = key.split("_")
@@ -411,6 +422,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
                 except FileNotFoundError:
                     return self._fail(HTTPStatus.NOT_FOUND, "no such file")
+                except ValueError as exc:
+                    return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
             return self._fail(HTTPStatus.NOT_FOUND, "unknown route")
         except BrowserLockError as exc:
             return self._fail(HTTPStatus.CONFLICT, str(exc))
@@ -424,27 +437,31 @@ class Handler(BaseHTTPRequestHandler):
         if not self.app.token_ok(self.headers.get("X-Arthur-Token")):
             return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
 
+        path = urlparse(self.path).path
+        if path.startswith("/api/actions/") and path not in ACTION_PATHS:
+            return self._fail(HTTPStatus.NOT_FOUND, "unknown action")
+
         try:
             body = self._read_body()
-            if self.path == "/api/actions/answer-decision":
+            if path == "/api/actions/answer-decision":
                 return self._send_json(
                     self.app.answer_decision(str(body.get("title", "")), str(body.get("answer", "")))
                 )
-            if self.path == "/api/actions/recover-job":
+            if path == "/api/actions/recover-job":
                 return self._send_json(
                     self.app.recover_job(str(body.get("job_id", "")), bool(body.get("requeue")))
                 )
-            if self.path == "/api/actions/create-job":
+            if path == "/api/actions/create-job":
                 return self._send_json(self.app.create_job(body))
-            if self.path == "/api/actions/create-loop":
+            if path == "/api/actions/create-loop":
                 return self._send_json(self.app.create_loop(body))
-            if self.path == "/api/actions/set-roles":
+            if path == "/api/actions/set-roles":
                 return self._send_json(self.app.set_roles(body))
-            if self.path == "/api/actions/run-next":
+            if path == "/api/actions/run-next":
                 return self._send_json(self.app.run_next(body))
-            if self.path == "/api/actions/clear-session":
+            if path == "/api/actions/clear-session":
                 return self._send_json(self.app.clear_session_action(str(body.get("session_id", ""))))
-            if self.path == "/api/actions/break-lock":
+            if path == "/api/actions/break-lock":
                 return self._send_json(self.app.break_lock(body))
             return self._fail(HTTPStatus.NOT_FOUND, "unknown action")
         except KeyError as exc:
