@@ -331,6 +331,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         pass
 
+    def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+        # BaseHTTPRequestHandler answers an unknown method with 501. That is a
+        # 5xx for a client mistake; answer 405 and keep the same JSON errors.
+        if code == HTTPStatus.NOT_IMPLEMENTED:
+            if not self._host_allowed():
+                self._fail(HTTPStatus.FORBIDDEN, "arthur web only answers localhost")
+                return
+            self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "method not allowed")
+            return
+        super().send_error(code, message, explain)
+
     # -------------------------------------------------------------- plumbing
 
     def _host_allowed(self) -> bool:

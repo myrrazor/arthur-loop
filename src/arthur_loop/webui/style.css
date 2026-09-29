@@ -96,6 +96,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   padding: 4px 10px 4px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
   border: 1px solid var(--line); color: var(--text-muted);
+  white-space: nowrap; flex: none;
 }
 .state-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wait); }
 .state-chip[data-state="POLL_DUE"] { color: var(--go); border-color: color-mix(in srgb, var(--go) 40%, var(--line)); background: color-mix(in srgb, var(--go) 12%, transparent); }
@@ -457,6 +458,12 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   .railnav-item span:not(.ri):not(.railnav-count), .railnav-projects, .railnav-foot { display: none; }
   .railnav-item { justify-content: center; }
   .rail { display: flex; border-left: 0; border-top: 1px solid var(--line); }
+  /* The state pill sits in the same row as the lock until 720px. At tablet
+     widths that pill shrinks onto the lock. Give it a full row with the rail fold. */
+  .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
+  .topbar-right { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+  .topbar-state { flex: 1 1 100%; order: 5; margin-left: 0; overflow: hidden; }
+  .state-hint { white-space: normal; }
 }
 
 .project-pick {
@@ -469,10 +476,6 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 @media (max-width: 720px) {
   .canvas-hint { display: none; }
   .canvas-legend { right: var(--pad); max-width: none; }
-  .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
-  .topbar-right { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
-  .topbar-state { flex: 1 1 100%; order: 5; margin-left: 0; }
-  .state-hint { white-space: normal; }
   .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; }
   .tbl { width: auto; }
   .tbl thead { display: none; }

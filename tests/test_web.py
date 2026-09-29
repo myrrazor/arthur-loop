@@ -160,6 +160,10 @@ class WebConsoleTests(unittest.TestCase):
             css = response.read().decode("utf-8")
         self.assertIn("max-width: calc(50% - 8px)", css)
         self.assertIn(".canvas-legend { right: var(--pad); max-width: none; }", css)
+        fold = css.split("@media (max-width: 1080px)", 1)[1].split("@media (max-width: 720px)", 1)[0]
+        self.assertIn("flex-wrap: wrap", fold)
+        self.assertIn(".topbar-state", fold)
+        self.assertIn("white-space: nowrap", css)
 
     def test_events_endpoint_returns_recent_first(self) -> None:
         with self._get("/api/events?n=5") as response:
@@ -585,6 +589,16 @@ class ApiShapeTests(unittest.TestCase):
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8")
             return exc.code, json.loads(raw) if raw else {}
+
+    def test_unimplemented_methods_are_405(self) -> None:
+        for method in ("PUT", "DELETE", "PATCH"):
+            request = urllib.request.Request(self.base + "/api/status", method=method)
+            request.add_header("X-Arthur-Token", self.token)
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request, timeout=5)
+            self.assertEqual(ctx.exception.code, 405)
+            body = json.loads(ctx.exception.read().decode("utf-8"))
+            self.assertEqual(body.get("error"), "method not allowed")
 
     def test_file_without_a_path_is_400(self) -> None:
         for path in ("/api/file", "/api/file?path="):
