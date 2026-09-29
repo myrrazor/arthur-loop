@@ -16,6 +16,8 @@ Return concise markdown with sections:
 - Approved Implementation Prompt
 - Control Block
 
+Include marker {{EXPECTED_MARKER}}.
+
 Control Block must include:
 PROJECT_ID: {{PROJECT_ID}}
 REVIEW_TYPE: PLAN_APPROVAL

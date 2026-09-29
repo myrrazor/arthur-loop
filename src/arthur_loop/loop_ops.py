@@ -302,6 +302,79 @@ def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_") or "LOOP"
 
 
+PROMPT_UNKNOWN = "(not available)"
+_PROMPT_TOKEN_RE = re.compile(r"\{\{[^{}]+\}\}")
+_ARTIFACT_TEXT_CAP = 8000
+
+
+def substitute_prompt_tokens(text: str, replacements: dict[str, str]) -> str:
+    """Fill known {{TOKENS}}. Anything left becomes a short note, never a literal placeholder."""
+
+    def replace(match: re.Match[str]) -> str:
+        return replacements.get(match.group(0), PROMPT_UNKNOWN)
+
+    rendered = _PROMPT_TOKEN_RE.sub(replace, text)
+    return _PROMPT_TOKEN_RE.sub(PROMPT_UNKNOWN, rendered)
+
+
+def cap_prompt_excerpt(text: str | None) -> str:
+    body = (text or "").strip()
+    if not body:
+        return PROMPT_UNKNOWN
+    if len(body) <= _ARTIFACT_TEXT_CAP:
+        return body
+    return body[:_ARTIFACT_TEXT_CAP] + "\n… (truncated)"
+
+
+def ensure_marker_line(text: str, marker: str) -> str:
+    """Old or customized hop prompts still have to ask the agent for the marker."""
+
+    if "{{EXPECTED_MARKER}}" in text or (marker and marker in text):
+        return text
+    return text.rstrip() + "\n\nInclude marker {{EXPECTED_MARKER}}.\n"
+
+
+def _control_field(text: str, name: str) -> str | None:
+    match = re.search(rf"(?m)^{re.escape(name)}:[ \t]*(\S.*?)\s*$", text or "")
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if not value or "{{" in value:
+        return None
+    return value
+
+
+def hop_prompt_replacements(
+    *,
+    project_id: str,
+    marker: str,
+    idempotency_key: str,
+    state_summary: str,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
+) -> dict[str, str]:
+    """Tokens a hop prompt can actually know. Anything else is filled later as unknown."""
+
+    excerpt = cap_prompt_excerpt(previous_artifact_text)
+    has_prev = bool((previous_artifact_text or "").strip())
+    plan = excerpt if previous_kind == "plan" and has_prev else PROMPT_UNKNOWN
+    thread = excerpt if previous_kind == "implementation-handoff" and has_prev else PROMPT_UNKNOWN
+    sprint = _control_field(previous_artifact_text or "", "SPRINT_ID") or PROMPT_UNKNOWN
+    path = (previous_artifact_path or "").strip() or PROMPT_UNKNOWN
+    return {
+        "{{PROJECT_ID}}": project_id,
+        "{{CURRENT_STATE_SUMMARY}}": state_summary,
+        "{{EXPECTED_MARKER}}": marker,
+        "{{IDEMPOTENCY_KEY}}": idempotency_key,
+        "{{CHATGPT_RESPONSE_ARTIFACT_PATH}}": path,
+        "{{CHATGPT_RESPONSE_ARTIFACT}}": excerpt if has_prev else PROMPT_UNKNOWN,
+        "{{CODEX_PLAN_ARTIFACT}}": plan,
+        "{{CODEX_THREAD_SUMMARY}}": thread,
+        "{{SPRINT_ID}}": sprint,
+    }
+
+
 def seed_first_prompt(
     root: Path,
     *,
@@ -316,15 +389,16 @@ def seed_first_prompt(
     dest.parent.mkdir(parents=True, exist_ok=True)
     src = root / "adapters" / "advisor" / "prompts" / "next-plan-request.md"
     if src.is_file():
-        text = src.read_text(encoding="utf-8")
-        replacements = {
-            "{{PROJECT_ID}}": project_id,
-            "{{CURRENT_STATE_SUMMARY}}": f"{project_id} — first hop of a new loop.",
-            "{{EXPECTED_MARKER}}": marker,
-            "{{IDEMPOTENCY_KEY}}": idempotency_key,
-        }
-        for token, value in replacements.items():
-            text = text.replace(token, value)
+        text = ensure_marker_line(src.read_text(encoding="utf-8"), marker)
+        text = substitute_prompt_tokens(
+            text,
+            hop_prompt_replacements(
+                project_id=project_id,
+                marker=marker,
+                idempotency_key=idempotency_key,
+                state_summary=f"{project_id} — first hop of a new loop.",
+            ),
+        )
     else:
         text = (
             f"# {job_id} Prompt\n\n"

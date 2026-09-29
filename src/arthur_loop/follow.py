@@ -28,9 +28,12 @@ from arthur_loop.loop_ops import (
     _next_job_id,
     _slug,
     claim_job,
+    ensure_marker_line,
     ensure_project_not_paused,
+    hop_prompt_replacements,
     seed_first_prompt,
     submit_job,
+    substitute_prompt_tokens,
 )
 from arthur_loop.pathguard import resolve_instance_file
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
@@ -195,11 +198,16 @@ def seed_hop_prompt(
     kind: str,
     marker: str | None = None,
     idempotency_key: str | None = None,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
 ) -> str:
     """Render a hop prompt from the instance adapter pack when present."""
 
     dest = root / "queue" / "prompts" / f"{job_id.lower()}.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
+    concrete_marker = marker or f"{project_id}_{_slug(kind)}_{_slug(job_id)}"
+    key = idempotency_key or f"follow:{project_id}:{kind}:{job_id}"
     spec = PROMPT_FOR_KIND.get(kind)
     text = ""
     if spec:
@@ -212,8 +220,8 @@ def seed_hop_prompt(
                 root,
                 project_id=project_id,
                 job_id=job_id,
-                marker=marker or f"{project_id}_LOOP_{_slug(job_id)}",
-                idempotency_key=idempotency_key or f"follow:{project_id}:{kind}:{job_id}",
+                marker=concrete_marker,
+                idempotency_key=key,
             )
             return (root / rel).read_text(encoding="utf-8")
         if kind == "qa-review":
@@ -234,14 +242,19 @@ def seed_hop_prompt(
                 f"Arthur Loop {kind} hop for {project_id}.\n"
                 f"Return a valid control block for this hop.\n"
             )
-    replacements = {
-        "{{PROJECT_ID}}": project_id,
-        "{{CURRENT_STATE_SUMMARY}}": f"{project_id} — {kind} hop.",
-        "{{EXPECTED_MARKER}}": marker or f"{project_id}_{_slug(kind)}_{_slug(job_id)}",
-        "{{IDEMPOTENCY_KEY}}": idempotency_key or f"follow:{project_id}:{kind}:{job_id}",
-    }
-    for token, value in replacements.items():
-        text = text.replace(token, value)
+    text = ensure_marker_line(text, concrete_marker)
+    text = substitute_prompt_tokens(
+        text,
+        hop_prompt_replacements(
+            project_id=project_id,
+            marker=concrete_marker,
+            idempotency_key=key,
+            state_summary=f"{project_id} — {kind} hop.",
+            previous_kind=previous_kind,
+            previous_artifact_path=previous_artifact_path,
+            previous_artifact_text=previous_artifact_text,
+        ),
+    )
     dest.write_text(text, encoding="utf-8")
     return dest.read_text(encoding="utf-8")
 
@@ -254,6 +267,9 @@ def enqueue_hop(
     title: str | None = None,
     actor: str | None = None,
     role: str | None = None,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
 ) -> QueueJob:
     job_id = _next_job_id(root, project_id)
     marker = f"{project_id}_{_slug(kind)}_{_slug(job_id)}"
@@ -273,6 +289,9 @@ def enqueue_hop(
         kind=kind,
         marker=marker,
         idempotency_key=key,
+        previous_kind=previous_kind,
+        previous_artifact_path=previous_artifact_path,
+        previous_artifact_text=previous_artifact_text,
     )
     job = QueueJob(
         job_id=job_id,
@@ -525,6 +544,9 @@ def follow_step(
                 kind=next_kind,
                 actor=holder,
                 role=role_for_kind(next_kind),
+                previous_kind=kind,
+                previous_artifact_path=artifact.path,
+                previous_artifact_text=out_path.read_text(encoding="utf-8"),
             )
             step["enqueued"] = nxt.to_record()
             step["enqueued_kind"] = next_kind

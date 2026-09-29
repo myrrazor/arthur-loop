@@ -21,6 +21,8 @@ Return a concise implementation plan with:
 - P0/P1 stop conditions
 - GO/NO-GO recommendation
 
+Include marker {{EXPECTED_MARKER}}.
+
 Final control block:
 PROJECT_ID: {{PROJECT_ID}}
 REVIEW_TYPE: CODEX_PLAN

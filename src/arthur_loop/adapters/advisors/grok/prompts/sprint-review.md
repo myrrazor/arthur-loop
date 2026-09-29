@@ -20,6 +20,8 @@ Return concise markdown with sections:
 - Next Sprint Recommendation
 - Control Block
 
+Include marker {{EXPECTED_MARKER}}.
+
 Control Block must include:
 PROJECT_ID: {{PROJECT_ID}}
 SPRINT_ID: {{SPRINT_ID}}
