@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import io
 import json
+import socket
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.artifact_store import save_chatgpt_artifact
 from arthur_loop.browser_lock import acquire_lock, read_lock
@@ -93,11 +96,14 @@ class WebConsoleTests(unittest.TestCase):
         self.assertIn(self.token, html)
         self.assertNotIn("__ARTHUR_TOKEN__", html)
 
-        # a bare GET / (another local user, a guessing script) never learns the token
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self._get("/", token=None)
-        self.assertEqual(ctx.exception.code, 403)
-        self.assertNotIn(self.token, ctx.exception.read().decode("utf-8"))
+        # a bare GET / serves the shell so a reload can use sessionStorage,
+        # but it must not contain this process's token
+        with self._get("/", token=None) as response:
+            shell = response.read().decode("utf-8")
+        self.assertIn("text/html", response.headers["Content-Type"])
+        self.assertIn("app.js", shell)
+        self.assertNotIn(self.token, shell)
+        self.assertIn('content=""', shell)
 
     def test_api_reads_require_the_session_token(self) -> None:
         for path in ("/api/status", "/api/events?n=3", "/api/artifacts?project=DEMO_APP", "/api/file?path=human-decisions/open.md"):
@@ -115,10 +121,39 @@ class WebConsoleTests(unittest.TestCase):
             self._get("/assets/../web.py", token=None)
         self.assertEqual(ctx.exception.code, 404)
 
+    def test_client_disconnect_during_run_next_does_not_traceback(self) -> None:
+        """A browser reload mid-hop must not log a traceback or a fake 500."""
+
+        def slow(*_args, **_kwargs):
+            time.sleep(0.5)
+            return {"steps": [], "stopped": "idle", "once": True}
+
+        port = self.server.server_address[1]
+        body = b'{"once": true}'
+        request = (
+            f"POST /api/actions/run-next HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{port}\r\n"
+            f"X-Arthur-Token: {self.token}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            f"Connection: close\r\n\r\n"
+        ).encode() + body
+        captured = io.StringIO()
+        with patch("arthur_loop.web.follow_loop", slow), redirect_stderr(captured):
+            sock = socket.create_connection(("127.0.0.1", port))
+            sock.sendall(request)
+            time.sleep(0.05)
+            sock.close()
+            time.sleep(0.8)
+        self.assertNotIn("Traceback", captured.getvalue())
+
     def test_queue_recover_button_skips_never_claimed_jobs(self) -> None:
         with self._get("/assets/app.js", token=None) as response:
             script = response.read().decode("utf-8")
         self.assertIn('!(j.status === "queued" && !j.claimedBy)', script)
+        self.assertIn("runInFlight", script)
+        self.assertIn("arthur-loop-token", script)
+        self.assertIn('aria-label", "Project"', script)
 
     def test_events_endpoint_returns_recent_first(self) -> None:
         with self._get("/api/events?n=5") as response:

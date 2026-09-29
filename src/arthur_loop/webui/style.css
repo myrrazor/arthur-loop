@@ -455,7 +455,17 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   .rail { display: flex; border-left: 0; border-top: 1px solid var(--line); }
 }
 
+.project-pick {
+  margin-left: auto;
+  background: var(--ink); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: 12px var(--mono); padding: 4px 8px;
+}
+
 @media (max-width: 720px) {
+  .role-strip { right: 72px; }
+  .canvas-hint { display: none; }
+  .canvas-legend { right: var(--pad); }
   .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
   .topbar-right { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
   .topbar-state { flex: 1 1 100%; order: 5; margin-left: 0; }

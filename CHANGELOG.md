@@ -36,6 +36,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 
 ### Fixed
 
+- Reloading the web console keeps the session token for that tab, and Run next stays disabled until the hop it started has finished. A browser that disconnects mid-response no longer leaves a traceback or a fake 500 in the server log. On a phone, the canvas legend no longer sits on top of the pan hint, and the artifacts view can switch projects when the icon rail hides the project list.
 - Overlapping `arthur follow` processes (and overlapping web Run next requests) no longer both invoke the same hop. The second caller stops with `follow_in_flight` instead of a second agent and an illegal `submitted -> submitted` transition.
 - The queue table no longer offers Recover on a queued job that has never been claimed. That action is refused, and the button only produced an error.
 - Web Run next keeps one process holder, releases the browser lock when a hop is waiting on a human reply, and returns 409 (not 500) when that lock is still held. Break accepts `{"force": true}`.

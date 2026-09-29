@@ -4,9 +4,13 @@
    offers human actions (assign roles, run next hop, answer decision, recover
    job, create loop, create job, clear session, break stale lock). */
 
-const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
+// The server copies a valid ?token= into the meta tag, then we drop it from
+// the address bar. sessionStorage keeps the same tab working after a reload.
+const metaToken = document.querySelector('meta[name="arthur-token"]').content || "";
+const savedToken = sessionStorage.getItem("arthur-loop-token") || "";
+const TOKEN = metaToken || savedToken;
+if (metaToken) sessionStorage.setItem("arthur-loop-token", metaToken);
 const POLL_MS = 3000;
-// the bootstrap URL carries the session token; keep it out of the address bar / history
 if (location.search.includes("token=")) history.replaceState(null, "", location.pathname);
 
 const STATE_META = {
@@ -155,7 +159,9 @@ function render() {
   const runBtn = document.querySelector('[data-action="run-next"]');
   if (runBtn) {
     const next = s.nextRun;
-    runBtn.disabled = !next;
+    // A status poll must not re-enable the button while this click's request
+    // is still inside the agent. nextRun stays truthy for the whole hop.
+    runBtn.disabled = runInFlight || !next;
     runBtn.title = next
       ? `Run ${next.role} (${next.agent}${next.model ? ":" + next.model : ""}) on ${next.kind}`
       : "No queued hop to run";
@@ -763,7 +769,22 @@ function td(cls, text, label) {
 
 async function renderArtifacts(panel, s) {
   const project = store.project || (s.projects[0] && s.projects[0].projectId);
-  panel.replaceChildren(viewHead("Artifacts", project ? `project ${project}` : "no project"));
+  const head = viewHead("Artifacts", project ? `project ${project}` : "no project");
+  // The icon rail hides project chips below 1080px, so the artifacts view
+  // carries its own switcher. Otherwise a reload sticks on projects[0].
+  if ((s.projects || []).length > 1) {
+    const select = el("select", "project-pick");
+    select.setAttribute("aria-label", "Project");
+    for (const p of s.projects) {
+      const option = el("option", null, p.projectId);
+      option.value = p.projectId;
+      if (p.projectId === project) option.selected = true;
+      select.append(option);
+    }
+    select.onchange = () => { store.project = select.value; renderView(); };
+    head.append(select);
+  }
+  panel.replaceChildren(head);
   if (!project) { panel.append(emptyState("No projects yet.", "Artifacts appear once the advisor produces one.")); return; }
   const grid = el("div", "artifacts");
   const listCol = el("div", "artifact-list");
@@ -1043,8 +1064,11 @@ function runNextToast(record) {
   return { kind: "ok", title: "Run next", body: label || stopped };
 }
 
+let runInFlight = false;
 async function runNextHop() {
+  if (runInFlight) return;
   const btn = document.querySelector('[data-action="run-next"]');
+  runInFlight = true;
   if (btn) btn.disabled = true;
   try {
     const record = await action("/api/actions/run-next", { once: true });
@@ -1054,7 +1078,8 @@ async function runNextHop() {
   } catch (e) {
     toast("err", "Could not run next hop", e.message);
   } finally {
-    if (btn) btn.disabled = false;
+    runInFlight = false;
+    if (btn) btn.disabled = !(store.status && store.status.nextRun);
   }
 }
 
@@ -1136,5 +1161,9 @@ document.addEventListener("keydown", (e) => {
 
 let timer = null;
 function startPolling() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, POLL_MS); }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
-startPolling();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && TOKEN) poll(); });
+if (!TOKEN) {
+  document.body.textContent = "Arthur Loop web console: open the exact URL printed by `arthur web` (it carries this session's token).";
+} else {
+  startPolling();
+}

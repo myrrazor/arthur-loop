@@ -27,6 +27,10 @@ from arthur_loop.status import clear_session, collect_status, status_to_dict
 
 
 DEFAULT_PORT = 7433
+# A reload or a closed tab drops the socket while a hop is still finishing.
+# That is not a server failure: the hop already ran, and writing the response
+# (or the fallback 500) just raises BrokenPipeError.
+_CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
 # One holder for every Run next in this process. A fresh id per click made
 # the second claim collide with the lock the first click was still holding.
 WEB_RUN_HOLDER = "web-run-next"
@@ -337,23 +341,23 @@ class Handler(BaseHTTPRequestHandler):
             host = raw.split(":", 1)[0]
         return host in ("127.0.0.1", "localhost", "[::1]")
 
+    def _send_bytes(self, body: bytes, content_type: str, status: int = 200) -> None:
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except _CLIENT_GONE:
+            return
+
     def _send_json(self, payload: Any, status: int = 200) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(body, "application/json; charset=utf-8", status)
 
     def _send_text(self, text: str, content_type: str, status: int = 200) -> None:
-        body = text.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(text.encode("utf-8"), content_type, status)
 
     def _fail(self, status: int, message: str) -> None:
         self._send_json({"error": message}, status=status)
@@ -389,18 +393,15 @@ class Handler(BaseHTTPRequestHandler):
                 if name not in STATIC_FILES:
                     return self._fail(HTTPStatus.NOT_FOUND, "unknown asset")
                 return self._send_text(_read_ui(name), STATIC_FILES[name])
-            if not self.app.token_ok(self._presented_token(query)):
-                if url.path == "/":
-                    return self._send_text(
-                        "Arthur Loop web console: open the exact URL printed by `arthur web` "
-                        "(it carries this session's token).\n",
-                        "text/plain; charset=utf-8",
-                        status=HTTPStatus.FORBIDDEN,
-                    )
-                return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
             if url.path == "/":
-                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", self.app.token)
+                # The shell is not secret (assets are already public). Only a
+                # correct ?token= is copied into the page; a reload then keeps
+                # that token in sessionStorage instead of the address bar.
+                accepted = self.app.token if self.app.token_ok(self._presented_token(query)) else ""
+                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", accepted)
                 return self._send_text(html, "text/html; charset=utf-8")
+            if not self.app.token_ok(self._presented_token(query)):
+                return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
             if url.path == "/api/status":
                 return self._send_json(self.app.status_payload())
             if url.path == "/api/events":
@@ -427,9 +428,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._fail(HTTPStatus.NOT_FOUND, "unknown route")
         except BrowserLockError as exc:
             return self._fail(HTTPStatus.CONFLICT, str(exc))
+        except _CLIENT_GONE:
+            return
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
-            return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            try:
+                return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            except _CLIENT_GONE:
+                return
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib naming
         if not self._host_allowed():
@@ -471,9 +477,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
         except BrowserLockError as exc:
             return self._fail(HTTPStatus.CONFLICT, str(exc))
+        except _CLIENT_GONE:
+            return
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
-            return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            try:
+                return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            except _CLIENT_GONE:
+                return
 
 
 def _read_ui(name: str) -> str:
