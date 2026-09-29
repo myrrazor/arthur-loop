@@ -115,6 +115,11 @@ class WebConsoleTests(unittest.TestCase):
             self._get("/assets/../web.py", token=None)
         self.assertEqual(ctx.exception.code, 404)
 
+    def test_queue_recover_button_skips_never_claimed_jobs(self) -> None:
+        with self._get("/assets/app.js", token=None) as response:
+            script = response.read().decode("utf-8")
+        self.assertIn('!(j.status === "queued" && !j.claimedBy)', script)
+
     def test_events_endpoint_returns_recent_first(self) -> None:
         with self._get("/api/events?n=5") as response:
             events = json.load(response)

@@ -743,7 +743,8 @@ function renderQueue(panel, s) {
     tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta, "Next poll"));
     const err = td(null, j.lastError || "—", "Last error"); err.style.color = "var(--text-faint)"; err.title = j.lastError || ""; tr.append(err);
     const act = el("td"); act.dataset.label = "";
-    if (!TERMINAL.has(j.status)) {
+    // recover refuses a queued job that was never claimed; don't offer a button that 400s
+    if (!TERMINAL.has(j.status) && !(j.status === "queued" && !j.claimedBy)) {
       const r = el("button", "btn ghost sm", "Recover"); r.onclick = () => runRecover(j.jobId, true, r); act.append(r);
     }
     tr.append(act);

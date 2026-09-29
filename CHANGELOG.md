@@ -37,6 +37,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 ### Fixed
 
 - Overlapping `arthur follow` processes (and overlapping web Run next requests) no longer both invoke the same hop. The second caller stops with `follow_in_flight` instead of a second agent and an illegal `submitted -> submitted` transition.
+- The queue table no longer offers Recover on a queued job that has never been claimed. That action is refused, and the button only produced an error.
 - Web Run next keeps one process holder, releases the browser lock when a hop is waiting on a human reply, and returns 409 (not 500) when that lock is still held. Break accepts `{"force": true}`.
 - Hop prompts include the expected marker and no longer leave literal `{{...}}` tokens in the rendered text.
 - Agent invoke waits 45 minutes by default (`--timeout` or `polling_policy.invoke_timeout_seconds`). The browser lock covers that wait, and a timed-out hop is left in `needs_recovery` with the lock released.
