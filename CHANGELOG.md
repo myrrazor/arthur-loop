@@ -36,6 +36,16 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 
 ### Fixed
 
+- Reloading the web console keeps the session token for that tab, and Run next stays disabled until the hop it started has finished. A browser that disconnects mid-response no longer leaves a traceback or a fake 500 in the server log. On a phone, the canvas legend no longer sits on top of the pan hint, and the artifacts view can switch projects when the icon rail hides the project list.
+- The canvas legend and the pan hint each stay in their own half of the stage, so a 768px window and a laptop with the side rail open no longer paint one on top of the other.
+- Overlapping `arthur follow` processes (and overlapping web Run next requests) no longer both invoke the same hop. The second caller stops with `follow_in_flight` instead of a second agent and an illegal `submitted -> submitted` transition.
+- The queue table no longer offers Recover on a queued job that has never been claimed. That action is refused, and the button only produced an error.
+- Web Run next keeps one process holder, releases the browser lock when a hop is waiting on a human reply, and returns 409 (not 500) when that lock is still held. Break accepts `{"force": true}`.
+- Hop prompts include the expected marker and no longer leave literal `{{...}}` tokens in the rendered text.
+- Agent invoke waits 45 minutes by default (`--timeout` or `polling_policy.invoke_timeout_seconds`). The browser lock covers that wait, and a timed-out hop is left in `needs_recovery` with the lock released.
+- `loop create` refuses to enqueue a second live job for a project. `queue recover` refuses a never-claimed queued job. `lock release` exits 2 on a holder mismatch. `queue create` in a bare directory says so on stderr.
+- Narrow terminals ellipsize status columns instead of folding headers mid-word. The web console keeps the decision rail and Run next usable below 1080px, stacks the queue at phone width, and prefills the next free job id.
+- `GET /api/file` without a path returns 400. Unknown `/api/actions/` routes return 404 before the body is read. `create-loop` and `set-roles` accept `agent[:model]` strings as well as objects.
 - `arthur capture --source-file` now uses the same instance-root path guard as MCP capture, so host files such as `/etc/passwd` are refused instead of being copied into project artifacts.
 - `arthur mcp serve` answers `Content-Length: abc` / `Content-Length: -1` with JSON-RPC `-32700` and keeps serving; those frames used to raise and kill the stdio process.
 - Empty or whitespace idempotency keys are refused (they used to bypass uniqueness).

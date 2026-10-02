@@ -12,6 +12,7 @@ from pathlib import Path
 
 from arthur_loop.cli import main
 from arthur_loop.loop_ops import create_loop, list_loops
+from arthur_loop.queue_ledger import QueueLedger
 from arthur_loop.web import make_server
 
 
@@ -64,13 +65,24 @@ class LoopCreateTests(unittest.TestCase):
             listed = list_loops(Path(tmp))
             self.assertEqual(listed["projects"][0]["project_id"], "SHOP")
 
-    def test_second_loop_on_same_project_bumps_job_id(self) -> None:
+    def test_second_loop_on_same_project_does_not_double_enqueue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             _init(tmp)
-            first = create_loop(Path(tmp), project_id="SHOP")
-            second = create_loop(Path(tmp), project_id="SHOP")
-            self.assertNotEqual(first["job"]["job_id"], second["job"]["job_id"])
-            self.assertNotEqual(first["job"]["expected_marker"], second["job"]["expected_marker"])
+            root = Path(tmp)
+            bare = create_loop(root, project_id="SHOP", seed_job=False)
+            self.assertIsNone(bare["job"])
+            self.assertIn("Created a project", bare["honest_copy"])
+            self.assertIn("No queue job was seeded", bare["honest_copy"])
+
+            seeded = create_loop(root, project_id="SHOP")
+            self.assertIsNotNone(seeded["job"])
+            self.assertNotIn("Created a project", seeded["honest_copy"])
+            self.assertIn("already existed", seeded["honest_copy"])
+
+            with self.assertRaises(ValueError) as ctx:
+                create_loop(root, project_id="SHOP")
+            self.assertIn(seeded["job"]["job_id"], str(ctx.exception))
+            self.assertEqual(len(QueueLedger(root).latest_jobs()), 1)
 
 
 class WebWizardTests(unittest.TestCase):

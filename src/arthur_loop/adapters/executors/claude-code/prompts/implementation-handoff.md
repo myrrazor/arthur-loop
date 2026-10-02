@@ -17,6 +17,8 @@ Before final response:
 - summarize assumptions and known gaps
 - include final control block
 
+Include marker {{EXPECTED_MARKER}}.
+
 Final control block:
 PROJECT_ID: {{PROJECT_ID}}
 SPRINT_ID: {{SPRINT_ID}}

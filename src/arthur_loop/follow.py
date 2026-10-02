@@ -15,6 +15,7 @@ Human gates that remain (minimized, documented):
 from __future__ import annotations
 
 import json
+import math
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,15 +23,18 @@ from typing import Any, Callable
 
 from arthur_loop.artifact_store import ARTIFACT_KINDS, implementation_gate, save_chatgpt_artifact
 from arthur_loop.browser_lock import release_lock
-from arthur_loop.config import load_config
+from arthur_loop.config import DEFAULT_INVOKE_TIMEOUT_SECONDS, load_config
 from arthur_loop.roles import assignment_for, next_hop_kind, role_for_kind
 from arthur_loop.loop_ops import (
     _next_job_id,
     _slug,
     claim_job,
+    ensure_marker_line,
     ensure_project_not_paused,
+    hop_prompt_replacements,
     seed_first_prompt,
     submit_job,
+    substitute_prompt_tokens,
 )
 from arthur_loop.pathguard import resolve_instance_file
 from arthur_loop.queue_ledger import QueueJob, QueueLedger
@@ -156,6 +160,8 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
             "inbox": inbox.relative_to(root).as_posix(),
             "note": f"{binary} is not on PATH; wrote the prompt inbox. Install the CLI or capture a reply by hand.",
         }
+    raw_timeout = request.get("timeout")
+    timeout = DEFAULT_INVOKE_TIMEOUT_SECONDS if raw_timeout is None else float(raw_timeout)
     try:
         proc = subprocess.run(
             argv,
@@ -163,7 +169,7 @@ def default_invoke(root: Path, request: dict[str, Any]) -> dict[str, Any]:
             capture_output=True,
             check=False,
             cwd=str(root),
-            timeout=float(request.get("timeout") or 120),
+            timeout=timeout,
             stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
@@ -195,11 +201,16 @@ def seed_hop_prompt(
     kind: str,
     marker: str | None = None,
     idempotency_key: str | None = None,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
 ) -> str:
     """Render a hop prompt from the instance adapter pack when present."""
 
     dest = root / "queue" / "prompts" / f"{job_id.lower()}.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
+    concrete_marker = marker or f"{project_id}_{_slug(kind)}_{_slug(job_id)}"
+    key = idempotency_key or f"follow:{project_id}:{kind}:{job_id}"
     spec = PROMPT_FOR_KIND.get(kind)
     text = ""
     if spec:
@@ -212,8 +223,8 @@ def seed_hop_prompt(
                 root,
                 project_id=project_id,
                 job_id=job_id,
-                marker=marker or f"{project_id}_LOOP_{_slug(job_id)}",
-                idempotency_key=idempotency_key or f"follow:{project_id}:{kind}:{job_id}",
+                marker=concrete_marker,
+                idempotency_key=key,
             )
             return (root / rel).read_text(encoding="utf-8")
         if kind == "qa-review":
@@ -234,14 +245,19 @@ def seed_hop_prompt(
                 f"Arthur Loop {kind} hop for {project_id}.\n"
                 f"Return a valid control block for this hop.\n"
             )
-    replacements = {
-        "{{PROJECT_ID}}": project_id,
-        "{{CURRENT_STATE_SUMMARY}}": f"{project_id} — {kind} hop.",
-        "{{EXPECTED_MARKER}}": marker or f"{project_id}_{_slug(kind)}_{_slug(job_id)}",
-        "{{IDEMPOTENCY_KEY}}": idempotency_key or f"follow:{project_id}:{kind}:{job_id}",
-    }
-    for token, value in replacements.items():
-        text = text.replace(token, value)
+    text = ensure_marker_line(text, concrete_marker)
+    text = substitute_prompt_tokens(
+        text,
+        hop_prompt_replacements(
+            project_id=project_id,
+            marker=concrete_marker,
+            idempotency_key=key,
+            state_summary=f"{project_id} — {kind} hop.",
+            previous_kind=previous_kind,
+            previous_artifact_path=previous_artifact_path,
+            previous_artifact_text=previous_artifact_text,
+        ),
+    )
     dest.write_text(text, encoding="utf-8")
     return dest.read_text(encoding="utf-8")
 
@@ -254,6 +270,9 @@ def enqueue_hop(
     title: str | None = None,
     actor: str | None = None,
     role: str | None = None,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
 ) -> QueueJob:
     job_id = _next_job_id(root, project_id)
     marker = f"{project_id}_{_slug(kind)}_{_slug(job_id)}"
@@ -273,6 +292,9 @@ def enqueue_hop(
         kind=kind,
         marker=marker,
         idempotency_key=key,
+        previous_kind=previous_kind,
+        previous_artifact_path=previous_artifact_path,
+        previous_artifact_text=previous_artifact_text,
     )
     job = QueueJob(
         job_id=job_id,
@@ -294,13 +316,21 @@ def enqueue_hop(
     return job
 
 
-def _pick_job(root: Path, project_id: str | None) -> QueueJob | None:
+def _pick_job(
+    root: Path,
+    project_id: str | None,
+    *,
+    jobs: dict[str, QueueJob] | None = None,
+) -> QueueJob | None:
     paused = set(open_human_decision_projects(root))
-    jobs = list(QueueLedger(root).latest_jobs().values())
+    if jobs is None:
+        loaded = list(QueueLedger(root).latest_jobs().values())
+    else:
+        loaded = list(jobs.values())
     if project_id:
-        jobs = [job for job in jobs if job.project_id == project_id]
+        loaded = [job for job in loaded if job.project_id == project_id]
     actionable = []
-    for job in jobs:
+    for job in loaded:
         if job.project_id in paused:
             continue
         if job.status in {"queued", "claimed", "submitted", "waiting_for_chatgpt"}:
@@ -320,10 +350,15 @@ def _job_role(root: Path, job: QueueJob, kind: str) -> str:
     return role_for_kind(kind)
 
 
-def preview_next_step(root: Path, project_id: str | None = None) -> dict[str, Any] | None:
+def preview_next_step(
+    root: Path,
+    project_id: str | None = None,
+    *,
+    jobs: dict[str, QueueJob] | None = None,
+) -> dict[str, Any] | None:
     """Read-only: which hop and role would run next."""
 
-    job = _pick_job(root, project_id)
+    job = _pick_job(root, project_id, jobs=jobs)
     if job is None:
         return None
     config = load_config(root)
@@ -356,11 +391,64 @@ def follow_step(
     invoke: Invoker | None = None,
     chain: bool = True,
     dry_run: bool = False,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
-    """One auto-follow step. Returns a JSON-serializable record."""
+    """One auto-follow step. Returns a JSON-serializable record.
 
+    Overlapping callers (two `arthur follow` processes, or two web Run next
+    threads) share one holder name, so the claimed-by check cannot tell them
+    apart. A non-blocking instance lock lets the second caller stop instead
+    of starting a second agent on the same hop.
+    """
+
+    if dry_run:
+        return _follow_step_body(
+            root,
+            project_id=project_id,
+            holder=holder,
+            invoke=invoke,
+            chain=chain,
+            dry_run=True,
+            timeout=timeout,
+        )
+    from arthur_loop.filelock import instance_lock_path, try_exclusive
+
+    with try_exclusive(instance_lock_path(root, "follow-step")) as acquired:
+        if not acquired:
+            return {
+                "action": "follow_in_flight",
+                "reason": "follow_in_flight",
+                "note": "another arthur follow is already running a step in this instance",
+            }
+        return _follow_step_body(
+            root,
+            project_id=project_id,
+            holder=holder,
+            invoke=invoke,
+            chain=chain,
+            dry_run=False,
+            timeout=timeout,
+        )
+
+
+def _follow_step_body(
+    root: Path,
+    *,
+    project_id: str | None = None,
+    holder: str = HOLDER,
+    invoke: Invoker | None = None,
+    chain: bool = True,
+    dry_run: bool = False,
+    timeout: float | None = None,
+) -> dict[str, Any]:
     invoke = invoke or default_invoke
     config = load_config(root)
+    if timeout is None:
+        timeout_seconds = float(
+            config["polling_policy"].get("invoke_timeout_seconds") or DEFAULT_INVOKE_TIMEOUT_SECONDS
+        )
+    else:
+        timeout_seconds = float(timeout)
     tick = classify_tick(root, dry_run=True, quota_enabled=bool(config["components"]["resource_governor"]))
     paused = _human_gates(root, project_id)
     if tick.status == "BLOCKED_BY_QUOTA":
@@ -415,7 +503,10 @@ def follow_step(
 
     if job.status == "queued":
         ensure_project_not_paused(root, job.project_id)
-        job = claim_job(root, job.job_id, holder=holder)
+        # The lease has to outlive the invoke. A 15-minute TTL used to go stale
+        # under a long agent run and let another holder steal the browser.
+        ttl_minutes = max(15, math.ceil(timeout_seconds / 60) + 1)
+        job = claim_job(root, job.job_id, holder=holder, ttl_minutes=ttl_minutes)
         step["claimed"] = job.to_record()
 
     if job.status == "claimed":
@@ -436,20 +527,42 @@ def follow_step(
                 "model": model,
                 "prompt": prompt,
                 "expected_marker": job.expected_marker,
+                "timeout": timeout_seconds,
             },
         )
         step["invoke"] = {k: v for k, v in invoked.items() if k != "prompt"}
         if invoked.get("status") == "needs_human":
-            step["action"] = "needs_human"
-            step["human_gates"] = [
-                f"{adapter} transport is human-gated; inbox at {invoked.get('inbox')}"
-            ]
-            return step
-        if invoked.get("status") != "ok":
+            # A human gate must not leave the job claimed under a dead holder.
+            # An already-pasted sibling .out.md is captured on this step; an
+            # empty one moves the job to submitted and drops the lease so the
+            # next follow reads the reply instead of invoking again.
+            out_path = follow_dir(root) / f"{job.job_id}.out.md"
+            pasted = out_path.is_file() and bool(out_path.read_text(encoding="utf-8").strip())
+            job = submit_job(root, job.job_id, holder=holder, keep_lock=pasted)
+            step["submitted"] = job.to_record()
+            if not pasted:
+                out_rel = out_path.relative_to(root).as_posix()
+                inbox = invoked.get("inbox")
+                step["action"] = "needs_human"
+                step["out"] = out_rel
+                step["lock_released"] = True
+                step["note"] = str(invoked.get("note") or "")
+                where = f"paste the reply into {out_rel}"
+                if inbox:
+                    where += f" (inbox {inbox})"
+                step["human_gates"] = [f"{adapter} transport is human-gated; {where}"]
+                return step
+        elif invoked.get("status") != "ok":
+            error = str(invoked.get("error") or invoked.get("stderr_head") or "invoke failed")
+            failed = QueueLedger(root).transition(job.job_id, "needs_recovery", error=error)
+            step["lock_released"] = release_lock(root, holder)
+            step["recovered"] = failed.to_record()
             step["action"] = "invoke_failed"
+            step["note"] = error
             return step
-        job = submit_job(root, job.job_id, holder=holder, keep_lock=True)
-        step["submitted"] = job.to_record()
+        else:
+            job = submit_job(root, job.job_id, holder=holder, keep_lock=True)
+            step["submitted"] = job.to_record()
 
     if job.status in {"submitted", "waiting_for_chatgpt"}:
         out_path = follow_dir(root) / f"{job.job_id}.out.md"
@@ -509,6 +622,9 @@ def follow_step(
                 kind=next_kind,
                 actor=holder,
                 role=role_for_kind(next_kind),
+                previous_kind=kind,
+                previous_artifact_path=artifact.path,
+                previous_artifact_text=out_path.read_text(encoding="utf-8"),
             )
             step["enqueued"] = nxt.to_record()
             step["enqueued_kind"] = next_kind
@@ -529,6 +645,7 @@ def follow_loop(
     invoke: Invoker | None = None,
     chain: bool = True,
     dry_run: bool = False,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """Run one or more follow steps until idle, human-gated, or max_steps."""
 
@@ -543,10 +660,20 @@ def follow_loop(
             invoke=invoke,
             chain=chain,
             dry_run=dry_run,
+            timeout=timeout,
         )
         steps.append(step)
         action = str(step.get("action") or "noop")
-        if action in {"idle", "stop", "needs_human", "invoke_failed", "waiting_for_output", "waiting_for_marker", "gate_no_go"}:
+        if action in {
+            "idle",
+            "stop",
+            "needs_human",
+            "invoke_failed",
+            "waiting_for_output",
+            "waiting_for_marker",
+            "gate_no_go",
+            "follow_in_flight",
+        }:
             stopped = action
             break
         if dry_run:

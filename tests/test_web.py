@@ -1,19 +1,39 @@
 from __future__ import annotations
 
+import io
 import json
+import socket
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 from arthur_loop.artifact_store import save_chatgpt_artifact
-from arthur_loop.browser_lock import acquire_lock, read_lock, release_lock
+from arthur_loop.browser_lock import acquire_lock, read_lock
+from arthur_loop.cli import main
+from arthur_loop.follow import preview_next_step
 from arthur_loop.init_cli import seed_demo
-from arthur_loop.queue_ledger import QueueLedger
+from arthur_loop.loop_ops import _next_job_id
+from arthur_loop.queue_ledger import QueueJob, QueueLedger
+from arthur_loop.status import collect_status
 from arthur_loop.web import make_server
+
+
+_PLAN_REPLY = """# Next plan
+
+```text
+PROJECT_ID: DEMO_APP
+REVIEW_TYPE: NEXT_PLAN_REQUEST
+APPROVAL_DECISION: REQUEST_CODEX_PLAN
+HAS_P0_P1: false
+```
+"""
 
 
 class WebConsoleTests(unittest.TestCase):
@@ -79,11 +99,14 @@ class WebConsoleTests(unittest.TestCase):
         self.assertIn(self.token, html)
         self.assertNotIn("__ARTHUR_TOKEN__", html)
 
-        # a bare GET / (another local user, a guessing script) never learns the token
-        with self.assertRaises(urllib.error.HTTPError) as ctx:
-            self._get("/", token=None)
-        self.assertEqual(ctx.exception.code, 403)
-        self.assertNotIn(self.token, ctx.exception.read().decode("utf-8"))
+        # a bare GET / serves the shell so a reload can use sessionStorage,
+        # but it must not contain this process's token
+        with self._get("/", token=None) as response:
+            shell = response.read().decode("utf-8")
+        self.assertIn("text/html", response.headers["Content-Type"])
+        self.assertIn("app.js", shell)
+        self.assertNotIn(self.token, shell)
+        self.assertIn('content=""', shell)
 
     def test_api_reads_require_the_session_token(self) -> None:
         for path in ("/api/status", "/api/events?n=3", "/api/artifacts?project=DEMO_APP", "/api/file?path=human-decisions/open.md"):
@@ -100,6 +123,50 @@ class WebConsoleTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._get("/assets/../web.py", token=None)
         self.assertEqual(ctx.exception.code, 404)
+
+    def test_client_disconnect_during_run_next_does_not_traceback(self) -> None:
+        """A browser reload mid-hop must not log a traceback or a fake 500."""
+
+        def slow(*_args, **_kwargs):
+            time.sleep(0.5)
+            return {"steps": [], "stopped": "idle", "once": True}
+
+        port = self.server.server_address[1]
+        body = b'{"once": true}'
+        request = (
+            f"POST /api/actions/run-next HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{port}\r\n"
+            f"X-Arthur-Token: {self.token}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            f"Connection: close\r\n\r\n"
+        ).encode() + body
+        captured = io.StringIO()
+        with patch("arthur_loop.web.follow_loop", slow), redirect_stderr(captured):
+            sock = socket.create_connection(("127.0.0.1", port))
+            sock.sendall(request)
+            time.sleep(0.05)
+            sock.close()
+            time.sleep(0.8)
+        self.assertNotIn("Traceback", captured.getvalue())
+
+    def test_queue_recover_button_skips_never_claimed_jobs(self) -> None:
+        with self._get("/assets/app.js", token=None) as response:
+            script = response.read().decode("utf-8")
+        self.assertIn('!(j.status === "queued" && !j.claimedBy)', script)
+        self.assertIn("runInFlight", script)
+        self.assertIn("arthur-loop-token", script)
+        self.assertIn('aria-label", "Project"', script)
+
+    def test_canvas_bars_stay_in_separate_halves(self) -> None:
+        with self._get("/assets/style.css", token=None) as response:
+            css = response.read().decode("utf-8")
+        self.assertIn("max-width: calc(50% - 8px)", css)
+        self.assertIn(".canvas-legend { right: var(--pad); max-width: none; }", css)
+        fold = css.split("@media (max-width: 1080px)", 1)[1].split("@media (max-width: 720px)", 1)[0]
+        self.assertIn("flex-wrap: wrap", fold)
+        self.assertIn(".topbar-state", fold)
+        self.assertIn("white-space: nowrap", css)
 
     def test_events_endpoint_returns_recent_first(self) -> None:
         with self._get("/api/events?n=5") as response:
@@ -128,7 +195,10 @@ class WebConsoleTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
 
     def test_recover_job_parks_then_requeues(self) -> None:
+        from arthur_loop.loop_ops import claim_job
+
         ledger = QueueLedger(self.root)
+        claim_job(self.root, "BQ-DEMO_APP-002", holder="web-test")
         with self._post(
             "/api/actions/recover-job",
             {"job_id": "BQ-DEMO_APP-002", "requeue": True},
@@ -338,9 +408,15 @@ class WebEnrichmentTests(unittest.TestCase):
         acquire_lock(self.root, "active-manager")
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self._post("/api/actions/break-lock", {})
-        self.assertEqual(ctx.exception.code, 400)
+        self.assertEqual(ctx.exception.code, 409)
+        self.assertIn(b"active-manager", ctx.exception.read())
         self.assertIsNotNone(read_lock(self.root))
-        release_lock(self.root, "active-manager")
+
+        with self._post("/api/actions/break-lock", {"force": True}) as response:
+            forced = json.load(response)
+        self.assertTrue(forced["broken"])
+        self.assertEqual(forced["holder"], "active-manager")
+        self.assertIsNone(read_lock(self.root))
 
         stale_moment = datetime.now(timezone.utc) - timedelta(hours=2)
         acquire_lock(self.root, "dead-manager", now=stale_moment)
@@ -350,6 +426,279 @@ class WebEnrichmentTests(unittest.TestCase):
         self.assertTrue(record["broken"])
         self.assertEqual(record["holder"], "dead-manager")
         self.assertIsNone(read_lock(self.root))
+
+
+def _cli(argv: list[str]) -> tuple[int, str, str]:
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        code = main(argv)
+    return code, out.getvalue(), err.getvalue()
+
+
+class RunNextResumeTests(unittest.TestCase):
+    """Two queued manual hops must not collide, and a pasted .out.md must advance."""
+
+    def test_run_next_reuses_holder_releases_lock_and_resumes_reply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, _, err = _cli(
+                [
+                    "init", "--root", tmp, "--yes", "--main-agent", "none",
+                    "--advisor", "manual", "--executor", "manual", "--tracker", "none",
+                    "--no-governor", "--no-integrations",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            code, out, err = _cli(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "manual",
+                    "--executor", "manual",
+                    "--title", "Demo",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            first_id = json.loads(out)["job"]["job_id"]
+            code, _, err = _cli(
+                [
+                    "queue", "--root", tmp, "create",
+                    "--job-id", "BQ-DEMO_APP-002",
+                    "--project-id", "DEMO_APP",
+                    "--target-chat-title", "Demo 2",
+                    "--target-chat-url", "manual",
+                    "--expected-marker", "DEMO_APP_LOOP_BQ_DEMO_APP_002",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+
+            root = Path(tmp)
+            server = make_server(root, port=0)
+            self.assertEqual(server.arthur_app.run_holder, "web-run-next")  # type: ignore[attr-defined]
+            token = server.arthur_app.token  # type: ignore[attr-defined]
+            base = f"http://127.0.0.1:{server.server_address[1]}"
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            def post(path: str, body: dict) -> tuple[int, dict]:
+                request = urllib.request.Request(
+                    base + path,
+                    data=json.dumps(body).encode("utf-8"),
+                    headers={"Content-Type": "application/json", "X-Arthur-Token": token},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(request, timeout=10) as response:
+                        return response.status, json.load(response)
+                except urllib.error.HTTPError as exc:
+                    raw = exc.read().decode("utf-8")
+                    return exc.code, json.loads(raw) if raw else {}
+
+            def get_status() -> dict:
+                request = urllib.request.Request(base + "/api/status", headers={"X-Arthur-Token": token})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    return json.load(response)
+
+            try:
+                code1, step1 = post("/api/actions/run-next", {"once": True, "chain": False})
+                self.assertEqual(code1, 200, step1)
+                self.assertEqual(step1["stopped"], "needs_human")
+                self.assertEqual(step1["steps"][0]["submitted"]["claimed_by"], "web-run-next")
+                self.assertEqual(step1["steps"][0]["submitted"]["status"], "submitted")
+                self.assertTrue(step1["steps"][0]["lock_released"])
+                self.assertIn(".out.md", step1["steps"][0]["out"])
+                self.assertIsNone(read_lock(root))
+
+                status = get_status()
+                self.assertTrue(status["pendingReplies"])
+                self.assertIn(first_id, [row["jobId"] for row in status["pendingReplies"]])
+
+                code2, step2 = post("/api/actions/run-next", {"once": True, "chain": False})
+                self.assertEqual(code2, 200, step2)
+                self.assertEqual(step2["stopped"], "needs_human")
+                self.assertNotEqual(step2["steps"][0]["job_id"], step1["steps"][0]["job_id"])
+                self.assertEqual(step2["steps"][0]["submitted"]["claimed_by"], "web-run-next")
+                self.assertIsNone(read_lock(root))
+                jobs = QueueLedger(root).latest_jobs()
+                self.assertEqual(jobs[first_id].status, "submitted")
+                self.assertEqual(jobs["BQ-DEMO_APP-002"].status, "submitted")
+
+                marker = jobs[first_id].expected_marker or ""
+                out_path = root / "runtime" / "follow" / f"{first_id}.out.md"
+                out_path.write_text(_PLAN_REPLY + f"\n{marker}\n", encoding="utf-8")
+                code3, step3 = post("/api/actions/run-next", {"once": True, "chain": False})
+                self.assertEqual(code3, 200, step3)
+                self.assertEqual(step3["stopped"], "advanced", step3)
+                self.assertEqual(step3["steps"][0]["job_id"], first_id)
+                self.assertEqual(QueueLedger(root).latest_jobs()[first_id].status, "completed")
+
+                second = root / "runtime" / "follow" / "BQ-DEMO_APP-002.out.md"
+                second.write_text(_PLAN_REPLY + "\nDEMO_APP_LOOP_BQ_DEMO_APP_002\n", encoding="utf-8")
+                code_cli, out_cli, err_cli = _cli(["follow", "--root", tmp, "--once", "--no-chain"])
+                self.assertEqual(code_cli, 0, err_cli)
+                report = json.loads(out_cli)
+                self.assertEqual(report["stopped"], "advanced", report)
+                self.assertEqual(report["steps"][0]["job_id"], "BQ-DEMO_APP-002")
+                self.assertEqual(QueueLedger(root).latest_jobs()["BQ-DEMO_APP-002"].status, "completed")
+                self.assertIsNone(read_lock(root))
+
+                acquire_lock(root, "cli-live")
+                refused, body = post("/api/actions/break-lock", {})
+                self.assertEqual(refused, 409)
+                self.assertIn("cli-live", body.get("error", ""))
+                self.assertIsNotNone(read_lock(root))
+                forced, forced_body = post("/api/actions/break-lock", {"force": True})
+                self.assertEqual(forced, 200, forced_body)
+                self.assertTrue(forced_body["broken"])
+                self.assertIsNone(read_lock(root))
+            finally:
+                server.shutdown()
+                server.server_close()
+
+
+class ApiShapeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        code, _, err = _cli(
+            [
+                "init", "--root", self._tmp.name, "--yes", "--main-agent", "none",
+                "--advisor", "manual", "--executor", "manual", "--tracker", "none",
+                "--no-governor", "--no-integrations",
+            ]
+        )
+        if code != 0:
+            raise AssertionError(err)
+        self.root = Path(self._tmp.name)
+        self.server = make_server(self.root, port=0)
+        self.token = self.server.arthur_app.token  # type: ignore[attr-defined]
+        self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self._tmp.cleanup()
+
+    def _get(self, path: str):
+        request = urllib.request.Request(self.base + path, headers={"X-Arthur-Token": self.token})
+        return urllib.request.urlopen(request, timeout=5)
+
+    def _post_raw(self, path: str, data: bytes | None) -> tuple[int, dict]:
+        headers = {"X-Arthur-Token": self.token, "Content-Type": "application/json"}
+        request = urllib.request.Request(self.base + path, data=data, headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(request, timeout=5) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8")
+            return exc.code, json.loads(raw) if raw else {}
+
+    def test_unimplemented_methods_are_405(self) -> None:
+        for method in ("PUT", "DELETE", "PATCH"):
+            request = urllib.request.Request(self.base + "/api/status", method=method)
+            request.add_header("X-Arthur-Token", self.token)
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(request, timeout=5)
+            self.assertEqual(ctx.exception.code, 405)
+            body = json.loads(ctx.exception.read().decode("utf-8"))
+            self.assertEqual(body.get("error"), "method not allowed")
+
+    def test_file_without_a_path_is_400(self) -> None:
+        for path in ("/api/file", "/api/file?path="):
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self._get(path)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertIn(b"required", ctx.exception.read().lower())
+
+    def test_unknown_action_is_404_before_the_body_is_read(self) -> None:
+        for data in (None, b"", b'{"unused": true}'):
+            code, body = self._post_raw("/api/actions/not-a-real-action", data)
+            self.assertEqual(code, 404, body)
+            self.assertIn("unknown action", body.get("error", ""))
+
+    def test_role_strings_are_accepted_beside_objects(self) -> None:
+        code, saved = self._post_raw(
+            "/api/actions/set-roles",
+            json.dumps({"roles": {"reviewer": "claude-code:opus"}}).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, saved)
+        self.assertEqual(saved["roles"]["reviewer"]["agent"], "claude-code")
+        self.assertEqual(saved["roles"]["reviewer"]["model"], "opus")
+
+        code, created = self._post_raw(
+            "/api/actions/create-loop",
+            json.dumps(
+                {
+                    "project_id": "SHOP",
+                    "seed_job": False,
+                    "roles": {
+                        "planner": "manual",
+                        "implementer": {"agent": "codex", "model": "gpt-5"},
+                    },
+                }
+            ).encode("utf-8"),
+        )
+        self.assertEqual(code, 200, created)
+        self.assertEqual(created["roles"]["planner"]["agent"], "manual")
+        self.assertEqual(created["roles"]["implementer"]["agent"], "codex")
+        self.assertEqual(created["roles"]["implementer"]["model"], "gpt-5")
+
+    def test_status_payload_reuses_one_job_read(self) -> None:
+        root = self.root
+        for project_id in ("SHOP", "OTHER"):
+            state = root / "projects" / project_id / "state.md"
+            state.parent.mkdir(parents=True, exist_ok=True)
+            state.write_text(f"# {project_id}\n\nready\n", encoding="utf-8")
+        ledger = QueueLedger(root)
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-001", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="submitted"))
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-003", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="submitted"))
+        ledger.record_job(QueueJob(job_id="BQ-SHOP-004", project_id="SHOP", target_chat_title="t", target_chat_url="manual", status="completed"))
+        ledger.record_job(QueueJob(job_id="BQ-OTHER-002", project_id="OTHER", target_chat_title="t", target_chat_url="manual", status="queued"))
+        ledger.record_job(QueueJob(job_id="BQ-OTHER-010", project_id="OTHER", target_chat_title="t", target_chat_url="manual", status="completed"))
+        follow = root / "runtime" / "follow"
+        follow.mkdir(parents=True, exist_ok=True)
+        (follow / "BQ-SHOP-001.inbox.md").write_text("inbox\n", encoding="utf-8")
+        (follow / "BQ-SHOP-001.out.md").write_text("   \n", encoding="utf-8")
+        (follow / "BQ-SHOP-003.inbox.md").write_text("inbox\n", encoding="utf-8")
+        (follow / "BQ-SHOP-003.out.md").write_text("already answered\n", encoding="utf-8")
+        (follow / "BQ-OTHER-002.inbox.md").write_text("inbox\n", encoding="utf-8")
+
+        app = self.server.arthur_app  # type: ignore[attr-defined]
+        config = app.config
+
+        def baseline() -> None:
+            collect_status(
+                root,
+                reserve_percent=float(config["reserve_policy"]["minimum_reserve_percent"]),
+                quota_enabled=bool(config["components"]["resource_governor"]),
+            )
+            preview_next_step(root)
+
+        def count_reads(fn) -> int:
+            calls = {"n": 0}
+            original = QueueLedger.latest_jobs
+
+            def wrapped(ledger, *args, **kwargs):
+                calls["n"] += 1
+                return original(ledger, *args, **kwargs)
+
+            with patch.object(QueueLedger, "latest_jobs", wrapped):
+                fn()
+            return calls["n"]
+
+        self.assertEqual(count_reads(app.status_payload), count_reads(baseline))
+        payload = app.status_payload()
+        self.assertEqual(
+            payload["nextJobIds"],
+            {project_id: _next_job_id(root, project_id) for project_id in ("SHOP", "OTHER")},
+        )
+        self.assertEqual([row["jobId"] for row in payload["pendingReplies"]], ["BQ-SHOP-001"])
+        self.assertEqual(payload["pendingReplies"], app.pending_replies())
+        with patch.object(QueueLedger, "latest_jobs", side_effect=AssertionError("ledger reread")):
+            self.assertEqual(
+                _next_job_id(root, "SHOP", {"BQ-SHOP-009"}, known={"BQ-SHOP-004"}),
+                "BQ-SHOP-010",
+            )
 
 
 if __name__ == "__main__":

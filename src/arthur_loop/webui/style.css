@@ -96,6 +96,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   padding: 4px 10px 4px 8px; border-radius: 999px;
   font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
   border: 1px solid var(--line); color: var(--text-muted);
+  white-space: nowrap; flex: none;
 }
 .state-chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wait); }
 .state-chip[data-state="POLL_DUE"] { color: var(--go); border-color: color-mix(in srgb, var(--go) 40%, var(--line)); background: color-mix(in srgb, var(--go) 12%, transparent); }
@@ -174,7 +175,9 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 /* ---- center stage ----------------------------------------------------- */
 
 .stage { grid-area: stage; position: relative; overflow: hidden; background: var(--bg); }
-.view { position: absolute; inset: 0; overflow: auto; }
+.view { position: absolute; inset: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--text-faint) transparent; }
+.view::-webkit-scrollbar { height: 10px; width: 10px; }
+.view::-webkit-scrollbar-thumb { background: var(--text-faint); border-radius: 5px; }
 .view[hidden] { display: none; }
 
 .view-head {
@@ -203,6 +206,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .canvas-legend {
   position: absolute; left: var(--pad); bottom: var(--pad);
   display: flex; gap: 14px; flex-wrap: wrap;
+  max-width: calc(50% - 8px);
   padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(8px); font-size: 10.5px; color: var(--text-muted);
@@ -211,6 +215,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .canvas-legend i { width: 8px; height: 8px; border-radius: 2px; }
 .canvas-hint {
   position: absolute; right: var(--pad); bottom: var(--pad);
+  max-width: calc(50% - 8px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 10.5px; color: var(--text-faint);
   padding: 7px 11px; border: 1px solid var(--line-soft); border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface) 80%, transparent);
@@ -309,6 +315,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   margin-top: 8px; font-size: 11.5px; line-height: 1.55; color: var(--text-muted);
   white-space: pre-wrap; max-height: 150px; overflow-y: auto;
 }
+.decision .d-body em { color: var(--text); font-style: italic; }
 .decision textarea {
   width: 100%; margin-top: 9px; resize: vertical; min-height: 76px;
   background: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm);
@@ -391,6 +398,7 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
   animation: toast-in 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .toast.ok { border-left-color: var(--go); }
+.toast.warn { border-left-color: var(--lock); }
 .toast.err { border-left-color: var(--quota); }
 .toast .t-title { font-weight: 700; }
 .toast .t-body { color: var(--text-muted); margin-top: 2px; }
@@ -417,7 +425,8 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 .role-strip {
   position: absolute;
   left: 14px;
-  right: 14px;
+  /* Fit (.canvas-reset) is top-right; keep it clear of the chips at every width. */
+  right: 72px;
   top: 10px;
   display: flex;
   flex-wrap: wrap;
@@ -441,10 +450,49 @@ h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 /* ---- responsive: fold the rails under 1080px -------------------------- */
 
 @media (max-width: 1080px) {
-  #app { grid-template-columns: 60px 1fr; grid-template-areas: "top top" "nav stage"; }
+  #app {
+    grid-template-columns: 60px 1fr;
+    grid-template-rows: auto 1fr minmax(160px, 38vh);
+    grid-template-areas: "top top" "nav stage" "rail rail";
+  }
   .railnav-item span:not(.ri):not(.railnav-count), .railnav-projects, .railnav-foot { display: none; }
   .railnav-item { justify-content: center; }
-  .rail { display: none; }
+  .rail { display: flex; border-left: 0; border-top: 1px solid var(--line); }
+  /* The state pill sits in the same row as the lock until 720px. At tablet
+     widths that pill shrinks onto the lock. Give it a full row with the rail fold. */
+  .topbar { flex-wrap: wrap; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; row-gap: 8px; }
+  .topbar-right { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+  .topbar-state { flex: 1 1 100%; order: 5; margin-left: 0; overflow: hidden; }
+  .state-hint { white-space: normal; }
+}
+
+.project-pick {
+  margin-left: auto;
+  background: var(--ink); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font: 12px var(--mono); padding: 4px 8px;
+}
+
+@media (max-width: 720px) {
+  .canvas-hint { display: none; }
+  .canvas-legend { right: var(--pad); max-width: none; }
+  .tbl, .tbl tbody, .tbl tr, .tbl td { display: block; }
+  .tbl { width: auto; }
+  .tbl thead { display: none; }
+  .tbl tr {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    margin: 0 0 10px; padding: 8px 10px; background: var(--surface);
+  }
+  .tbl td {
+    border: none; padding: 3px 0; display: flex; justify-content: space-between; gap: 12px;
+    text-align: right; white-space: normal;
+  }
+  .tbl td::before {
+    content: attr(data-label);
+    color: var(--text-faint); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    text-align: left;
+  }
+  .tbl .num { text-align: right; }
 }
 
 @media (prefers-reduced-motion: reduce) {

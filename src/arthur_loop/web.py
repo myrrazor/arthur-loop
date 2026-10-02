@@ -18,7 +18,7 @@ from arthur_loop.config import load_config, require_instance
 from arthur_loop.decisions import answer_decision as _answer_decision
 from arthur_loop.decisions import list_decisions
 from arthur_loop.follow import follow_loop, preview_next_step
-from arthur_loop.loop_ops import apply_role_updates, create_loop, wizard_options
+from arthur_loop.loop_ops import _next_job_id, apply_role_updates, create_loop, wizard_options
 from arthur_loop.pathguard import READABLE_SUFFIXES, resolve_instance_file
 from arthur_loop.roles import formulate_default_loop, resolve_roles, roles_payload
 from arthur_loop.queue_ledger import QueueJob, QueueLedger, read_jsonl
@@ -27,6 +27,13 @@ from arthur_loop.status import clear_session, collect_status, status_to_dict
 
 
 DEFAULT_PORT = 7433
+# A reload or a closed tab drops the socket while a hop is still finishing.
+# That is not a server failure: the hop already ran, and writing the response
+# (or the fallback 500) just raises BrokenPipeError.
+_CLIENT_GONE = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+# One holder for every Run next in this process. A fresh id per click made
+# the second claim collide with the lock the first click was still holding.
+WEB_RUN_HOLDER = "web-run-next"
 
 # routes that never need the session token: the bootstrap page (which itself
 # requires ?token=) and the static assets it loads
@@ -40,6 +47,17 @@ STATIC_FILES = {
 
 # viewer cap — loop logs grow without bound, don't slurp them whole
 MAX_VIEW_BYTES = 2_000_000
+
+ACTION_PATHS = {
+    "/api/actions/answer-decision",
+    "/api/actions/recover-job",
+    "/api/actions/create-job",
+    "/api/actions/create-loop",
+    "/api/actions/set-roles",
+    "/api/actions/run-next",
+    "/api/actions/clear-session",
+    "/api/actions/break-lock",
+}
 
 
 def _camel_key(key: str) -> str:
@@ -67,6 +85,7 @@ class WebApp:
         # one secret per process: the operator gets it in the URL `arthur web` prints,
         # and every read or write over the API must present it
         self.token = secrets.token_urlsafe(24)
+        self.run_holder = WEB_RUN_HOLDER
         # ThreadingHTTPServer: writes are read-modify-write, serialize them
         self._write_lock = threading.Lock()
 
@@ -100,9 +119,51 @@ class WebApp:
         }
         payload["roles"] = roles_payload(self.config)
         payload["loopSequence"] = formulate_default_loop(self.config).get("hops") or []
-        payload["nextRun"] = preview_next_step(self.root)
+        # Preview, pending replies, and next job ids all need the latest jobs.
+        # Read the ledger once and hand that snapshot down; a second pass per
+        # project made GET /api/status scale with the queue.
+        jobs = QueueLedger(self.root).latest_jobs()
+        payload["nextRun"] = preview_next_step(self.root, jobs=jobs)
         payload["loopWizard"] = wizard_options(self.root)
+        payload["pendingReplies"] = self.pending_replies(jobs)
+        known_ids = set(jobs)
+        payload["nextJobIds"] = {
+            project["projectId"]: _next_job_id(self.root, project["projectId"], known=known_ids)
+            for project in payload["projects"]
+        }
         return payload
+
+    def pending_replies(self, jobs: dict[str, QueueJob] | None = None) -> list[dict[str, Any]]:
+        """Submitted hops whose inbox is waiting on an empty sibling .out.md."""
+
+        if jobs is None:
+            jobs = QueueLedger(self.root).latest_jobs()
+        follow = self.root / "runtime" / "follow"
+        if not follow.is_dir():
+            return []
+        waiting_status = {"submitted", "waiting_for_chatgpt", "claimed"}
+        pending: list[dict[str, Any]] = []
+        for inbox in sorted(follow.glob("*.inbox.md")):
+            job_id = inbox.name[: -len(".inbox.md")]
+            out = follow / f"{job_id}.out.md"
+            try:
+                if out.is_file() and out.read_text(encoding="utf-8").strip():
+                    continue
+            except OSError:
+                continue
+            job = jobs.get(job_id)
+            if job is None or job.status not in waiting_status:
+                continue
+            pending.append(
+                {
+                    "jobId": job.job_id,
+                    "projectId": job.project_id,
+                    "status": job.status,
+                    "inbox": inbox.relative_to(self.root).as_posix(),
+                    "out": out.relative_to(self.root).as_posix(),
+                }
+            )
+        return pending
 
     def _decision_bodies(self) -> dict[str, str]:
         """Map open-decision titles to their question text (status line stripped)."""
@@ -248,7 +309,7 @@ class WebApp:
             once=bool(once),
             max_steps=int(body.get("max_steps") or 12),
             project_id=str(body["project_id"]).strip() if body.get("project_id") else None,
-            holder=f"web-run-next-{secrets.token_hex(8)}",
+            holder=self.run_holder,
             chain=body.get("chain", True),
             dry_run=bool(body.get("dry_run")),
         )
@@ -257,16 +318,14 @@ class WebApp:
         cleared = clear_session(self.root, session_id)
         return {"session_id": session_id, "cleared": cleared}
 
-    def break_lock(self) -> dict[str, Any]:
-        """Remove a STALE browser lock. A fresh lock means the holder is active: refuse."""
+    def break_lock(self, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Remove a browser lock. A fresh lock needs {"force": true}."""
 
+        force = bool((body or {}).get("force"))
         with self._write_lock:
             if read_lock(self.root) is None:
                 return {"broken": False, "reason": "no lock held"}
-            try:
-                broken = break_lock(self.root, force=False, via="web-console")
-            except BrowserLockError as exc:
-                raise ValueError(str(exc))
+            broken = break_lock(self.root, force=force, via="web-console")
         return {"broken": broken is not None, "holder": broken.holder if broken else None}
 
 
@@ -278,6 +337,17 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:
         pass
 
+    def send_error(self, code: int, message: str | None = None, explain: str | None = None) -> None:
+        # BaseHTTPRequestHandler answers an unknown method with 501. That is a
+        # 5xx for a client mistake; answer 405 and keep the same JSON errors.
+        if code == HTTPStatus.NOT_IMPLEMENTED:
+            if not self._host_allowed():
+                self._fail(HTTPStatus.FORBIDDEN, "arthur web only answers localhost")
+                return
+            self._fail(HTTPStatus.METHOD_NOT_ALLOWED, "method not allowed")
+            return
+        super().send_error(code, message, explain)
+
     # -------------------------------------------------------------- plumbing
 
     def _host_allowed(self) -> bool:
@@ -288,23 +358,23 @@ class Handler(BaseHTTPRequestHandler):
             host = raw.split(":", 1)[0]
         return host in ("127.0.0.1", "localhost", "[::1]")
 
+    def _send_bytes(self, body: bytes, content_type: str, status: int = 200) -> None:
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except _CLIENT_GONE:
+            return
+
     def _send_json(self, payload: Any, status: int = 200) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(body, "application/json; charset=utf-8", status)
 
     def _send_text(self, text: str, content_type: str, status: int = 200) -> None:
-        body = text.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        self._send_bytes(text.encode("utf-8"), content_type, status)
 
     def _fail(self, status: int, message: str) -> None:
         self._send_json({"error": message}, status=status)
@@ -340,18 +410,15 @@ class Handler(BaseHTTPRequestHandler):
                 if name not in STATIC_FILES:
                     return self._fail(HTTPStatus.NOT_FOUND, "unknown asset")
                 return self._send_text(_read_ui(name), STATIC_FILES[name])
-            if not self.app.token_ok(self._presented_token(query)):
-                if url.path == "/":
-                    return self._send_text(
-                        "Arthur Loop web console: open the exact URL printed by `arthur web` "
-                        "(it carries this session's token).\n",
-                        "text/plain; charset=utf-8",
-                        status=HTTPStatus.FORBIDDEN,
-                    )
-                return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
             if url.path == "/":
-                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", self.app.token)
+                # The shell is not secret (assets are already public). Only a
+                # correct ?token= is copied into the page; a reload then keeps
+                # that token in sessionStorage instead of the address bar.
+                accepted = self.app.token if self.app.token_ok(self._presented_token(query)) else ""
+                html = _read_ui("index.html").replace("__ARTHUR_TOKEN__", accepted)
                 return self._send_text(html, "text/html; charset=utf-8")
+            if not self.app.token_ok(self._presented_token(query)):
+                return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
             if url.path == "/api/status":
                 return self._send_json(self.app.status_payload())
             if url.path == "/api/events":
@@ -373,10 +440,19 @@ class Handler(BaseHTTPRequestHandler):
                     return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
                 except FileNotFoundError:
                     return self._fail(HTTPStatus.NOT_FOUND, "no such file")
+                except ValueError as exc:
+                    return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
             return self._fail(HTTPStatus.NOT_FOUND, "unknown route")
+        except BrowserLockError as exc:
+            return self._fail(HTTPStatus.CONFLICT, str(exc))
+        except _CLIENT_GONE:
+            return
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
-            return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            try:
+                return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            except _CLIENT_GONE:
+                return
 
     def do_POST(self) -> None:  # noqa: N802 - stdlib naming
         if not self._host_allowed():
@@ -384,37 +460,48 @@ class Handler(BaseHTTPRequestHandler):
         if not self.app.token_ok(self.headers.get("X-Arthur-Token")):
             return self._fail(HTTPStatus.FORBIDDEN, "missing or wrong session token")
 
+        path = urlparse(self.path).path
+        if path.startswith("/api/actions/") and path not in ACTION_PATHS:
+            return self._fail(HTTPStatus.NOT_FOUND, "unknown action")
+
         try:
             body = self._read_body()
-            if self.path == "/api/actions/answer-decision":
+            if path == "/api/actions/answer-decision":
                 return self._send_json(
                     self.app.answer_decision(str(body.get("title", "")), str(body.get("answer", "")))
                 )
-            if self.path == "/api/actions/recover-job":
+            if path == "/api/actions/recover-job":
                 return self._send_json(
                     self.app.recover_job(str(body.get("job_id", "")), bool(body.get("requeue")))
                 )
-            if self.path == "/api/actions/create-job":
+            if path == "/api/actions/create-job":
                 return self._send_json(self.app.create_job(body))
-            if self.path == "/api/actions/create-loop":
+            if path == "/api/actions/create-loop":
                 return self._send_json(self.app.create_loop(body))
-            if self.path == "/api/actions/set-roles":
+            if path == "/api/actions/set-roles":
                 return self._send_json(self.app.set_roles(body))
-            if self.path == "/api/actions/run-next":
+            if path == "/api/actions/run-next":
                 return self._send_json(self.app.run_next(body))
-            if self.path == "/api/actions/clear-session":
+            if path == "/api/actions/clear-session":
                 return self._send_json(self.app.clear_session_action(str(body.get("session_id", ""))))
-            if self.path == "/api/actions/break-lock":
-                return self._send_json(self.app.break_lock())
+            if path == "/api/actions/break-lock":
+                return self._send_json(self.app.break_lock(body))
             return self._fail(HTTPStatus.NOT_FOUND, "unknown action")
         except KeyError as exc:
             # str(KeyError) wraps the message in quotes
             return self._fail(HTTPStatus.BAD_REQUEST, str(exc.args[0]) if exc.args else str(exc))
         except ValueError as exc:
             return self._fail(HTTPStatus.BAD_REQUEST, str(exc))
+        except BrowserLockError as exc:
+            return self._fail(HTTPStatus.CONFLICT, str(exc))
+        except _CLIENT_GONE:
+            return
         except Exception:  # pragma: no cover - last-resort guard
             traceback.print_exc()
-            return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            try:
+                return self._fail(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error — see the arthur web terminal")
+            except _CLIENT_GONE:
+                return
 
 
 def _read_ui(name: str) -> str:

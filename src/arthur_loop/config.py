@@ -7,6 +7,9 @@ from typing import Any
 from arthur_loop.roles import derive_roles, merge_roles, validate_roles
 
 
+# Real coding-agent hops run for many minutes. 120s used to kill them mid-edit.
+DEFAULT_INVOKE_TIMEOUT_SECONDS = 45 * 60
+
 # every id here has a shipped pack under src/arthur_loop/adapters/ (tests enforce it)
 KNOWN_ADVISORS = {"chatgpt-browser", "claude-code", "codex", "grok", "manual"}
 KNOWN_EXECUTORS = {"codex", "claude-code", "grok", "manual"}
@@ -28,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
         "first_poll_minutes": 1,
         "steady_poll_minutes": 5,
         "max_retries_after_stopped_no_output": 1,
+        "invoke_timeout_seconds": DEFAULT_INVOKE_TIMEOUT_SECONDS,
     },
     "projects": [],
 }

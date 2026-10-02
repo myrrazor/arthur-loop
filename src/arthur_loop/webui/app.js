@@ -4,9 +4,13 @@
    offers human actions (assign roles, run next hop, answer decision, recover
    job, create loop, create job, clear session, break stale lock). */
 
-const TOKEN = document.querySelector('meta[name="arthur-token"]').content;
+// The server copies a valid ?token= into the meta tag, then we drop it from
+// the address bar. sessionStorage keeps the same tab working after a reload.
+const metaToken = document.querySelector('meta[name="arthur-token"]').content || "";
+const savedToken = sessionStorage.getItem("arthur-loop-token") || "";
+const TOKEN = metaToken || savedToken;
+if (metaToken) sessionStorage.setItem("arthur-loop-token", metaToken);
 const POLL_MS = 3000;
-// the bootstrap URL carries the session token; keep it out of the address bar / history
 if (location.search.includes("token=")) history.replaceState(null, "", location.pathname);
 
 const STATE_META = {
@@ -106,11 +110,23 @@ async function poll() {
 
 /* ---- derived: the next-action headline --------------------------------- */
 
+function pendingReplyLine(status) {
+  const rows = status.pendingReplies || [];
+  if (!rows.length) return null;
+  const row = rows[0];
+  const extra = rows.length > 1 ? ` (+${rows.length - 1} more)` : "";
+  return `awaited for ${row.jobId} — paste into ${row.out}${extra}`;
+}
+
 function nextAction(status) {
   const meta = STATE_META[status.state] || STATE_META.WAIT;
   const now = Date.now();
   if (status.state === "HUMAN_INPUT_REQUIRED" && status.decisions.length) {
     return { verb: "Answer", target: status.decisions[0].title, color: meta.color };
+  }
+  const pending = pendingReplyLine(status);
+  if (pending && status.state !== "POLL_DUE" && status.state !== "BLOCKED_BY_BROWSER_LOCK") {
+    return { verb: "Reply", target: pending, color: "var(--human)" };
   }
   if (status.state === "POLL_DUE" && status.tick.dueJobId) {
     const job = status.queue.find((j) => j.jobId === status.tick.dueJobId);
@@ -143,7 +159,9 @@ function render() {
   const runBtn = document.querySelector('[data-action="run-next"]');
   if (runBtn) {
     const next = s.nextRun;
-    runBtn.disabled = !next;
+    // A status poll must not re-enable the button while this click's request
+    // is still inside the agent. nextRun stays truthy for the whole hop.
+    runBtn.disabled = runInFlight || !next;
     runBtn.title = next
       ? `Run ${next.role} (${next.agent}${next.model ? ":" + next.model : ""}) on ${next.kind}`
       : "No queued hop to run";
@@ -176,6 +194,10 @@ function updateFreshness() {
   txt.textContent = "live";
 }
 
+function webRunHolder(holder) {
+  return String(holder || "").startsWith("web-run-next");
+}
+
 function renderLock(s) {
   const wrap = bind("lock-chip");
   const lock = s.browserLock;
@@ -184,11 +206,22 @@ function renderLock(s) {
   wrap.classList.toggle("is-stale", !lock.fresh);
   bind("lock-text").textContent = lock.fresh ? `lock: ${lock.holder}` : `stale lock: ${lock.holder}`;
   const btn = bind("lock-break");
-  btn.hidden = lock.fresh; // breaking a fresh lock would yank it from an active agent
+  // A fresh CLI holder is still working. A stale lock, or one left by a
+  // finished web Run next, can be broken after an explicit confirm.
+  const recoverable = !lock.fresh || webRunHolder(lock.holder);
+  btn.hidden = !recoverable;
   btn.onclick = async () => {
+    const who = lock.holder || "the current holder";
+    const prompt = lock.fresh
+      ? `Break the lock held by ${who}? Only if that web run has finished.`
+      : `Break the stale lock held by ${who}?`;
+    if (!window.confirm(prompt)) return;
     btn.disabled = true;
-    try { await action("/api/actions/break-lock", {}); toast("ok", "Stale lock broken", lock.holder); poll(); }
-    catch (e) { toast("err", "Could not break lock", e.message); }
+    try {
+      await action("/api/actions/break-lock", { force: true });
+      toast("ok", "Lock broken", who);
+      poll();
+    } catch (e) { toast("err", "Could not break lock", e.message); }
     finally { btn.disabled = false; }
   };
 }
@@ -228,13 +261,15 @@ function railSignature(s) {
     s.tick.staleJobIds,
     s.sessions.map((x) => [x.sessionId, x.state, x.activity, x.stale, x.projectId]),
     (s.quarantine || []).map((q) => q.path),
+    (s.pendingReplies || []).map((row) => [row.jobId, row.out]),
   ]);
 }
 
 function renderRail(s) {
   const body = bind("rail-body");
   const quarantine = s.quarantine || [];
-  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0) + quarantine.length;
+  const pending = s.pendingReplies || [];
+  const attention = s.decisions.length + (s.tick.staleJobIds ? s.tick.staleJobIds.length : 0) + quarantine.length + pending.length;
   const badge = bind("attention-badge");
   badge.hidden = attention === 0; badge.textContent = attention;
 
@@ -253,6 +288,11 @@ function renderRail(s) {
   if (s.decisions.length) {
     body.append(el("div", "rail-group-title", "Open decisions"));
     for (const d of s.decisions) body.append(decisionCard(d));
+  }
+
+  if (pending.length) {
+    body.append(el("div", "rail-group-title", "Replies awaited"));
+    for (const row of pending) body.append(pendingReplyCard(row));
   }
 
   const staleIds = new Set(s.tick.staleJobIds || []);
@@ -296,10 +336,38 @@ function quarantineCard(q) {
   return card;
 }
 
+function pendingReplyCard(row) {
+  const card = el("div", "stale-job");
+  card.append(el("div", "s-id", row.jobId));
+  card.append(el("div", "s-meta", `Paste the reply into ${row.out}`));
+  const actions = el("div", "s-actions");
+  const view = el("button", "btn ghost sm", "Inbox");
+  view.onclick = () => openFile(row.inbox, `${row.jobId} inbox`);
+  actions.append(view);
+  card.append(actions);
+  return card;
+}
+
+function appendEmphasis(parent, text) {
+  const re = /_([^_\n]+)_/g;
+  let last = 0;
+  let match;
+  while ((match = re.exec(text))) {
+    if (match.index > last) parent.append(document.createTextNode(text.slice(last, match.index)));
+    parent.append(el("em", null, match[1]));
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) parent.append(document.createTextNode(text.slice(last)));
+}
+
 function decisionCard(d) {
   const card = el("div", "decision");
   card.append(el("div", "d-title", d.title), el("div", "d-project", d.projectId || ""));
-  if (d.body) card.append(el("div", "d-body", d.body));
+  if (d.body) {
+    const body = el("div", "d-body");
+    appendEmphasis(body, d.body);
+    card.append(body);
+  }
   const ta = el("textarea"); ta.placeholder = "Answer this decision. It records into human-decisions/open.md and unblocks the project.";
   card.append(ta);
   const actions = el("div", "d-actions");
@@ -543,6 +611,7 @@ function patchCanvas(s) {
 function deriveCanvas(s) {
   const by = (pred) => s.queue.filter(pred).length;
   const decisions = s.decisions.length;
+  const pending = (s.pendingReplies || []).length;
   const sessions = s.sessions.filter((x) => !x.stale);
   const execSess = sessions.filter((x) => x.role === "executor" || x.role === "project-loop");
   const queued = by((j) => j.status === "queued");
@@ -553,7 +622,16 @@ function deriveCanvas(s) {
     inflight: { big: String(inflight), sub: "awaiting advisor", n: inflight, mood: inflight ? "warn" : "idle", pip: inflight ? "var(--lock)" : "var(--wait)" },
     executor: { big: String(execSess.length), sub: execSess[0] ? execSess[0].projectId || "working" : "idle", n: execSess.length, mood: execSess.length ? "active" : "idle", pip: execSess.length ? "var(--go)" : "var(--wait)" },
     gate: { big: String(by((j) => j.status === "needs_recovery")), sub: "review · recover", mood: by((j) => j.status === "needs_recovery") ? "warn" : "idle", pip: by((j) => j.status === "needs_recovery") ? "var(--quota)" : "var(--wait)" },
-    human: { big: String(decisions), sub: decisions === 1 ? "decision open" : "decisions open", mood: decisions ? "blocked" : "idle", pip: decisions ? "var(--human)" : "var(--wait)" },
+    human: {
+      big: String(decisions || pending),
+      sub: decisions
+        ? (decisions === 1 ? "decision open" : "decisions open")
+        : pending
+          ? `reply awaited · ${(s.pendingReplies[0].out || "").split("/").pop()}`
+          : "decisions open",
+      mood: decisions || pending ? "blocked" : "idle",
+      pip: decisions || pending ? "var(--human)" : "var(--wait)",
+    },
   };
 }
 
@@ -664,14 +742,15 @@ function renderQueue(panel, s) {
   const tb = el("tbody");
   for (const j of s.queue) {
     const tr = el("tr");
-    tr.append(td("mono-id", j.jobId), td(null, j.projectId));
-    const st = el("td"); const pill = el("span", null, j.status); pill.style.cssText = `color:${JOB_STATE[j.status] || "var(--text)"}`; st.append(pill); tr.append(st);
-    tr.append(td("num", String(j.attemptCount)));
+    tr.append(td("mono-id", j.jobId, "Job"), td(null, j.projectId, "Project"));
+    const st = el("td"); st.dataset.label = "Status"; const pill = el("span", null, j.status); pill.style.cssText = `color:${JOB_STATE[j.status] || "var(--text)"}`; st.append(pill); tr.append(st);
+    tr.append(td("num", String(j.attemptCount), "Att"));
     const eta = j.status === "queued" ? "ready" : rel(j.nextPollAt, now);
-    tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta));
-    const err = td(null, j.lastError || "—"); err.style.color = "var(--text-faint)"; err.style.maxWidth = "220px"; err.style.overflow = "hidden"; err.style.textOverflow = "ellipsis"; err.style.whiteSpace = "nowrap"; err.title = j.lastError || ""; tr.append(err);
-    const act = el("td");
-    if (!TERMINAL.has(j.status)) {
+    tr.append(td(eta.endsWith("ago") ? "num overdue" : "num", eta.endsWith("ago") ? `overdue ${eta.replace(" ago", "")}` : eta, "Next poll"));
+    const err = td(null, j.lastError || "—", "Last error"); err.style.color = "var(--text-faint)"; err.title = j.lastError || ""; tr.append(err);
+    const act = el("td"); act.dataset.label = "";
+    // recover refuses a queued job that was never claimed; don't offer a button that 400s
+    if (!TERMINAL.has(j.status) && !(j.status === "queued" && !j.claimedBy)) {
       const r = el("button", "btn ghost sm", "Recover"); r.onclick = () => runRecover(j.jobId, true, r); act.append(r);
     }
     tr.append(act);
@@ -680,13 +759,32 @@ function renderQueue(panel, s) {
   table.append(tb);
   panel.append(table);
 }
-function td(cls, text) { return el("td", cls, text); }
+function td(cls, text, label) {
+  const cell = el("td", cls, text);
+  if (label) cell.dataset.label = label;
+  return cell;
+}
 
 /* ---- artifacts view ---------------------------------------------------- */
 
 async function renderArtifacts(panel, s) {
   const project = store.project || (s.projects[0] && s.projects[0].projectId);
-  panel.replaceChildren(viewHead("Artifacts", project ? `project ${project}` : "no project"));
+  const head = viewHead("Artifacts", project ? `project ${project}` : "no project");
+  // The icon rail hides project chips below 1080px, so the artifacts view
+  // carries its own switcher. Otherwise a reload sticks on projects[0].
+  if ((s.projects || []).length > 1) {
+    const select = el("select", "project-pick");
+    select.setAttribute("aria-label", "Project");
+    for (const p of s.projects) {
+      const option = el("option", null, p.projectId);
+      option.value = p.projectId;
+      if (p.projectId === project) option.selected = true;
+      select.append(option);
+    }
+    select.onchange = () => { store.project = select.value; renderView(); };
+    head.append(select);
+  }
+  panel.replaceChildren(head);
   if (!project) { panel.append(emptyState("No projects yet.", "Artifacts appear once the advisor produces one.")); return; }
   const grid = el("div", "artifacts");
   const listCol = el("div", "artifact-list");
@@ -882,11 +980,13 @@ function openJobModal() {
     body.append(f);
   };
   const proj = (s && s.projects[0] && s.projects[0].projectId) || "MY_APP";
-  add("job_id", "Job id", "BQ-" + proj + "-001", "BQ-" + proj + "-001");
-  add("project_id", "Project", proj, proj);
-  add("target_chat_title", "Advisor conversation title", proj + " planning");
-  add("target_chat_url", "Advisor target URL", "manual");
-  add("expected_marker", "Expected marker (optional)", "");
+  const nextIds = (s && s.nextJobIds) || {};
+  const jobId = nextIds[proj] || ("BQ-" + proj + "-001");
+  add("job_id", "Job id", "", jobId);
+  add("project_id", "Project", "", proj);
+  add("target_chat_title", "Advisor conversation title", "", proj + " planning");
+  add("target_chat_url", "Advisor target URL", "", "manual");
+  add("expected_marker", "Expected marker (optional)", "", "");
   const actions = el("div", "modal-actions");
   const cancel = el("button", "btn ghost", "Cancel"); cancel.onclick = closeModal;
   const create = el("button", "btn primary", "Create job");
@@ -941,19 +1041,45 @@ document.querySelectorAll(".railnav-item").forEach((b, i) => {
   b.onclick = () => setView(b.dataset.view);
   if (i < 5) b.title = `Shortcut: ${i + 1}`;
 });
+function runNextToast(record) {
+  const step = (record.steps && record.steps[0]) || {};
+  const stopped = record.stopped;
+  const note = step.note || (step.humanGates && step.humanGates[0]) || "";
+  const inbox = step.invoke && step.invoke.inbox;
+  if (stopped === "needs_human") {
+    const where = step.out ? `paste into ${step.out}` : "";
+    const body = [note, inbox ? `inbox ${inbox}` : "", where].filter(Boolean).join(" — ");
+    return { kind: "warn", title: "Reply needed", body: body || stopped };
+  }
+  if (stopped === "waiting_for_output") {
+    return { kind: "warn", title: "Waiting for reply", body: note || stopped };
+  }
+  if (stopped === "stop" || stopped === "follow_in_flight" || step.reason === "claimed_by_other" || step.reason === "follow_in_flight") {
+    return { kind: "err", title: "Run next stopped", body: note || step.reason || stopped };
+  }
+  if (stopped === "invoke_failed" || stopped === "waiting_for_marker" || stopped === "gate_no_go") {
+    return { kind: "err", title: "Run next stopped", body: note || stopped };
+  }
+  const label = step.role ? `${step.role} · ${step.adapter || ""}` : stopped;
+  return { kind: "ok", title: "Run next", body: label || stopped };
+}
+
+let runInFlight = false;
 async function runNextHop() {
+  if (runInFlight) return;
   const btn = document.querySelector('[data-action="run-next"]');
+  runInFlight = true;
   if (btn) btn.disabled = true;
   try {
     const record = await action("/api/actions/run-next", { once: true });
-    const step = (record.steps && record.steps[0]) || {};
-    const label = step.role ? `${step.role} · ${step.adapter || ""}` : record.stopped;
-    toast(record.stopped === "invoke_failed" ? "err" : "ok", "Run next", label || record.stopped);
+    const toastInfo = runNextToast(record);
+    toast(toastInfo.kind, toastInfo.title, toastInfo.body);
     poll();
   } catch (e) {
     toast("err", "Could not run next hop", e.message);
   } finally {
-    if (btn) btn.disabled = false;
+    runInFlight = false;
+    if (btn) btn.disabled = !(store.status && store.status.nextRun);
   }
 }
 
@@ -1035,5 +1161,9 @@ document.addEventListener("keydown", (e) => {
 
 let timer = null;
 function startPolling() { poll(); timer = setInterval(() => { if (!document.hidden) poll(); }, POLL_MS); }
-document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
-startPolling();
+document.addEventListener("visibilitychange", () => { if (!document.hidden && TOKEN) poll(); });
+if (!TOKEN) {
+  document.body.textContent = "Arthur Loop web console: open the exact URL printed by `arthur web` (it carries this session's token).";
+} else {
+  startPolling();
+}

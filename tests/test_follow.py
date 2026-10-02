@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
+import threading
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
+from arthur_loop.browser_lock import read_lock
 from arthur_loop.cli import main
-from arthur_loop.follow import follow_loop, transport_argv
+from arthur_loop.config import DEFAULT_INVOKE_TIMEOUT_SECONDS, load_config
+from arthur_loop.follow import default_invoke, follow_loop, transport_argv
 from arthur_loop.mcp import dispatch_tool
-from arthur_loop.queue_ledger import QueueLedger
+from arthur_loop.queue_ledger import QueueLedger, parse_ledger_time
 
 
 REPLY = """# Next plan
@@ -154,6 +161,263 @@ class FollowTests(unittest.TestCase):
             with patch("arthur_loop.follow.release_lock", side_effect=OSError("release failed")):
                 with self.assertRaisesRegex(OSError, "release failed"):
                     follow_loop(root, once=True, invoke=_fake_invoke)
+
+    def test_echo_agent_advances_past_hop_two_without_manual_poll(self) -> None:
+        """A non-interactive agent that only echoes its prompt must clear the plan hop.
+
+        The plan pack is stripped of its marker line first, the way an older
+        customized prompt looks. Rendering has to put the marker back and must
+        not leave a literal {{token}}.
+        """
+
+        blocks = {
+            "next-plan-request": (
+                "```text\n"
+                "PROJECT_ID: DEMO_APP\n"
+                "REVIEW_TYPE: NEXT_PLAN_REQUEST\n"
+                "APPROVAL_DECISION: REQUEST_CODEX_PLAN\n"
+                "HAS_P0_P1: false\n"
+                "```\n"
+            ),
+            "plan": (
+                "```text\n"
+                "PROJECT_ID: DEMO_APP\n"
+                "REVIEW_TYPE: CODEX_PLAN\n"
+                "PLAN_STATUS: READY_FOR_CHATGPT_REVIEW\n"
+                "IMPLEMENTATION_STARTED: false\n"
+                "```\n"
+            ),
+        }
+
+        def _echo(root: Path, request: dict) -> dict:
+            dest = root / "runtime" / "follow" / f"{request['job_id']}.out.md"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(request["prompt"] + "\n" + blocks[request["kind"]], encoding="utf-8")
+            return {"status": "ok", "adapter": request["adapter"], "output": dest.relative_to(root).as_posix()}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            code, _, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "codex",
+                    "--executor", "codex",
+                    "--title", "Demo",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            pack = root / "adapters" / "executor" / "prompts" / "plan-only.md"
+            stripped = pack.read_text(encoding="utf-8").replace("Include marker {{EXPECTED_MARKER}}.\n", "")
+            self.assertNotIn("EXPECTED_MARKER", stripped)
+            pack.write_text(stripped + "\n{{NOT_A_REAL_TOKEN}}\n", encoding="utf-8")
+
+            report = follow_loop(root, max_steps=2, invoke=_echo)
+
+            self.assertEqual(len(report["steps"]), 2, report)
+            self.assertEqual(report["steps"][0]["action"], "advanced")
+            self.assertEqual(report["steps"][0]["kind"], "next-plan-request")
+            plan = report["steps"][1]
+            self.assertEqual(plan["action"], "advanced", plan)
+            self.assertEqual(plan["kind"], "plan")
+            self.assertNotEqual(report["stopped"], "waiting_for_marker")
+            jobs = QueueLedger(root).latest_jobs()
+            plan_job = jobs[plan["job_id"]]
+            self.assertEqual(plan_job.status, "completed")
+            rendered = (root / plan_job.prompt_path).read_text(encoding="utf-8")
+            self.assertIn(plan_job.expected_marker, rendered)
+            self.assertNotIn("{{", rendered)
+            self.assertNotIn("NOT_A_REAL_TOKEN", rendered)
+            self.assertIn("(not available)", rendered)
+            self.assertIn(report["steps"][0]["capture"]["path"], rendered)
+
+    def test_invoke_timeout_defaults_long_and_failure_is_recoverable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            self.assertEqual(
+                load_config(root)["polling_policy"]["invoke_timeout_seconds"],
+                DEFAULT_INVOKE_TIMEOUT_SECONDS,
+            )
+            code, out, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "codex",
+                    "--executor", "codex",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            job_id = json.loads(out)["job"]["job_id"]
+            seen: dict = {}
+
+            def _boom(instance: Path, request: dict) -> dict:
+                seen["timeout"] = request.get("timeout")
+                seen["lock"] = json.loads((instance / "runtime/browser-lock.json").read_text(encoding="utf-8"))
+                return {"status": "error", "error": "timed out waiting"}
+
+            with patch("arthur_loop.follow.default_invoke", side_effect=_boom):
+                code, _, err = _run(["follow", "--root", tmp, "--once", "--timeout", "0.2"])
+            self.assertEqual(code, 2, err)
+            self.assertEqual(seen["timeout"], 0.2)
+            job = QueueLedger(root).latest_jobs()[job_id]
+            self.assertEqual(job.status, "needs_recovery")
+            self.assertIn("timed out", job.last_error or "")
+            self.assertIsNone(read_lock(root))
+            self.assertNotEqual(job.claimed_by, None)
+
+            code, _, err = _run(["queue", "--root", tmp, "recover", "--job-id", job_id, "--requeue"])
+            self.assertEqual(code, 0, err)
+            follow_loop(root, once=True, invoke=_boom, timeout=3600)
+            acquired = parse_ledger_time(seen["lock"]["acquired_at"])
+            stale = parse_ledger_time(seen["lock"]["stale_after"])
+            self.assertIsNotNone(acquired)
+            self.assertIsNotNone(stale)
+            self.assertGreaterEqual((stale - acquired).total_seconds(), 3600)
+            self.assertEqual(QueueLedger(root).latest_jobs()[job_id].status, "needs_recovery")
+            self.assertIsNone(read_lock(root))
+
+            code, _, err = _run(["queue", "--root", tmp, "recover", "--job-id", job_id, "--requeue"])
+            self.assertEqual(code, 0, err)
+            cfg_path = root / "config" / "arthur-loop.json"
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            cfg.setdefault("polling_policy", {})["invoke_timeout_seconds"] = 99
+            cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+            follow_loop(root, once=True, invoke=_boom)
+            self.assertEqual(seen["timeout"], 99)
+
+            with patch(
+                "arthur_loop.follow.transport_argv",
+                return_value=[sys.executable, "-c", "import time; time.sleep(30)"],
+            ):
+                result = default_invoke(
+                    root,
+                    {"adapter": "codex", "prompt": "ping", "job_id": "BQ-TIMEOUT", "timeout": 0.3, "model": ""},
+                )
+            self.assertEqual(result["status"], "error")
+            self.assertIn("timed out", result["error"].lower())
+
+            for command in ("follow", "run"):
+                help_out = io.StringIO()
+                with redirect_stdout(help_out):
+                    with self.assertRaises(SystemExit) as ctx:
+                        main([command, "--help"])
+                self.assertEqual(ctx.exception.code, 0)
+                self.assertIn("--timeout", help_out.getvalue())
+
+    def test_overlapping_follow_steps_invoke_the_agent_once(self) -> None:
+        """Two in-process callers must not both run the agent for one hop."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            code, _, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "codex",
+                    "--executor", "codex",
+                    "--title", "Demo",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            calls: list[str] = []
+            gate = threading.Event()
+
+            def _slow(instance: Path, request: dict) -> dict:
+                calls.append(request["job_id"])
+                gate.set()
+                time.sleep(1.0)
+                dest = instance / "runtime" / "follow" / f"{request['job_id']}.out.md"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                marker = str(request.get("expected_marker") or "")
+                dest.write_text(REPLY + (f"\n{marker}\n" if marker else ""), encoding="utf-8")
+                return {"status": "ok", "adapter": request["adapter"], "output": dest.relative_to(instance).as_posix()}
+
+            reports: list[dict] = []
+
+            def _one() -> None:
+                reports.append(follow_loop(root, once=True, chain=False, invoke=_slow))
+
+            threads = [threading.Thread(target=_one), threading.Thread(target=_one)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+            self.assertTrue(all(not thread.is_alive() for thread in threads))
+            self.assertEqual(calls, ["BQ-DEMO_APP-001"])
+            stopped = sorted(report["stopped"] for report in reports)
+            self.assertEqual(stopped, ["advanced", "follow_in_flight"])
+            self.assertEqual(QueueLedger(root).latest_jobs()["BQ-DEMO_APP-001"].status, "completed")
+            self.assertTrue(gate.is_set())
+            for line in (root / "queue" / "jobs.jsonl").read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    json.loads(line)
+
+    def test_overlapping_follow_processes_invoke_the_agent_once(self) -> None:
+        """Two `arthur follow --once` processes share a holder and must not both exec."""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            _init(tmp)
+            root = Path(tmp)
+            code, _, err = _run(
+                [
+                    "loop", "--root", tmp, "create",
+                    "--project-id", "DEMO_APP",
+                    "--advisor", "codex",
+                    "--executor", "codex",
+                    "--title", "Demo",
+                ]
+            )
+            self.assertEqual(code, 0, err)
+            bindir = root / "bin"
+            bindir.mkdir()
+            log_path = root / "shim.log"
+            shim = bindir / "codex"
+            shim.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, sys, time\n"
+                f"open({str(log_path)!r}, 'a', encoding='utf-8').write(str(os.getpid()) + '\\n')\n"
+                "time.sleep(1.2)\n"
+                "prompt = sys.argv[-1]\n"
+                "marker = ''\n"
+                "key = 'Include marker '\n"
+                "if key in prompt:\n"
+                "    marker = prompt.split(key, 1)[1].split()[0].rstrip('.')\n"
+                "sys.stdout.write('Include marker %s.\\n\\n```text\\nPROJECT_ID: DEMO_APP\\n"
+                "REVIEW_TYPE: NEXT_PLAN_REQUEST\\nAPPROVAL_DECISION: REQUEST_CODEX_PLAN\\nHAS_P0_P1: false\\n```\\n' % marker)\n",
+                encoding="utf-8",
+            )
+            shim.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = str(bindir) + os.pathsep + env.get("PATH", "")
+            env["PYTHONPATH"] = os.pathsep.join(
+                [str(Path(__file__).resolve().parents[1] / "src"), env.get("PYTHONPATH", "")]
+            ).rstrip(os.pathsep)
+            procs = [
+                subprocess.Popen(
+                    [sys.executable, "-c",
+                     "from arthur_loop.cli import main; raise SystemExit(main(['follow','--root',%r,'--once','--no-chain']))" % tmp],
+                    cwd=tmp,
+                    env=env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                for _ in range(2)
+            ]
+            outputs = [proc.communicate(timeout=20) for proc in procs]
+            codes = [proc.returncode for proc in procs]
+            blobs = [out + err for out, err in outputs]
+            self.assertFalse(any("Traceback" in blob for blob in blobs), blobs)
+            self.assertEqual(sorted(codes), [0, 2], blobs)
+            joined = "\n".join(blobs)
+            self.assertIn("follow_in_flight", joined)
+            self.assertIn('"stopped": "advanced"', joined)
+            invokes = [line for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(len(invokes), 1, invokes)
+            self.assertEqual(QueueLedger(root).latest_jobs()["BQ-DEMO_APP-001"].status, "completed")
 
     def test_mcp_follow_run_dry_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

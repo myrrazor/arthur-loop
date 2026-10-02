@@ -21,12 +21,13 @@ from arthur_loop.roles import (
     ROLE_AGENTS,
     formulate_default_loop,
     merge_roles,
+    parse_role_spec,
     resolve_roles,
     roles_payload,
     validate_roles,
 )
 from arthur_loop.decisions import PROJECT_ID_RE
-from arthur_loop.queue_ledger import QueueJob, QueueLedger
+from arthur_loop.queue_ledger import TERMINAL_STATUSES, QueueJob, QueueLedger
 from arthur_loop.tick import open_human_decision_projects
 
 
@@ -231,8 +232,10 @@ def apply_role_updates(
         for role, value in roles.items():
             if role not in LOOP_ROLES:
                 raise ValueError(f"unknown role {role!r} — expected one of {list(LOOP_ROLES)}")
-            if not isinstance(value, dict):
-                raise ValueError(f"role {role} must be an object with agent and optional model")
+            if isinstance(value, str):
+                value = parse_role_spec(value)
+            elif not isinstance(value, dict):
+                raise ValueError(f"role {role} must be an object with agent and optional model, or agent[:model]")
             overlay[role] = {
                 "agent": str(value.get("agent") or current[role]["agent"]),
                 "model": str(value.get("model") if value.get("model") is not None else current[role].get("model") or ""),
@@ -283,8 +286,19 @@ def _fill_project_map(data: dict[str, Any], atlas_key: str | None = None) -> dic
     return {str(k): str(v) for k, v in mapping.items()}
 
 
-def _next_job_id(root: Path, project_id: str, reserved: set[str] | None = None) -> str:
-    existing = set(QueueLedger(root).latest_jobs())
+def _next_job_id(
+    root: Path,
+    project_id: str,
+    reserved: set[str] | None = None,
+    *,
+    known: set[str] | None = None,
+) -> str:
+    # `known` is the job-id set already loaded by the caller. Scanning the
+    # ledger again here made one status response reread every job per project.
+    if known is None:
+        existing = set(QueueLedger(root).latest_jobs())
+    else:
+        existing = set(known)
     if reserved:
         existing |= reserved
     prefix = f"BQ-{project_id}-"
@@ -302,6 +316,79 @@ def _slug(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_") or "LOOP"
 
 
+PROMPT_UNKNOWN = "(not available)"
+_PROMPT_TOKEN_RE = re.compile(r"\{\{[^{}]+\}\}")
+_ARTIFACT_TEXT_CAP = 8000
+
+
+def substitute_prompt_tokens(text: str, replacements: dict[str, str]) -> str:
+    """Fill known {{TOKENS}}. Anything left becomes a short note, never a literal placeholder."""
+
+    def replace(match: re.Match[str]) -> str:
+        return replacements.get(match.group(0), PROMPT_UNKNOWN)
+
+    rendered = _PROMPT_TOKEN_RE.sub(replace, text)
+    return _PROMPT_TOKEN_RE.sub(PROMPT_UNKNOWN, rendered)
+
+
+def cap_prompt_excerpt(text: str | None) -> str:
+    body = (text or "").strip()
+    if not body:
+        return PROMPT_UNKNOWN
+    if len(body) <= _ARTIFACT_TEXT_CAP:
+        return body
+    return body[:_ARTIFACT_TEXT_CAP] + "\n… (truncated)"
+
+
+def ensure_marker_line(text: str, marker: str) -> str:
+    """Old or customized hop prompts still have to ask the agent for the marker."""
+
+    if "{{EXPECTED_MARKER}}" in text or (marker and marker in text):
+        return text
+    return text.rstrip() + "\n\nInclude marker {{EXPECTED_MARKER}}.\n"
+
+
+def _control_field(text: str, name: str) -> str | None:
+    match = re.search(rf"(?m)^{re.escape(name)}:[ \t]*(\S.*?)\s*$", text or "")
+    if not match:
+        return None
+    value = match.group(1).strip()
+    if not value or "{{" in value:
+        return None
+    return value
+
+
+def hop_prompt_replacements(
+    *,
+    project_id: str,
+    marker: str,
+    idempotency_key: str,
+    state_summary: str,
+    previous_kind: str | None = None,
+    previous_artifact_path: str | None = None,
+    previous_artifact_text: str | None = None,
+) -> dict[str, str]:
+    """Tokens a hop prompt can actually know. Anything else is filled later as unknown."""
+
+    excerpt = cap_prompt_excerpt(previous_artifact_text)
+    has_prev = bool((previous_artifact_text or "").strip())
+    plan = excerpt if previous_kind == "plan" and has_prev else PROMPT_UNKNOWN
+    thread = excerpt if previous_kind == "implementation-handoff" and has_prev else PROMPT_UNKNOWN
+    sprint = _control_field(previous_artifact_text or "", "SPRINT_ID") or PROMPT_UNKNOWN
+    path = (previous_artifact_path or "").strip() or PROMPT_UNKNOWN
+    return {
+        "{{PROJECT_ID}}": project_id,
+        "{{CURRENT_STATE_SUMMARY}}": state_summary,
+        "{{EXPECTED_MARKER}}": marker,
+        "{{IDEMPOTENCY_KEY}}": idempotency_key,
+        "{{CHATGPT_RESPONSE_ARTIFACT_PATH}}": path,
+        "{{CHATGPT_RESPONSE_ARTIFACT}}": excerpt if has_prev else PROMPT_UNKNOWN,
+        "{{CODEX_PLAN_ARTIFACT}}": plan,
+        "{{CODEX_THREAD_SUMMARY}}": thread,
+        "{{SPRINT_ID}}": sprint,
+    }
+
+
 def seed_first_prompt(
     root: Path,
     *,
@@ -316,15 +403,16 @@ def seed_first_prompt(
     dest.parent.mkdir(parents=True, exist_ok=True)
     src = root / "adapters" / "advisor" / "prompts" / "next-plan-request.md"
     if src.is_file():
-        text = src.read_text(encoding="utf-8")
-        replacements = {
-            "{{PROJECT_ID}}": project_id,
-            "{{CURRENT_STATE_SUMMARY}}": f"{project_id} — first hop of a new loop.",
-            "{{EXPECTED_MARKER}}": marker,
-            "{{IDEMPOTENCY_KEY}}": idempotency_key,
-        }
-        for token, value in replacements.items():
-            text = text.replace(token, value)
+        text = ensure_marker_line(src.read_text(encoding="utf-8"), marker)
+        text = substitute_prompt_tokens(
+            text,
+            hop_prompt_replacements(
+                project_id=project_id,
+                marker=marker,
+                idempotency_key=idempotency_key,
+                state_summary=f"{project_id} — first hop of a new loop.",
+            ),
+        )
     else:
         text = (
             f"# {job_id} Prompt\n\n"
@@ -370,6 +458,23 @@ def ensure_project(root: Path, project_id: str, *, goal: str = "") -> dict[str, 
     return {"project_id": project_id, "state_path": state_rel, "created": created}
 
 
+def _loop_honest_copy(*, created_project: bool, seeded_job: bool, hops: list[dict[str, Any]]) -> str:
+    if created_project and seeded_job:
+        lead = "Created a project and the first queue job."
+    elif created_project:
+        lead = "Created a project. No queue job was seeded."
+    elif seeded_job:
+        lead = "The project already existed. Seeded a queue job."
+    else:
+        lead = "The project already existed. No queue job was seeded."
+    order = " → ".join(f"{hop['role']}({hop['agent']})" for hop in hops)
+    return (
+        f"{lead} This is not a drag-drop graph composer. "
+        f"Assigned agents run in order: {order}. "
+        "Run `arthur` or `arthur run` to invoke the next role."
+    )
+
+
 def create_loop(
     root: Path,
     *,
@@ -397,6 +502,17 @@ def create_loop(
     project_id = project_id.strip()
     if not PROJECT_ID_PATTERN.match(project_id):
         raise ValueError(f"project id {project_id!r} must be a single word like MY_APP")
+    if seed_job:
+        live = sorted(
+            job.job_id
+            for job in QueueLedger(root).latest_jobs().values()
+            if job.project_id == project_id and job.status not in TERMINAL_STATUSES
+        )
+        if live:
+            raise ValueError(
+                f"{project_id} already has a non-terminal queue job ({', '.join(live)}). "
+                "Finish or cancel it before seeding another loop job."
+            )
 
     ticket = (ticket or "").strip() or None
     if ticket and not goal.strip():
@@ -470,11 +586,10 @@ def create_loop(
         "sequence": sequence,
         "ticket": ticket,
         "job": job_record,
-        "honest_copy": (
-            "Created a project and the first queue job. This is not a drag-drop "
-            "graph composer. Assigned agents run in order: "
-            + " → ".join(f"{hop['role']}({hop['agent']})" for hop in sequence["hops"])
-            + ". Run `arthur` or `arthur run` to invoke the next role."
+        "honest_copy": _loop_honest_copy(
+            created_project=bool(project.get("created")),
+            seeded_job=job_record is not None,
+            hops=sequence["hops"],
         ),
         "next": [
             "arthur",

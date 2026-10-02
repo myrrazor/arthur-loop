@@ -428,6 +428,15 @@ def _headline_panel(snapshot: StatusSnapshot, now: datetime) -> Panel:
     )
 
 
+_COLUMN_MIN_WIDTH = {
+    "JOB": 12,
+    "PROJECT": 8,
+    "STATUS": 8,
+    "ATTEMPT": 7,
+    "NEXT POLL": 9,
+}
+
+
 def _section_table(title: str, *columns: str) -> Table:
     table = Table(
         box=box.SIMPLE_HEAD,
@@ -438,7 +447,12 @@ def _section_table(title: str, *columns: str) -> Table:
         pad_edge=False,
     )
     for column in columns:
-        table.add_column(column, overflow="fold")
+        table.add_column(
+            column,
+            overflow="ellipsis",
+            no_wrap=True,
+            min_width=_COLUMN_MIN_WIDTH.get(column, 4),
+        )
     return table
 
 

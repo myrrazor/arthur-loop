@@ -138,6 +138,7 @@ def require_lock(root: Path, holder: str) -> None:
 
 def cmd_queue_create(args: argparse.Namespace) -> int:
     root = resolve_root(args)
+    fresh_root = not is_instance(root)
     job = QueueJob(
         job_id=args.job_id,
         project_id=args.project_id,
@@ -150,6 +151,8 @@ def cmd_queue_create(args: argparse.Namespace) -> int:
     )
     QueueLedger(root).create_job(job, force=args.force)
     print_record(job)
+    if fresh_root:
+        sys.stderr.write(f"initialized new instance root at {root}\n")
     return EXIT_OK
 
 
@@ -391,9 +394,14 @@ def cmd_lock(args: argparse.Namespace) -> int:
         print_record(lock)
         return EXIT_OK
     if args.lock_action == "release":
+        current = read_lock(root)
         released = release_lock(root, args.holder, now=parse_at(args.at))
-        print_record({"holder": args.holder, "released": released})
-        return EXIT_OK
+        if released or current is None:
+            print_record({"holder": args.holder, "released": released})
+            return EXIT_OK
+        print_record({"holder": args.holder, "released": False, "current_holder": current.holder})
+        sys.stderr.write(f"error: browser lock is held by {current.holder}, not {args.holder}\n")
+        return EXIT_ERROR
     if args.lock_action == "break":
         broken = break_lock(root, force=args.force, via="cli", now=parse_at(args.at))
         print_record({"broken": broken is not None, "holder": broken.holder if broken else None})
@@ -1326,12 +1334,13 @@ def cmd_follow(args: argparse.Namespace) -> int:
         holder=args.holder,
         chain=not args.no_chain,
         dry_run=args.dry_run,
+        timeout=getattr(args, "timeout", None),
     )
     print_record(record)
     stopped = record.get("stopped")
     if stopped in {"needs_human", "gate_no_go"}:
         return EXIT_NEEDS_HUMAN
-    if stopped in {"invoke_failed"}:
+    if stopped in {"invoke_failed", "follow_in_flight"}:
         return EXIT_ERROR
     return EXIT_OK
 
@@ -1354,6 +1363,12 @@ def _build_follow_parser(subparsers: Any) -> None:
     follow.add_argument("--holder", default="arthur-follow")
     follow.add_argument("--no-chain", action="store_true", help="Do not enqueue the next hop from the control block")
     follow.add_argument("--dry-run", action="store_true")
+    follow.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Seconds to wait for the agent CLI (default: polling_policy.invoke_timeout_seconds, 45 minutes)",
+    )
     follow.set_defaults(func=cmd_follow)
 
 
@@ -1402,6 +1417,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     args.holder = getattr(args, "holder", None) or "arthur-follow"
     args.no_chain = getattr(args, "no_chain", False)
     args.dry_run = getattr(args, "dry_run", False)
+    args.timeout = getattr(args, "timeout", None)
     return cmd_follow(args)
 
 
@@ -1421,6 +1437,12 @@ def _build_run_parser(subparsers: Any) -> None:
     run.add_argument("--holder", default="arthur-follow")
     run.add_argument("--no-chain", action="store_true")
     run.add_argument("--dry-run", action="store_true")
+    run.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Seconds to wait for the agent CLI (default: polling_policy.invoke_timeout_seconds, 45 minutes)",
+    )
     run.set_defaults(func=cmd_run, once=True)
 
 
@@ -1477,6 +1499,7 @@ def main(argv: list[str] | None = None) -> int:
             args.holder = "arthur-follow"
             args.no_chain = False
             args.dry_run = False
+            args.timeout = None
             try:
                 return cmd_follow(args)
             except (BrowserLockError, KeyError, ValueError, OSError, RuntimeError) as exc:
