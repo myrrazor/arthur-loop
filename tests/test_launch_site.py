@@ -112,6 +112,7 @@ class LaunchSiteTests(unittest.TestCase):
             ROOT / "README.md",
             ROOT / "CONTRIBUTING.md",
             ROOT / "RELEASE_NOTES_v0.1.0.md",
+            ROOT / "RELEASE_NOTES_v0.1.1.md",
             ROOT / "LAUNCH_CHECKLIST.md",
             *sorted((ROOT / "docs/announcements").glob("*.md")),
             *sorted((ROOT / "docs/design").glob("*.md")),
@@ -163,7 +164,10 @@ class LaunchSiteTests(unittest.TestCase):
             self.assertNotRegex(text, r"(?i)latest release[:\s]+v0\.2\.0")
             self.assertNotIn("Open source · v0.2.0", text)
         self.assertIn('<link rel="canonical" href="https://arthurloop.com/" />', self.index)
-        self.assertIn("arthur 0.1.0", self.index)
+        self.assertIn("arthur 0.1.1", self.index)
+        self.assertIn('"softwareVersion": "0.1.1"', self.index)
+        self.assertIn("Open source · MIT · v0.1.1", self.index)
+        self.assertIn("v0.1.1", self.readme)
         self.assertIn('id="menu-bar"', self.index)
         self.assertIn("Watch quota from the Mac menu bar", self.index)
         self.assertIn("Star on GitHub", self.index)

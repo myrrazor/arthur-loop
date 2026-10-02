@@ -1,10 +1,8 @@
 # How it works
 
-Public `main` / last tag **v0.1.0** is the original file-based control plane: install `arthur`, `init`, then queue / capture / gate / status / `arthur web`. That is **not** a download-to-working-auto-follow. Those three default git commands do not ship `arthur follow`, MCP, or Atlas walk.
+Latest tag **v0.1.1** (and current `main`) adds coding-agent install, MCP, `arthur follow`, assignable roles, and Atlas next/walk on top of the v0.1.0 file-based control plane (queue / capture / gate / status / `arthur web`). See [install.md](install.md) for pinning the tag.
 
-This branch adds coding-agent install, MCP, `arthur follow`, and Atlas next/walk. See [install.md](install.md) for the two install stories.
-
-1. **Install this branch** (not the three default git commands on the README/site). Last tag is still v0.1.0; there is no tagged v0.2.0. `arthur --version` prints `arthur 0.1.0` until the next tag.
+1. **Install** with any of the three commands on the README/site (they track `main`), or pin `@v0.1.1`. `arthur --version` prints `arthur 0.1.1`.
 2. **`arthur init`** in an empty directory. It detects Claude Code, Codex, Cursor, and Grok Build on **PATH** (not `~/.cursor` alone); writes adapter packs; writes skills where those clients load them. Grok's skill lands in `.grok/skills/arthur-loop`. When `grok` is on PATH, install runs `grok mcp add` and `grok --trust` (untrusted folder = project MCP does not spawn).
 3. **Create a loop** — terminal (`arthur loop create`), web wizard (`arthur web` → + Loop), or `/arthur-loop` / MCP `arthur.loop.create`. This creates a project and the first queue job. It is not a drag-drop graph composer.
 4. **Auto-follow** — `arthur follow` / MCP `arthur.follow.run` claims, invokes the CLI adapter, captures, gates, and enqueues the next hop. Grok's transport is `grok --always-approve -p PROMPT` (Grok Build 1.0.30; `-p --always-approve` is the wrong order). Humans still answer decisions and supply ChatGPT-browser / manual replies. See [follow.md](follow.md).

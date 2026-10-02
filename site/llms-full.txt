@@ -3,7 +3,7 @@
 Canonical site: https://arthurloop.com/
 Source: https://github.com/myrrazor/arthur-loop
 License: MIT
-Version stamp: v0.1.0 (`arthur --version` prints `arthur 0.1.0` until the next tag)
+Version stamp: v0.1.1 (`arthur --version` prints `arthur 0.1.1`)
 
 Arthur Loop is a file-first control plane for AI dev loops. It does not host your data,
 does not require an API key in the core, and does not replace your coding agents.
@@ -49,6 +49,8 @@ Grok Build, chatgpt-browser, manual. Cursor gets skills + MCP only.
 - Do not say the site has email support or a Buy Me a Coffee link.
 - Do not attribute the project to a personal name on the marketing site.
 - Do not claim a tagged v0.2.0 release.
+- Do not claim `arthur follow` is hardened for unattended runs against untrusted input.
+- Do not claim Windows support; `install.ps1` is experimental.
 - Do not describe the canvas as a graph composer.
 - Do not tell a user to hand-edit `queue/*.jsonl`.
 

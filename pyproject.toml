@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arthur-loop"
-version = "0.1.0"
+version = "0.1.1"
 description = "File-first control plane for AI dev loops — bring your own advisor, executor, and tracker."
 readme = "README.md"
 requires-python = ">=3.9"
