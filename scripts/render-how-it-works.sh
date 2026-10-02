@@ -29,7 +29,7 @@ still wizard "$ROOT/docs/assets/create-loop-wizard.png" 4
 card follow 4 "2. Auto-follow" "arthur follow --once" "claim → invoke → submit → capture → gate"
 card atlas 4 "3. Atlas next / walk" "arthur tracker next --json" "arthur tracker walk" "in_review is not ready work"
 still console "$ROOT/docs/assets/web-console.png" 4
-card honest 4 "4–5. Honest install + this video" "v0.1.0 is the last tag" "this branch is unreleased" "human gates: decisions, browser, NO-GO"
+card honest 4 "4–5. Honest install + this video" "v0.1.1 is the latest tag" "install: pipx, uv, or curl" "human gates: decisions, browser, NO-GO"
 
 cat > "$WORK/list.txt" <<EOF
 file 'intro.mp4'

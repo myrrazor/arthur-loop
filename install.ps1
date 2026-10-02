@@ -1,6 +1,6 @@
 # Arthur Loop experimental Windows installer.
-# Public main does not host this file — raw .../main/install.ps1 is a 404.
-# From a checkout of this branch:  ./install.ps1
+# Experimental: Windows is not a supported platform yet.
+# From a checkout:  ./install.ps1
 # Env: ARTHUR_LOOP_REPO, ARTHUR_LOOP_REF, ARTHUR_LOOP_HOME, ARTHUR_LOOP_BIN
 $ErrorActionPreference = "Stop"
 
@@ -61,5 +61,5 @@ $shim = Join-Path $BinDir "arthur.cmd"
 Set-Content -Path $shim -Value "@echo off`r`n`"$arthur`" %*" -Encoding ascii
 Write-Host ""
 Write-Host "Arthur Loop installed (experimental Windows): $shim"
-Write-Host "Confirm with: arthur --version   (prints arthur 0.1.0 until the next tag)"
-Write-Host "This installer does not claim MCP or arthur follow unless you installed this branch."
+Write-Host "Confirm with: arthur --version   (v0.1.1 prints arthur 0.1.1)"
+Write-Host "Windows is experimental: file locks, notifications, and the browser advisor are untested here."

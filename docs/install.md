@@ -1,31 +1,27 @@
 # Install honesty
 
-The last tagged release is **v0.1.0**. There is no tagged v0.2.0. `arthur --version` reports `arthur 0.1.0` until the next tag. This repository's default git install (the three commands on the README and launch site) tracks `main`.
+The latest tagged release is **v0.1.1**. `arthur --version` reports `arthur 0.1.1`. v0.1.1 includes coding-agent integrations (skills + MCP registration), the stdio MCP server, `arthur follow`, assignable roles, Atlas `next`/`walk`, and the web create-loop wizard. See [RELEASE_NOTES_v0.1.1.md](../RELEASE_NOTES_v0.1.1.md).
 
-That public tree is the original file-based control plane: `arthur init`, queue, capture, gate, `status`, `arthur web`. It does **not** include `arthur follow`, the stdio MCP server, client skills/integrations, or Atlas `next`/`walk`. It is not a working auto-follow in minutes.
+The three default git install commands on the README and launch site track `main`, which is v0.1.1 or newer. `arthur --version` reports the version in `pyproject.toml`, so a `main` install between tags still says `arthur 0.1.1`.
 
-Canonical site: [https://arthurloop.com/](https://arthurloop.com/). `arthur-loop.vercel.app` 404s — do not use it as canonical.
+Canonical site: [https://arthurloop.com/](https://arthurloop.com/). Do not use `arthur-loop.vercel.app` as canonical.
 
-`https://raw.githubusercontent.com/myrrazor/arthur-loop/main/install.ps1` is a **404**. This branch ships an experimental `install.ps1` in the repo; run it from a checkout. Do not advertise the `/main/install.ps1` URL.
+`install.ps1` is an experimental Windows installer. Run it from a checkout. Windows is not a supported platform yet.
 
-## This branch (Atlas product-gap)
-
-Unreleased work on `cursor/atlas-product-gap-ab6b` is **not** the v0.1.0 tarball. Install this tip:
+## Pin the tag
 
 ```bash
-pipx install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
+pipx install 'git+https://github.com/myrrazor/arthur-loop.git@v0.1.1'
 # or
-uv tool install 'git+https://github.com/myrrazor/arthur-loop.git@cursor/atlas-product-gap-ab6b'
-# or from a checkout of this branch
-./install.sh
+uv tool install 'git+https://github.com/myrrazor/arthur-loop.git@v0.1.1'
+# or
+curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/v0.1.1/install.sh \
+  | ARTHUR_LOOP_REF=v0.1.1 sh
 ```
 
-Then `arthur --version` still prints `arthur 0.1.0` (setuptools metadata). That is the last release number, not a claim that you installed the tagged commit. Prove the tree with `arthur follow --help` / `arthur mcp --help`.
+Check the tree with `arthur --version`, `arthur follow --help`, and `arthur mcp --help`.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/myrrazor/arthur-loop/cursor/atlas-product-gap-ab6b/install.sh \
-  | ARTHUR_LOOP_REF=cursor/atlas-product-gap-ab6b sh
-```
+Do not run `arthur follow` unattended against untrusted input yet. Known gaps are listed in the release notes and are slated for v0.1.2.
 
 ## Grok
 

@@ -5,7 +5,7 @@
 File-first control plane for AI dev loops — bring your own advisor, executor, and tracker.
 
 <div align="center">
-  <a href="https://github.com/myrrazor/arthur-loop/releases/latest"><img alt="Release: v0.1.0" src="https://img.shields.io/badge/release-v0.1.0-3fb950?style=for-the-badge"></a>
+  <a href="https://github.com/myrrazor/arthur-loop/releases/latest"><img alt="Release: v0.1.1" src="https://img.shields.io/badge/release-v0.1.1-3fb950?style=for-the-badge"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-3fb950?style=for-the-badge">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-58a6ff?style=for-the-badge">
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-d29922?style=for-the-badge">
@@ -29,7 +29,7 @@ Assign agents to **planner**, **implementer**, **reviewer**, and **QA**. Arthur 
   <sub>Ready <a href="https://github.com/myrrazor/atlas-tasker">Atlas Tasker</a> tickets become queue jobs with <code>arthur tracker walk</code>.</sub>
 </p>
 
-Site: [arthurloop.com](https://arthurloop.com/). Last tag is **v0.1.0** — `arthur --version` prints that until the next tag.
+Site: [arthurloop.com](https://arthurloop.com/). Latest tag is **v0.1.1** (`arthur --version` prints `arthur 0.1.1`). It includes `arthur follow`, the MCP server, assignable roles, and Atlas walk. See the [v0.1.1 release notes](RELEASE_NOTES_v0.1.1.md).
 
 ## Install
 
