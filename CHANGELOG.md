@@ -6,11 +6,11 @@ All notable changes to Arthur Loop will be documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-02
+
 Product-gap pass after the hardening review: Arthur Loop now installs into coding agents the way Atlas Tasker does (skills where those clients load them, plus MCP registration), agents can create and drive a loop without a human typing every hop, Atlas boards are a first-class read path, and the web console has an honest create-loop wizard.
 
-Hostile re-test of tip `aad65fa` was ALMOST. This revision closes Grok load, auto-follow, Atlas next/walk, install honesty, and the how-it-works video.
-
-Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface honesty and the remaining blockers: live-site overclaims (no fake v0.2.0, no MCP/follow on curl-main, arthurloop.com canonical instead of Vercel 404, install.ps1 shipped here and not linked on `/main`), `grok --trust` ENXIO-after-grant, probe multiline TOML, usable `tracker.project_map` after init/loop create, and pause blocking poll/complete/fail.
+It also carries the security and stability fixes from the September review passes: path guards on capture and MCP file reads, a stricter queue state machine, a 45-minute default invoke timeout, and guards against two followers running the same hop.
 
 ### Added
 
@@ -22,7 +22,7 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 - `arthur loop create|list` — project + first queue job. Shared by CLI, web wizard, and MCP. Not a graph composer.
 - Atlas board adapter: `arthur tracker next` / `queue` / `walk` / `board` / `open-jobs`. Ready/in_progress only (`in_review` is not opened). Arthur `project_id` maps to an Atlas key via `tracker.project_map`.
 - How-it-works video (`docs/assets/how-it-works.mp4`) and create-loop wizard shot on the launch site.
-- [docs/install.md](docs/install.md) — version honesty and how to install this branch.
+- [docs/install.md](docs/install.md) — version honesty and how to pin a tag.
 - Grok Build advisor and executor adapter packs.
 - Web console **+ Loop** wizard and `POST /api/actions/create-loop`.
 - Cursor as an integration target (skills + MCP). No advisor/executor pack — `solo`/`pair` still refuse it.
@@ -94,5 +94,6 @@ Hostile re-test of tip `33decbf` was ALMOST. This revision owns public-surface h
 - Pluggable quota providers with CodexBar support kept optional.
 - ArthurBar, a read-only native macOS menu bar view of loop status.
 
-[Unreleased]: https://github.com/myrrazor/arthur-loop/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/myrrazor/arthur-loop/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/myrrazor/arthur-loop/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/myrrazor/arthur-loop/releases/tag/v0.1.0

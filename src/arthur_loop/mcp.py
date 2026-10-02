@@ -37,7 +37,7 @@ from arthur_loop.tick import classify_tick
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "arthur-loop"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.1.1"
 
 WRITE_TOOLS = {
     "arthur.queue.create",
